@@ -5,8 +5,7 @@
 *Lire en [anglais / in English](README.md).*
 
 **PokeMind est un compagnon Pokémon TCG Live pour Windows.** Il garde en mémoire tes combats, tes decks et
-tes cartes sur ton PC, et te permet de les revoir avec un coach qui cite ses sources et dit ce qui reste
-inconnu.
+tes cartes sur ton PC, et te permet de les revoir avec un coach IA.
 
 > ## État : préversion
 >
