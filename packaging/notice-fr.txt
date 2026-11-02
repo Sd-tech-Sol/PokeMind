@@ -1,0 +1,14 @@
+﻿PokeMind - ton compagnon Pokémon TCG Live
+
+- Tes combats, tes decks et tes discussions restent sur ce PC, dans %LOCALAPPDATA%\PokeMind.
+  Désinstaller PokeMind retire le programme et garde ce dossier.
+- Au premier lancement, PokeMind peut télécharger le catalogue public des cartes (TCGdex, français
+  et anglais, environ 25 Mo). Rien de personnel n'est envoyé.
+- Le coach utilise un moteur que tu as déjà : Codex CLI, Claude Code (en ligne, ton propre compte)
+  ou Ollama (local). Rien ne part vers un moteur en ligne avant ton accord dans Réglages.
+- Franc-jeu : pour l'entraînement et la révision après la partie. Pas pendant un tournoi officiel.
+  PokeMind n'interagit jamais avec le client du jeu : pas d'overlay, pas de bot, aucune automatisation.
+
+PokeMind est un projet de fans non officiel, sans lien avec Nintendo, The Pokémon Company, Creatures
+ou GAME FREAK. Pokémon est une marque de ses propriétaires respectifs.
+Code de PokeMind : licence MIT. Données des cartes : TCGdex (licence MIT).

@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "corpus_version": "synthetic_text_v1",
+  "corpus_sha256": "09d654750687173554c6e17054e62a603b9862fbd987968e885a655ceb6310c5",
+  "status": "OCR_ENGINE_NOT_INSTALLED",
+  "release_status": "BLOCKED_WITH_REASON",
+  "real_ocr_executed": false,
+  "mock_used": false,
+  "network_used": false,
+  "images_persisted": 0,
+  "case_count": 22,
+  "fields": {
+    "name": {
+      "samples": 22,
+      "attempted": 0,
+      "wrong_accepted": 0,
+      "exact": 0,
+      "abstained": 0
+    },
+    "set_code": {
+      "samples": 22,
+      "attempted": 0,
+      "wrong_accepted": 0,
+      "exact": 0,
+      "abstained": 0
+    },
+    "collector_number": {
+      "samples": 22,
+      "attempted": 0,
+      "wrong_accepted": 0,
+      "exact": 0,
+      "abstained": 0
+    },
+    "hp": {
+      "samples": 22,
+      "attempted": 0,
+      "wrong_accepted": 0,
+      "exact": 0,
+      "abstained": 0
+    }
+  },
+  "cases": [
+    {
+      "language": "eng",
+      "variant": "clean",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "small",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "zoom",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "crop",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "rotate",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "noise",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "occluded",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "wrong_printing",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "unknown",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "wrong_number",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "eng",
+      "variant": "wrong_hp",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "clean",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "small",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "zoom",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "crop",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "rotate",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "noise",
+      "identity_candidate": null,
+      "identity_expected": true,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "occluded",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "wrong_printing",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "unknown",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "wrong_number",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    },
+    {
+      "language": "fra",
+      "variant": "wrong_hp",
+      "identity_candidate": null,
+      "identity_expected": false,
+      "all_fields_exact": null,
+      "errors": []
+    }
+  ],
+  "identity_false_positives": null,
+  "abstention_rate": null,
+  "wall_seconds": 3.104,
+  "ocr_latency_median_seconds": null,
+  "python_peak_bytes": 994804,
+  "engine_cpu_seconds": null,
+  "engine_peak_bytes": null,
+  "calibrated_on_owner": false,
+  "visual_certain_allowed": false,
+  "limits": [
+    "Original 5x7 font; rotation is shear; not real-card calibration.",
+    "Engine CPU/RSS unmeasured; Python allocation peak excludes child process."
+  ]
+}

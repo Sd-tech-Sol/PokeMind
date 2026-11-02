@@ -1,0 +1,34 @@
+# VERIFICATION_PM-0005B-R1 — audit indépendant ChatGPT (2026-10-12)
+
+## Verdict
+**PM-0005B-R1 : CORRECTIFS PRINCIPAUX ACCEPTÉS EN REVUE STATIQUE, MAIS VALIDATION FINALE RETENUE — PM-0005B-R2 CIBLÉE REQUISE.** La progression simple entre deux sessions, le rejet précoce des tournois privés, la redirection sécurisée et la restriction du quota sont corrigés et testés par des fixtures. Deux scénarios de synchronisation *entre différents filtres* et *après un long historique* restent incorrects. Ces problèmes ont été établis par lecture de code; aucune perte dans la SQLite privée de l'utilisateur n'a été observée par ChatGPT.
+
+## Vérifications GitHub effectuées
+- Dépôt privé `Sd-tech-Sol/PokeMind`, branche `work/pm-0005b-r1-sync-integrity`, HEAD de livraison `84bafddc50e010e518a5cd9979ed6252fcea826e`. Parent d'orchestration `993a8e8c1ba516deb2d9345bf87f4db53c45ac0f`; **2 commits en avance, 0 de retard, 9 fichiers modifiés/ajoutés**. Correctifs dans `src/pokemind/meta.py`, CLI, `tests/test_meta.py` et documentation.
+- Arbre Git complet : **120 entrées, truncated=false**, aucune base SQLite, backup, journal, deck réel, capture, clé/secret, ni donnée sous `data/local/` suivie détectée.
+- CI GitHub : **0 commit statuses et 0 workflows PR associés** (ne prouve pas qu'aucune autre CI externe existe). `153 passed` au prévol et `157 passed` au final, `compileall`, diff et intégrité SQLite sont **rapportés par Codex**, non réexécutés par ChatGPT sous Windows. Aucun appel Limitless réel effectué pour R1 selon Codex.
+- Schéma SQLite reste 7; données personnelles, 4 documents/87 sections, 5 combats et un deck exact de 60 cartes déclarés préservés par Codex, pas inspectables via GitHub. Aucun merge constaté.
+
+## Contrôles conformes au périmètre immédiat R1
+1. `_validate_public_api_url` permet seulement `https://play.limitlesstcg.com/api/games`, `/api/tournaments` et les détails/standings/pairings de tournois publics autorisés; même validation sur requête, redirect et URL finale, avec rejet du chemin protégé `/games/{id}/decks`. `_before_redirect` et `_reserve_get` débitent les GET suivis avant transmission.
+2. `_rate_limit_remaining` interprète un restant explicite `RateLimit r=0` ou `X-RateLimit-Remaining: 0` et bloque la prochaine requête. Budget total inclut tentatives/retries/redirections, et caches offline conservés.
+3. `process_tournament` valide `details` et son `is_public`, jeu, format, plateforme, online et statut avant `standings`/`pairings`, démontré par tests synthétiques.
+4. Découverte saute les tournois déjà connus, et deux appels consécutifs sur une page de 6 nouveaux IDs importent des IDs distincts; refresh manuel revalide les anciens et rend `partial` un tournoi devenu privé, sans effacer l'historique, avec exclusion des agrégats.
+5. Tests additionnels de chemins protégés, RateLimit 0, redirections comptées, pagination simple et nouveau tournoi en tête présents. `excluded_scope` clarifie le périmètre des exclusions de matchups.
+
+## DÉFAUT 1 — exclusions terminales globales hors contexte de filtre
+**`src/pokemind/meta.py::_known_discovery_ids()` (environ lignes 671–683) et `sync_meta` (environ ligne 837).**
+- `_known_discovery_ids` retourne l'ensemble des `tournament_id` importés, **PLUS** tous les `meta_sync_state.scope LIKE 'tournament:%'` avec `state='skipped'`, sans filtrer par `format`, `platform` ou `online` demandés.
+- Reproduction déterministe : `meta sync --online true` reçoit un tournoi public PTCG Standard `isOnline=false`; détails → `online_mismatch`, état `tournament:T` = `skipped`. Plus tard `meta sync --online false` voit le même tournoi dans la liste mais le considère **déjà connu** et n'interroge jamais `details/standings/pairings`. Même problème de `format_mismatch_or_custom`, `platform_mismatch`, et potentiellement d'un changement fournisseur après une exclusion.
+- L'ancienne ligne d'exclusion a un scope global `tournament:T` et n'enregistre pas toutes les dimensions du filtre; elle **ne peut pas être réutilisée comme preuve qu'un tournoi ne peut appartenir à aucun autre filtre**.
+- Critère R2 : état de découverte/exclusion **scopé au moins par `game+format+platform+online`**, avec replay prudent des anciennes exclusions globales; test de 2 appels sur la même base (online true → exclu, online false → importé) et réciproque format/plateforme. Un tournoi réellement privé reste non importé; aucune requête standings/pairings avant validation de details.
+
+## DÉFAUT 2 — reprise insuffisante quand beaucoup d'IDs déjà connus sont en tête
+**`sync_meta` branche `mode=discover` : boucle `page=1`, `seen_this_run`, `known_tournaments`, `limit=min(50,max(6,max_tournaments*3))`.**
+- À chaque nouvelle invocation, la découverte recommence **page 1** et parcourt **toutes les pages anciennes** nécessaires pour trouver un nouvel ID. L'état stocke les IDs, mais **aucun vrai point de reprise des pages**. Après plusieurs sessions, si les N premières pages ne contiennent que des événements déjà archivés, un budget modeste peut être consommé par la relecture des pages anciennes **avant** tout événement nouveau. Résultat : `budget_exhausted` à chaque run, progression nulle indéfiniment.
+- Exemple logique avec `max_tournaments=1`, `limit=6` et faible `max_requests` : assez d'IDs connus sur six pages successives épuisent les GET disponibles; un événement inédit sur page 7 est inaccessible à chaque relance tant que l'ordre ne change pas. Le test sur 6 IDs et le test page 2 après insertion ne couvrent pas cet horizon.
+- Critère R2 : un système de reprise durable borné **par jeu/format/plateforme/online**, combinant sondage de tête à coût borné + curseur/pagination durable/revalidation avec chevauchement et déduplication. Ne pas supposer que la pagination de Limitless est atomique ou que le numéro de page est stable entre exécutions. Prouver en fixture 35–60 IDs déjà connus, événement nouveau derrière eux, petit budget par invocation, puis progression sur plusieurs exécutions; insérer 1–2 événements en tête entre deux runs et montrer que le nouvel état n'oublie pas la tête ni les candidats profonds. Mettre en avant les limites non-atomicité; ne jamais inventer une garantie d'exhaustivité.
+- Conserver le mode explicit `refresh`, le classement des tournois réels par filtre, les snapshots déjà acquis, l'intégrité privée et les budgets. Pas de crawl massif réel durant R2.
+
+## Suite décidée conformément au feu vert permanent
+Préparer immédiatement une nouvelle branche **`work/pm-0005b-r2-resume-scopes`**, prompt de correction limité aux deux points confirmés. Ne pas démarrer PM-0006 tant que le mécanisme Limitless n'est pas correct. Aucune migration gratuite; si une colonne/table SQL est nécessaire, migration additive/sauvegarde/rollback testées. Pas d'installation de scheduler, achat, compte Pokémon, merge, publication/suppression privée. Codex exécute localement puis ChatGPT revérifie GitHub.

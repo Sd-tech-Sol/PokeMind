@@ -1,0 +1,31 @@
+# Audit indépendant — PM-V1-PUBLIC-DECK-LEGALITY-PREFLIGHT-001
+
+**22 octobre 2026 (Québec). Verdict : `VERIFIED_GITHUB_CODE_CI_SYNTHETIC_SCOPE_ONLY`.** Fonctionnalité livrée; **évaluation de la légalité des 4 listes réelles : `UNKNOWN`**. V1 `NOT_RELEASE_READY`.
+
+## Contrôles indépendants GitHub
+
+- Branche `work/pm-v1-lotj-final-readiness-windows`, HEAD de livraison [`e1c6b75b34f8d53d33a3d24e3c75083fd31ac662`](https://github.com/Sd-tech-Sol/PokeMind-dev/commit/e1c6b75b34f8d53d33a3d24e3c75083fd31ac662) contrôlé. Comparaison depuis dernier audit `d115596bb69130a971a42aa93988e1fb96ea5943` : **1 commit, 19 fichiers**, dont `src/pokemind/public_deck_preflight.py`, factorisation `rules.check_deck_entries`, intégration CLI, tests, preuve JUnit et documentation. Aucun merge, reset, force-push ni changement de données privées visibles au diff.
+- [GitHub Actions `39895765373`](https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/39895765373) **`completed/success`**, `head_sha=e1c6b75b34f8d53d33a3d24e3c75083fd31ac662`. Logs des deux jobs inspectés : **Windows job120225743585 : 846 passed / 2 skipped** ; **Ubuntu job120225743374 : 845 passed / 3 skipped**. Hygiène Git et `git diff --check` réussis. OCR non attesté demeure skipped; le troisième skip Ubuntu est propre à l'environnement Windows.
+- Les deux logs publient `public_deck_preflight_evidence` **au SHA et run exacts** : `scope=SYNTHETIC_PUBLIC_DECK_PREFLIGHT_ONLY`, **4 listes inventées de 60 cartes**, 4 `legal` présentiel sur normes inventées, 4 `unknown` Live, vérifications synthétiques reprint/errata, deux DB PUBLIC distinctes, aucune mutation, réseau interdit et `real_public_cache_verified=false`. Les marqueurs antérieurs `competitive_advisor_evidence`, `competitive_pages_evidence`, `rules_registry_evidence` et `ci_evidence` sont présents. Le publieur refuse une preuve JUnit manquante, dupliquée ou hors contrat.
+- Arbre Git récursif **394 entrées, non tronqué**; sous `data/local/`, **`data/local/.gitkeep` seul fichier suivi**. Aucune SQLite, page HTML de tournoi, deck complet propriétaire, journal, capture, ou fichier de cartes brut dans Git. Cela ne constitue **pas un audit du disque Windows**.
+
+## Code, sécurité et limites observés
+
+- `competitive-preflight` exige `--db` compétitif et `--reference-db` catalogue/règles explicitement PUBLIC, `--as-of`, format Standard et plateforme `in_person` ou `live`. Il refuse namespace/chemin non PUBLIC, schéma incomplet, événement/liste incohérent et sélection de composition doublon. Deux bases distinctes via `connect_readonly`; **aucun import, migration ou écriture du deck joué**.
+- Revue des entrées réelles dans `competitive._advisor_snapshot`, des méthodes `rules._resolve_structure_identity`, `rules.check_card`, `rules.check_deck_entries`, de la classification et de la provenance dans `public_deck_preflight.py` : total60, lignes/copies séparées, `legal/not_legal/unknown`, vérification d'identité exacte **code TCG Online + numéro + nom présent + catégorie**, marques, reprint/errata lorsque sources valides, dates et quota. Absence, conflit, source future ou ambiguïté ne se transforment pas en validation. Les champs `live_availability`, `ownership`, `credits`, `craftability`, `matchups` restent inconnus.
+- Les tests comprennent fixtures de sources futures et errata, réimpressions, interdit, 60 copies, quotas, catégories contradictoires, marques et structure incomplètes, source absente, refus de chemins privés, zéro réseau et cache inchangé. Le verdict technique s'arrête aux fixtures; les quatre listes réelles n'ont pas été mises dans Git/CI.
+
+## Données locales rapportées uniquement par Codex
+
+- Deux caches PUBLIC déjà existants consultés en lecture seule : quatre compositions de 60 cartes, soit **97 lignes d'impressions comptées séparément par option / 240 copies**. **0/97 lignes résolues**, toutes avec `SET_CODE_MAPPING_MISSING`; **4 decks `unknown` présentiel et 4 `unknown` Live**, aucune `not_legal` attribuée à tort.
+- Le catalogue de référence contient selon Codex **23 864 impressions, 223 extensions, 118 codes TCG Online non vides**. Aucun des codes requis pour cet échantillon ne correspond dans ce cache. **Cela ne prouve pas l'absence physique des cartes ou des extensions, ni leur illégalité**.
+- **52 fichiers PUBLIC contrôlés inchangés** en octets/taille/mtime, zéro GET/interdit observé, aucun accès privé : observation instrumentée **sur PC rapportée par Codex**, non auditée indépendamment par GitHub. Les 133 tests locaux ciblés et la suite locale 845/3 sont distincts de la CI exacte.
+- Les PDF officiels, la vraie disponibilité Live, l'équivalence de variantes et la couverture de la rotation ne sont pas recertifiés par ce lot. Le test historique d'export presse-papiers TCG Live reste `FIELD_VALIDATED`, sans retest nécessaire.
+
+## Décision et continuité produit
+
+**Accepter le code et les preuves CI reproductibles : `VERIFIED_GITHUB_CODE_CI_SYNTHETIC_SCOPE_ONLY`; aucune certification de légalité des quatre listes réelles.** Ancien mandat consommé. Ne pas refaire le prévol, les GET compétitifs, les tests d'import PTCGL ou les audits précédents.
+
+Le chantier utilisateur [Deck Intelligence — issue #1](https://github.com/Sd-tech-Sol/PokeMind-dev/issues/1) est le prolongement prioritaire. Pour avancer sans cacher le blocage réel, préparer `PM-V1-DECK-INTELLIGENCE-PUBLIC-FOUNDATION-001` `READY` sous D-196 : **pont de codes d'extension sourcé et vérifiable**, puis premières **fiches stratégiques Deck Knowledge** et exports PUBLIC déjà validés, réutilisant les modèles du dépôt. Budget réseau *nouveau et strictement borné* si les sources PUBLIC locales ne suffisent pas; pas de confusion de set par simple similarité, et aucune recette/effet/avantage inventé. Le texte « prêt à copier » ne vaut pas certification Live ni possession.
+
+Les futurs modules **Opponent Deck Observer, Matchup Analytics, Counter-Deck Lab et Learning Loop** de l'issue #1 restent inscrits; tout usage de vrais journaux/collection personnels est sur commande locale explicite, jamais à l'initiative d'un collecteur. Les exigences de la V1 (OCR, scheduler Windows, protection/récupération, autres attestations) restent ouvertes. **V1 `NOT_RELEASE_READY`. STOP audit.**

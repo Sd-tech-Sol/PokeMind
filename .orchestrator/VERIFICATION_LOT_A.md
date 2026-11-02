@@ -1,0 +1,42 @@
+# VERIFICATION_LOT_A — audit indépendant ChatGPT (2026-10-13)
+
+## Verdict et type de vérification
+**LOT A : ACCEPTÉ EN REVUE STATIQUE INDÉPENDANTE POUR LA FONDATION A1–A5; COUVERTURE DES DONNÉES ET RÈGLES = PARTIAL_WITH_EVIDENCE.** Ne pas marquer les connaissances mondiales, toutes les réimpressions, les exclusions officielles, le support TCG Live ou le métagame mondial `DONE`. Les mécanismes de consultation, progression, diagnostics et moteur structurel sont présents. **Dette de correction réseau TCGdex identifiée** à intégrer comme garde-fou précoce au LOT B, sans créer une série de micro-tranches.
+
+## Preuves directement contrôlées
+- Repo GitHub **privé** `Sd-tech-Sol/PokeMind`, branche `work/pm-v1-lota-knowledge-completeness`; HEAD de livraison Codex **`3e1b29f4bea5885810110e96d48f00ebdb7b563f`**, base orchestrateur `a70bafa7fd4d1031784bfa12d4395bb273a07c1f`. Comparaison : **7 commits en avance, 0 retard, 30 fichiers changés**. Commits A1/A2 `07cea71`, A3 `7e687f6`, A4 `13e204d`, A5 `9f174dd`, preuves `b7f6569` et passation finale.
+- Fichiers inspectés : `src/pokemind/{cards,rules,meta,knowledge,database}.py`, `knowledge/curated/official_rules_2026.json`, les définitions et tests `tests/test_{cards,rules,meta,knowledge}.py`, `docs/{LOT_A_EXECUTION_PLAN,LOT_A_ACCEPTANCE_MATRIX,LOT_A_SOURCE_AUDIT}.md`, docs de règles/cartes/méta et `.orchestrator/{RESULT,HANDOFF,NEXT_ACTION}.md`. Pas d'exécution du code sur Windows par ChatGPT.
+- Arbre Git du HEAD : **147 entrées, `truncated=false`**, aucune SQLite, vrai deck, collection, journal personnel, capture, sauvegarde, token ou `data/local` privée dans les chemins suivis. L'audit des chemins ne certifie pas le contenu de toute l'histoire.
+- Statut GitHub : **0 statuts CI et 0 workflow PR** associés au HEAD via le connecteur. **216 tests passés au prévol et 230 tests passés à la fin en 39,58 s**, compilation et `git diff --check` sont **rapportés par Codex**, sans réexécution indépendante par ChatGPT.
+- Codex rapporte base privée **schéma 7 intact**, intégrité SQLite `ok`, 223 sets/602 impressions/973 traductions, 13 sources/6 assertions, 1 tournoi/16 matchs; ces nombres sont **rapportés de son PC**, non reproduits par ChatGPT. Le code livrable prévoit schéma 9; **aucune migration réelle de cette base** pendant le lot selon Codex.
+
+## A1/A2 — catalogue et identités : mécanismes acceptés, couverture partielle
+- API TCGdex GET bornée pour les requêtes directement comptabilisées, pagination FR/EN et statut de progression, erreurs/404 distinctes, refresh manuel, priorités exactes issues d'IDs publics du deck local (pas de vraie decklist envoyée). `cards coverage` fournit numérateur, dénominateur local, détails manquants et total fournisseur `unknown` avant scan achevé.
+- `cards show/search` conserve l'ID d'impression, la provenance EN/FR, les champs manquants/variantes. `cards reprints` n'utilise que des assertions officielles vérifiées et refuse de déclarer une équivalence sur simple nom partagé.
+- **Données non complètes** : le smoke isolé de Codex a utilisé quatre GET, découvert 117 sets et 107 impressions, zéro détail des 107 dans chacune des deux langues; total global fournisseur non établi. Réimpressions officielles `0` dans le registre courant. Ces chiffres ne sont pas une mesure du catalogue mondial.
+
+## A3 — règles officielles/structure : garde-fous acceptés, sources partielles
+- Schéma **8→9** additif `official_deck_structure_rules`, transaction, backup avant migration et restauration/rollback synthétiques rapportés; `rules check-deck` contrôle 60, somme, doublons par nom canonique, Énergies de base/Pokémon de base; `legal` seulement si toutes preuves présentes et `not_legal` pour interdiction démontrée, autrement `unknown`.
+- `_structure_rule_context` exige source et règle `verified` actives, rejette conflits/portées divergentes; les copies/restrictions spéciales ont un indicateur de couverture complète qui reste `False` dans le registre incomplet. Aucune validation globale indue des decks du joueur constatée dans cette lecture.
+- `pm-lota-1` décrit 14 sources, 6 assertions et une règle de structure; deux PDF non lus sont `non_verified`, des portails seulement `navigation_only`. Les 14 HTTP HEAD 200 rapportés attestent seulement une accessibilité, pas la validité normative du contenu; une consultation du rulebook aux pages 20–21 est **déclarée par Codex**.
+- **Conservation des blocages** : promos, errata, restrictions/équivalences complètes, exceptions, Expanded Live non exhaustifs. Ne pas annoncer un deck « légal » à date présente sans preuves.
+
+## A4 — Limitless : mécanisme de couverture accepté, données partielles
+- `meta coverage` sépare `PTCG`, format, plateforme, online, date, snapshots complets/partiels, placements classifiés, matchs admissibles et classifiables, modes BO, freshness, exclusions et biais, **sans taux de victoire inventé**.
+- Smoke isolé déclaré : un refresh public de 4 GET, snapshot 28/28 placements classifiés et 56/59 matchs classifiables; pas un échantillon mondial, ni assurance de finalisation. API sous `play.limitlesstcg.com/api` et chemin `/games/{id}/decks` protégé jamais utilisé selon code/rapport.
+- Trainer Hill est `BLOCKED_WITH_REASON` faute de preuve d'accès automatisé autorisé; pas de scraping pour contourner cela.
+
+## A5 — rapport intégré : mécanisme accepté
+- `knowledge status/audit` ouvre la SQLite **en lecture seule**, agrège niveaux de couverture, intégrité/FK/FTS5, actions prioritaires, indicateurs `unknown` et accepte explicitement anciens schémas avec `MIGRATE_WITH_BACKUP` au lieu de migrer silencieusement. Skill portable `.agents/skills/knowledge/SKILL.md`, README/guides fournis.
+- Le validateur de skill dépendant de `PyYAML` n'était pas disponible; Codex a déclaré un contrôle PowerShell équivalent et des tests de parcours CLI. **Ne pas dire validation officielle de l'outil de skill réussie.**
+
+## Réserve technique concrète — budget GET des redirections TCGdex
+**`src/pokemind/cards.py::CatalogApiClient.get_json` et `_SafeRedirectHandler.redirect_request`.**
+- `get_json` augmente `requests_made` **avant l'appel initial à `opener.open`** et à chaque retry explicite; `_SafeRedirectHandler` autorise une redirection vers le même hôte HTTPS mais **ne décompte pas la requête supplémentaire suivie par urllib**. Ainsi `--max-requests=N` **ne borne pas strictement le nombre réel de GET** en présence de réponses HTTP 30x. Le handler Limitless avait été renforcé précédemment pour éviter ce type d'écart.
+- Le handler vérifie hôte/schéma mais pas une allowlist exacte des chemins publics sous `/v2/{en|fr}/{sets|cards}`; la validation de la destination finale est elle aussi limitée à l'hôte/schéma. Aucun abus réel observé. L'API est publique et l'absence de clé réduit l'impact; **correction à faire avant de lancer une collecte publique substantielle**, avec tests faux redirects, compteur strict, chemin final, quota et `Retry-After`. Conserver la borne 1000 côté CLI mais la rendre stricte y compris redirects/retries.
+- Cette réserve n'invalide pas les fonctions offline déjà construites; elle bloque cependant la certification d'un **budget réseau strict en toute situation**. **Intégrer la correction comme exigence B0 en ouverture du grand LOT B**, plutôt que créer des microaudits non souhaités par l'utilisateur.
+
+## Limites restantes et décision
+- **Statuts de livraison :** mécanismes A1/A2/A3/A4/A5 acceptés statiquement; données historiques mondiales, équivalences, règles complètes, méta mondiale `PARTIAL_WITH_EVIDENCE`; Trainer Hill `BLOCKED_WITH_REASON`. La V1 **n'est pas achevée**. En particulier, continuer les compléments de sources au fil des lots, ne jamais supprimer ces postes.
+- L'utilisateur demande expressément **des lots plus grands, Codex plus autonome et aucun objectif V1 abandonné**. La politique `.orchestrator/AUTONOMY_POLICY.md`, le plan `.orchestrator/V1_BATCH_PLAN.md`, les lots C (coach visuel), D (actualisation autonome sur opt-in Windows), E (sauvegardes et stabilisation) demeurent obligatoires.
+- **Prochaine action :** ChatGPT prépare automatiquement le LOT B autonome, avec B0 correctif TCGdex puis collection/crédits fournis volontairement, diagnostic et recommandations fondées, apprentissage par journaux, candidats 60 cartes et export volontaire après contrôle. Ne pas importer la vraie collection ni transformer les cinq parties en preuve sans action de l'utilisateur. Pas de merge ni scheduler Windows sans consentement spécifique.

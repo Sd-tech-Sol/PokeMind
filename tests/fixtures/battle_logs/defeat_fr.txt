@@ -1,0 +1,12 @@
+Mise en place
+Joueur de référence : JoueurA
+JoueurA a joué Tarsal au Poste Actif.
+AdversaireB a joué Pikachu au Poste Actif.
+
+Tour no 1 - Tour de JoueurA
+JoueurA a pioché Énergie Psy de base.
+JoueurA a attaché Énergie Psy de base à Tarsal.
+
+Tour no 1 - Tour de AdversaireB
+AdversaireB a joué Hyper Ball.
+AdversaireB remporte la partie.

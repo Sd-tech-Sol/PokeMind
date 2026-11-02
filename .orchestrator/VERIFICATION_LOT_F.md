@@ -1,0 +1,46 @@
+# VERIFICATION_LOT_F — audit indépendant ChatGPT (2026-10-14)
+
+## Verdict
+**LOT F F0–F5 LIVRÉ, FONDATIONS ACCEPTÉES EN REVUE STATIQUE AVEC RÉSERVE BLOQUANTE SUR RESTAURATION RÉELLE.** F1 ne constitue **PAS** encore un moteur capable de reconnaître les vraies cartes/plateaux de TCG Live; il décode des pixels de **marqueurs synthétiques codés en dur** seulement. V1 demeure **NOT_RELEASE_READY**. **Ne pas appeler `restore apply` ni `retention apply` sur une vraie base ou de vrais backups** avant G0, audit et autorisation spécifique.
+
+## Contrôles GitHub effectivement indépendants
+- Repo **privé** `Sd-tech-Sol/PokeMind`, branche `work/pm-v1-lotf-completion-vision`, base d'orchestration `5317db92dedd6dabedaae5f476bf56e59153f466`, HEAD Codex **`0ad1db0d55173221fd3896135c034c98deb2ae91`**.
+- Compare GitHub : **10 commits en avance, 0 retard, 22 fichiers modifiés/créés**. Code `src/pokemind/{recovery,visual_coach,readiness,database,cards,cli}.py`, tests `test_{recovery,visual_coach,readiness,lot_f_e2e,cards}.py`, `.orchestrator/{RESULT,HANDOFF,NEXT_ACTION}.md`, `docs/{LOT_F_EXECUTION_PLAN,LOT_F_ACCEPTANCE_MATRIX,V1_READINESS_REPORT,MISE_EN_SERVICE_PROPRIETAIRE}.md` inspectés.
+- Arbre Git récursif **207 entrées, `truncated=false`** ; aucun chemin suivi `data/local/`, SQLite personnelle, image réelle, backup privé ni secret évident détecté. Le contrôle des chemins ne garantit pas zéro donnée privée dans l'historique ou chaque octet des sources.
+- **GitHub Actions indépendante vérifiée sur le SHA EXACT final `0ad1db0d...`** : run `38509791786` `https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/38509791786`, statut `completed/success`, jobs `Python 3.11 · ubuntu-latest` et `Python 3.11 · windows-latest` **success**. L'API combinée des statuts conventionnels retourne `statuses:[]`; la preuve CI provient des runs Actions et des jobs, pas de cette collection.
+- **328 passed, 1 skipped**, compilation, diff et hygiène Git, schéma SQLite 13, base personnelle schéma 7 inchangée sont **déclarés par Codex** ; les jobs CI sont prouvés mais ChatGPT n'a pas exécuté lui-même la base Windows, les images réelles ni testé un disque privé.
+
+## F0 — améliorations établies
+- `restore_backup` : `_assert_backup_attestation` compare SHA, taille, mtime/file-id et manifeste **avant le premier `os.replace`** ; vérification du clone et de la source durant la phase de préparation ; refus conservateur de cible WAL/SHM ou journal WAL et d'un writer verrouillant la SQLite (`_assert_target_quiescent`). Les tests couvrent altération du backup/manifeste avant publication, cible WAL/SHM, `BEGIN IMMEDIATE`, échec de publication `os.replace` et contrôle d'intégrité.
+- `retention_plan` refait `verify_backup` et lie les candidats à SHA/mtime/file-id ; `apply_retention` refait un inventaire sous verrou et place backup+manifest ensemble dans un staging avec tentative de rollback si le déplacement échoue. Tests de backup corrompu, altération même taille et échec de déplacement manifest.
+- **Améliorations réelles des mécanismes**, mais les trois points F0 ne certifient pas encore la sécurité de toute erreur pendant une restauration réelle.
+
+## G0-1 — BLOQUANT : exception POSTPUBLICATION ne restaure pas toujours la cible
+Dans `src/pokemind/recovery.py::restore_backup` :
+```python
+os.replace(temporary, target)
+published = _sqlite_checks(target)
+if published["status"] != "ok" ...:
+    raise RecoveryError("RESTORE_PUBLISHED_TARGET_INVALID")
+```
+Le bloc `except RecoveryError` retire le target puis remet la quarantaine, **mais** `_sqlite_checks(target)` peut aussi lever `sqlite3.DatabaseError`, `sqlite3.OperationalError`, `PermissionError/OSError` ou une autre exception inattendue : 
+- pour `sqlite3.Error`, l'exception passe au `except Exception` externe qui retire seulement `temporary`, **sans restauration de la quarantaine** ;
+- pour `OSError`, le `except OSError` interne ne restaure l'ancien target **que si `not target.exists()`**, ce qui est faux après un `os.replace` réussi suivi d'un échec `_sqlite_checks`.
+Résultat : une restauration peut signaler `RESTORE_APPLY_FAILED` ou une erreur et laisser un nouveau fichier cible publié à la place de l'ancien. **Corriger dans G0 avant toute action réelle** : conserver la cible d'origine en quarantaine jusqu'à publication ET vérification finale complètes; sur **TOUTE** exception postpublication (`sqlite3.Error`, `OSError`, `RecoveryError`, autres), restaurer l'ancienne cible et vérifier le rollback, et lever un code explicite `RESTORE_ROLLBACK_INCOMPLETE` si retour arrière impossible. Couvrir tests par injection d'une exception `sqlite3.OperationalError` et `PermissionError` dans `_sqlite_checks(target)` **après rename réussi**, assurer retour octet-pour-octet de l'ancien target, source backup préservée, cible WAL/séances privées non touchées.
+**G0-2 — garde de quiescence non maintenue :** `_assert_target_quiescent` commence `BEGIN EXCLUSIVE` puis le `ROLLBACK` et ferme la connexion **avant** l'opération de renommage ; un autre writer pourrait accéder à la cible après vérification et avant ou durant publication. Exiger arrêt explicite de l'application + garde/verrou réellement tenu jusqu'à fin publication, ou rester strictement `BLOCKED` pour toute cible existante non démontrablement isolée. Tester ouverture concurrente entre `_assert_target_quiescent` et `os.replace`. Ne pas promettre exclusivité SQLite sur la base personnelle à partir d'un contrôle ponctuel.
+
+## F1 — décodage de pixels synthétiques : PARTIAL, non reconnaissance des cartes réelles
+- `_png_rgb_pixels` parse PNG 8 bits RGB/RGBA non entrelacé, vérifie CRC/filtres et limite pixels/décompression. `_calibrated_marker_state` lit des ROI et seuils sans installer de logiciel, transforme des **couleurs fixes** (`255,0,0`, `0,0,255`, etc.) en identifiants fixes `Synthetic Active`, `syn-1`, phase/dégâts/énergies; la sémantique des champs est codée en dur et impossible à changer par un fichier de calibration. Le moteur n'identifie pas des visuels de cartes Pokémon.
+- La provenance `visual_certain` ne peut être injectée par simple annotation propriétaire, un chemin interne seulement crée la provenance ; `training_observations` a migré au **schéma 13** ajoutant `local_vision`. Tests synthétiques ROI décalée/masquée, pipeline observation→mémoire→conseil, pas de pixel enregistré.
+- `vision_backend_status().operational=false`, `verified_on_user_training=false`. Le terme **`VISION_SYNTHETIC_ADAPTER_ACTIVE`** doit rester qualifié comme marqueur synthétique, pas être présenté comme « reconnaissance réelle TCG Live ». Aucun backend OCR ou modèle calibré, aucun essai de capture du propriétaire. Conserver F1 `PARTIAL_WITH_EVIDENCE`.
+
+## F2–F5 — qualité fonctionnelle et sortie de V1
+- F2 : Codex rapporte une campagne **jetable et bornée** de 221 sets et un lot de 100 cartes EN ; changement de traitement d'ID fournisseur réservé `?` avec test. La lecture du code confirme l'intention de garde des URLs mais les résultats réseau/quantités sont **rapportés par Codex**, non rejoués indépendamment par ChatGPT. Aucun catalogue historique FR/EN complet, reprints/règles promos/errata/Live, méta mondiale ou Trainer Hill autorisé prouvé.
+- F3 : `v1_readiness` en lecture seule affiche capacités et comptes agrégés, pas d'inventaire privé en clair; test E2E synthétique sur vision → mémoire → sauvegarde → clone restauré → readiness. En version courante, `RELEASE_READY` est une expression calculée à partir de quelques compteurs et du statut `verified_on_user_training`, **sans vérifier explicitement la totalité des règles/reprints/compatibilité Live ni l'activation réelle de la cadence scheduler** ; avant une vraie release, aligner les portes automatiques sur **toutes** les conditions métier ou interdire `RELEASE_READY` quand une porte normative demeure inconnue. Actuellement les bloqueurs empêchent bien la proclamation globale.
+- F4 : `docs/MISE_EN_SERVICE_PROPRIETAIRE.md` planifie des décisions volontaires séparées, **pas l'exécution** d'un backup, import, migration ou scheduler. Rien de personnel modifié selon Codex; vérification directe du PC impossible.
+- F5 : V1 `NOT_RELEASE_READY` et matrice honnête ; préserver intégralité des objectifs sans les reclasser `DONE` si absence de source et de vérification réelle.
+
+## Conclusion et direction
+**ACCEPTATION CONDITIONNELLE DES FONDATIONS F1–F5, F0 amélioré MAIS RESTAURATION SUR CIBLE RÉELLE BLOQUÉE PAR G0.** CI verte prouvée, pas de permission pour restore/purge réelle, ni merge/default branch, achat, compte Pokémon, accès aux screenshots privés, installation d'OCR/LLM/scheduler ou migration/import propriétaire.
+
+Préparer automatiquement **GRAND LOT G** avec **G0 correction prioritaire du rollback de toute exception postpublication et de la quiescence**, suivi G1 vrai pipeline visuel local optionnel fondé sur des éléments de capture réalistes/fixtures consenties (aucune vraie capture ni installation sans décision spécifique), G2 complétion publique/normative bornée, G3 mise en service/smoke tests consentis séparément, G4 contrôles readiness complets, G5 matrice et suite H+ si nécessaire. Codex planifie/commits/tests/fixes autonomes sur branche unique, ChatGPT audite GitHub en fin de grand lot. Ne rien supprimer et ne pas proclamer une V1 prête sur une seule CI verte.

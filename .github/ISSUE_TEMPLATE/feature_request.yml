@@ -1,0 +1,36 @@
+name: Suggest an improvement
+description: Suggest a feature or an improvement.
+title: "[idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read `ROADMAP.md` and `PROJECT_VISION.md` before suggesting.
+
+        Two principles are not negotiable: PokeMind **never plays for you** (no bot, overlay, click
+        automation or interaction with the game client), and the player's data **stays on their PC** unless
+        they explicitly allow otherwise.
+
+        You may write in English or French.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you want solved
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposal
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

@@ -1,0 +1,17 @@
+# Audit indépendant ChatGPT — PM-V1-DISPATCH-PREFLIGHT-002
+
+**Date Québec : 2026-10-19. Verdict : `VERIFIED_GITHUB_STOP_ONLY`. Parcours E2E `NOT_STARTED`. V1 `NOT_RELEASE_READY`.**
+
+## GitHub contrôlé directement
+- Repo `Sd-tech-Sol/PokeMind`, branche `work/pm-v1-lotj-final-readiness-windows`; base de dispatch `e0a1cd2c8abad78bb8ac38714fe9bf4a3af966a0`; commit Codex `0dcad51891f879178d6f1b159663e579a477a694`, **1 commit / 6 fichiers d'orchestration** uniquement, `DECISIONS.md`, `STATE.json`, `NEXT_ACTION.md`, `HANDOFF.md`, `RESULT.md`, nouveau `EVIDENCE_PM_V1_DISPATCH_PREFLIGHT_002.md`. Aucun changement à `src/`, `tests/`, `data/local/`, ou `docs/`.
+- Source du problème selon `EVIDENCE_PM_V1_DISPATCH_PREFLIGHT_002.md` : la **session locale de Codex** aurait reçu un message nommant l'ancien lot `PM-V1-TCGDEX-BULK-SOURCE-001` et l'ancien SHA `51d7451`. La dernière instruction effectivement fournie dans **cette conversation ChatGPT** nommait bien `PM-V1-USER-JOURNEY-E2E-001` et `e0a1cd2c`. La cause exacte de la discordance de relais **n'est pas vérifiable depuis GitHub**; ne pas blâmer l'utilisateur ni présumer d'un bug agent. Codex a fait l'arrêt prudent plutôt que de rejouer le lot BULK déjà audité/consommé.
+- Codex local rapporte `fetch/pull --ff-only`, arbre propre, aucun test E2E lancé, aucun code modifié et aucun fichier/base personnel consulté. Le diff GitHub corrobore l'absence de produit/fixtures versionnés; il ne permet pas de vérifier la machine ou la conversation locale de Codex.
+- Exécution [39352070030](https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/39352070030) : **`completed/success` au SHA exact `0dcad51891f879178d6f1b159663e579a477a694`**. Logs Windows job `118398314072` : **531 passed / 2 skipped**, `ci_evidence=TECHNICAL_TESTS_GREEN ... sha=0dcad518...`. Ubuntu job `118398313911` : **530 passed / 3 skipped**, même SHA. Ces tests sont les **tests hérités**, pas le parcours E2E demandé; aucune progression fonctionnelle nouvelle dans ce lot.
+
+## Décision de la vérification
+- **Accepter seulement la conformité de l'arrêt**, pas le mandat E2E comme fait. Le lot `PM-V1-USER-JOURNEY-E2E-001` était préparé, autorisé dans le périmètre **offline/fixtures seulement**, et **son autorisation n'a pas été consommée** lors du prévol arrêté.
+- Reprendre `PM-V1-USER-JOURNEY-E2E-001` au statut **READY**, sans modifier son mandat et sans réactiver `PM-V1-TCGDEX-BULK-SOURCE-001` ou `PM-V1-PUBLIC-COVERAGE-001` déjà consommés. Une nouvelle instruction explicite doit nommer **uniquement** E2E, et demander de lire le premier `NEXT_ACTION.md` et `STATE.json` à jour plutôt que de suivre un ancien SHA de capture ou de conversation.
+- Pour éviter une troisième fausse reprise, **ce relais remplace toutes les anciennes instructions à Codex dans cette conversation**. Demander un `/clear` facultatif seulement une fois Codex inactif. Aucun changement de données, rollback, suppression ou force-push.
+- Les commits documentaires de préparation créés par ChatGPT devront avoir une **nouvelle CI Windows + Ubuntu `completed/success` sur le HEAD exact** avant exécution E2E. Les sauvegardes/ACL/DB personnelles, migration schéma7→13, OCR réel et planificateur Windows restent totalement interdits sans consentement séparé. `NOT_RELEASE_READY`.
+
+**Chaîne de travail** : GitHub documente instructions, données d'audit et SHA ; utilisateur transmet le message à Codex ; Codex exécute ; ChatGPT vérifie à la livraison. Aucune automatisation de communication implicite.

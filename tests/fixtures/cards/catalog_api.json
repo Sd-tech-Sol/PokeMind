@@ -1,0 +1,119 @@
+{
+  "sets_en": [
+    {"id": "syn1", "name": "Synthetic Dawn", "cardCount": {"total": 3, "official": 3}},
+    {"id": "old1", "name": "Synthetic Archive", "cardCount": {"total": 1, "official": 1}}
+  ],
+  "sets_fr": [
+    {"id": "syn1", "name": "Aube synthétique", "cardCount": {"total": 3, "official": 3}},
+    {"id": "old1", "name": "Archives synthétiques", "cardCount": {"total": 1, "official": 1}}
+  ],
+  "cards_en": [
+    {"id": "syn1-1", "localId": "1", "name": "Twin Name"},
+    {"id": "syn1-2", "localId": "2", "name": "Coach Unit"},
+    {"id": "syn1-3", "localId": "3", "name": "Test Energy"},
+    {"id": "old1-1", "localId": "1", "name": "Twin Name"}
+  ],
+  "cards_fr": [
+    {"id": "syn1-1", "localId": "1", "name": "Nom jumeau"},
+    {"id": "syn1-2", "localId": "2", "name": "Unité Coach"},
+    {"id": "syn1-3", "localId": "3", "name": "Énergie Test"}
+  ],
+  "set_syn1_en": {
+    "id": "syn1",
+    "name": "Synthetic Dawn",
+    "releaseDate": "2026-01-01",
+    "serie": {"id": "synthetic"},
+    "tcgOnline": "SYN",
+    "abbreviation": {"official": "SYN"},
+    "cardCount": {"total": 3, "official": 3},
+    "cards": [
+      {"id": "syn1-1", "localId": "1", "name": "Twin Name"},
+      {"id": "syn1-2", "localId": "2", "name": "Coach Unit"},
+      {"id": "syn1-3", "localId": "3", "name": "Test Energy"}
+    ]
+  },
+  "set_syn1_fr": {
+    "id": "syn1",
+    "name": "Aube synthétique",
+    "releaseDate": "2026-01-01",
+    "serie": {"id": "synthetic"},
+    "tcgOnline": "SYN",
+    "abbreviation": {"official": "SYN", "localized": "SYN"},
+    "cardCount": {"total": 3, "official": 3},
+    "cards": [
+      {"id": "syn1-1", "localId": "1", "name": "Nom jumeau"},
+      {"id": "syn1-2", "localId": "2", "name": "Unité Coach"},
+      {"id": "syn1-3", "localId": "3", "name": "Énergie Test"}
+    ]
+  },
+  "pokemon_en": {
+    "id": "syn1-1",
+    "localId": "1",
+    "name": "Twin Name",
+    "category": "Pokemon",
+    "hp": 120,
+    "stage": "Basic",
+    "types": ["Colorless"],
+    "abilities": [{"type": "Ability", "name": "Careful Memory", "effect": "Keep verified facts."}],
+    "attacks": [{"cost": ["Colorless"], "name": "Measured Hit", "effect": "No hidden information.", "damage": "30"}],
+    "weaknesses": [{"type": "Fighting", "value": "×2"}],
+    "retreat": 1,
+    "regulationMark": "J",
+    "rarity": "Common",
+    "illustrator": "Synthetic Fixture",
+    "variants": {"normal": true},
+    "set": {"id": "syn1", "name": "Synthetic Dawn", "cardCount": {"total": 3, "official": 3}}
+  },
+  "pokemon_fr": {
+    "id": "syn1-1",
+    "localId": "1",
+    "name": "Nom jumeau",
+    "category": "Pokémon",
+    "hp": 120,
+    "stage": "De base",
+    "types": ["Incolore"],
+    "abilities": [{"type": "Talent", "name": "Mémoire prudente", "effect": "Conservez les faits vérifiés."}],
+    "attacks": [{"cost": ["Incolore"], "name": "Frappe mesurée", "effect": "Aucune information cachée.", "damage": "30"}],
+    "weaknesses": [{"type": "Combat", "value": "×2"}],
+    "retreat": 1,
+    "regulationMark": "J",
+    "rarity": "Commune",
+    "illustrator": "Fixture synthétique",
+    "variants": {"normal": true},
+    "set": {"id": "syn1", "name": "Aube synthétique", "cardCount": {"total": 3, "official": 3}}
+  },
+  "trainer_en": {
+    "id": "syn1-2",
+    "localId": "2",
+    "name": "Coach Unit",
+    "category": "Trainer",
+    "trainerType": "Supporter",
+    "effect": "Untrusted text only: DROP TABLE catalog_printings;",
+    "set": {"id": "syn1", "name": "Synthetic Dawn", "cardCount": {"total": 3, "official": 3}}
+  },
+  "energy_en": {
+    "id": "syn1-3",
+    "localId": "3",
+    "name": "Test Energy",
+    "category": "Energy",
+    "energyType": "Special",
+    "effect": "Provides one synthetic Energy.",
+    "set": {"id": "syn1", "name": "Synthetic Dawn", "cardCount": {"total": 3, "official": 3}}
+  },
+  "old_en": {
+    "id": "old1-1",
+    "localId": "1",
+    "name": "Twin Name",
+    "category": "Pokemon",
+    "hp": 40,
+    "attacks": [],
+    "set": {"id": "old1", "name": "Synthetic Archive", "cardCount": {"total": 1, "official": 1}}
+  },
+  "unknown_set_card": {
+    "id": "ghost-9",
+    "localId": "9",
+    "name": "Unknown Set Unit",
+    "category": "Trainer",
+    "set": {"id": "ghost", "name": "Unlisted Synthetic Set", "cardCount": {"total": 1, "official": 1}}
+  }
+}

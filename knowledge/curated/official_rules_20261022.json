@@ -1,0 +1,394 @@
+{
+  "registry_version": "pm-official-review-20261022",
+  "consulted_at": "2026-10-22T22:05:02Z",
+  "sources": [
+    {
+      "source_id": "pokemon-rotation-2026-fr",
+      "source_type": "official_announcement",
+      "url": "https://www.pokemon.com/fr/actualites/rotation-de-la-saison-2026-du-format-standard-pour-le-jcc-pokemon",
+      "title": "Rotation Standard 2026 — annonce officielle FR",
+      "language": "fr",
+      "published_date": "2026-01-09",
+      "validation_status": "verified",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "rights_note": "Faits courts uniquement; source complete hors Git. Aucun droit de redistribution du document deduit. Conditions generales non accessibles integralement.",
+      "notes": "Revue Codex locale des sources acquises; aucun audit independant de la copie Windows. Validite constatee seulement au 2026-10-22.",
+      "full_document_evidence": {
+        "sha256": "529f686aed1a11157b0f81d4685c4393b0eba1e86b4970113b68de58bc6e5c88",
+        "bytes": 272188,
+        "pages": null,
+        "observed_at": "2026-10-22T21:55:05.292384+00:00",
+        "provenance": "CODEX_LOCAL_REPORTED"
+      }
+    },
+    {
+      "source_id": "pokemon-tcg-handbook-pdf",
+      "source_type": "official_pdf",
+      "url": "https://www.pokemon.com/static-assets/content-assets/cms2/pdf/play-pokemon/rules/play-pokemon-tcg-tournament-handbook-en.pdf",
+      "title": "Pokemon TCG Tournament Handbook — revision 2026-09-01",
+      "language": "en",
+      "published_date": "2026-09-01",
+      "validation_status": "verified",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "rights_note": "Faits courts uniquement; source complete hors Git. Aucun droit de redistribution du document deduit. Conditions generales non accessibles integralement.",
+      "notes": "Revue Codex locale des sources acquises; aucun audit independant de la copie Windows. Validite constatee seulement au 2026-10-22.",
+      "full_document_evidence": {
+        "sha256": "9f6464bf5d1c8991dca30aae6f2d971fe6676d4d83c8ac0c550c55f899be0b88",
+        "bytes": 802794,
+        "pages": 27,
+        "observed_at": "2026-10-22T21:52:26.610641+00:00",
+        "provenance": "CODEX_LOCAL_REPORTED"
+      }
+    },
+    {
+      "source_id": "pokemon-tcg-errata-pdf",
+      "source_type": "official_pdf",
+      "url": "https://www.pokemon.com/static-assets/content-assets/cms2/pdf/trading-card-game/tcg_errata.pdf",
+      "title": "Pokemon TCG Errata — revision 2026-08-17",
+      "language": "en",
+      "published_date": "2026-08-17",
+      "validation_status": "verified",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "rights_note": "Faits courts uniquement; source complete hors Git. Aucun droit de redistribution du document deduit. Conditions generales non accessibles integralement.",
+      "notes": "Revue Codex locale des sources acquises; aucun audit independant de la copie Windows. Validite constatee seulement au 2026-10-22.",
+      "full_document_evidence": {
+        "sha256": "684879b27af9fe9205f2a4b19b9127bf0ec1df81a2a3bc1bcb901d0cdee1fad6",
+        "bytes": 437192,
+        "pages": 11,
+        "observed_at": "2026-10-22T21:54:55.413130+00:00",
+        "provenance": "CODEX_LOCAL_REPORTED"
+      }
+    },
+    {
+      "source_id": "review20261022-bans-en",
+      "source_type": "official_rules_page",
+      "url": "https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list",
+      "title": "Pokemon TCG Banned Card List — observed 2026-10-22",
+      "language": "en",
+      "published_date": null,
+      "validation_status": "verified",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "rights_note": "Faits courts uniquement; source complete hors Git. Aucun droit de redistribution du document deduit. Conditions generales non accessibles integralement.",
+      "notes": "Revue Codex locale des sources acquises; aucun audit independant de la copie Windows. Validite constatee seulement au 2026-10-22.",
+      "full_document_evidence": {
+        "sha256": "0c49af91ea349e8ebfaf23d8d4d21b8c67687403b15f12f88559022282ee9481",
+        "bytes": 35706,
+        "pages": null,
+        "observed_at": "2026-10-22T21:55:07.640552+00:00",
+        "provenance": "CODEX_LOCAL_REPORTED"
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "assertion_id": "review20261022-rotation-live",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "rotation",
+      "format": "standard",
+      "platform": "live",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "allowed_regulation_marks": [
+          "H",
+          "I",
+          "J"
+        ],
+        "future_marks_require_publication": true,
+        "rotation_effective_date": "2026-03-26",
+        "source_section": "Le format Standard en 2026"
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-rotation-in_person",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "rotation",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "allowed_regulation_marks": [
+          "H",
+          "I",
+          "J"
+        ],
+        "future_marks_require_publication": true,
+        "rotation_effective_date": "2026-04-10",
+        "source_section": "Le format Standard en 2026"
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-bans-standard-physical",
+      "source_id": "review20261022-bans-en",
+      "assertion_kind": "restriction_coverage",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "complete": true,
+        "banned_cards": [],
+        "observed_on": "2026-10-22",
+        "scope": "Standard tournament bans only; client temporary restrictions and release eligibility excluded"
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-functional-reprint-policy",
+      "source_id": "pokemon-tcg-handbook-pdf",
+      "assertion_kind": "reprint_policy",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "requires_explicit_functional_identity": true,
+        "same_name_alone_is_insufficient": true,
+        "currently_playable_reprint_may_be_used_immediately": true,
+        "prerelease_exception_requires_same_name_and_functional_text": true,
+        "source_pages": [
+          11,
+          12
+        ],
+        "negative_example": {
+          "printing_ids": [
+            "sm7-151",
+            "base5-17"
+          ],
+          "functionally_identical": false
+        },
+        "positive_example": {
+          "printing_ids": [
+            "sm7-127",
+            "ex7-83"
+          ],
+          "functionally_identical": true
+        }
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-release-policy-physical",
+      "source_id": "pokemon-tcg-handbook-pdf",
+      "assertion_kind": "release_window",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "requires_printing_legal_from": true,
+        "rule": "second Friday following US product or expansion release",
+        "staggered_release_requires_product_schedule": true,
+        "reprint_exception_requires_explicit_evidence": true,
+        "source_page": 11
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-reprint-sm1-129",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "reprint_equivalence",
+      "format": "standard",
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sm1-129",
+      "payload": {
+        "current_printing_id": "me01-125",
+        "identity_basis": "explicit official example, embedded expansion and collector number",
+        "live_support_or_ownership_proven": false
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-known-playable-sm1-129",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "release_window",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sm1-129",
+      "payload": {
+        "legal_from": "2026-10-22",
+        "date_basis": "confirmed playable on review date; NOT first release or earliest legality",
+        "official_currently_legal_example": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-known-playable-me01-125",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "release_window",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "me01-125",
+      "payload": {
+        "legal_from": "2026-10-22",
+        "date_basis": "confirmed playable on review date; NOT first release or earliest legality",
+        "official_currently_legal_example": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-reprint-swsh2-154",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "reprint_equivalence",
+      "format": "standard",
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "swsh2-154",
+      "payload": {
+        "current_printing_id": "me01-114",
+        "identity_basis": "explicit official example, embedded expansion and collector number",
+        "live_support_or_ownership_proven": false
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-known-playable-swsh2-154",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "release_window",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "swsh2-154",
+      "payload": {
+        "legal_from": "2026-10-22",
+        "date_basis": "confirmed playable on review date; NOT first release or earliest legality",
+        "official_currently_legal_example": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-known-playable-me01-114",
+      "source_id": "pokemon-rotation-2026-fr",
+      "assertion_kind": "release_window",
+      "format": "standard",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "me01-114",
+      "payload": {
+        "legal_from": "2026-10-22",
+        "date_basis": "confirmed playable on review date; NOT first release or earliest legality",
+        "official_currently_legal_example": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-tool-category",
+      "source_id": "pokemon-tcg-errata-pdf",
+      "assertion_kind": "errata",
+      "format": null,
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": null,
+      "payload": {
+        "pokemon_tools_are_not_items": true,
+        "includes_older_tool_printings": true,
+        "source_page": 1
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-minior-sv04-099",
+      "source_id": "pokemon-tcg-errata-pdf",
+      "assertion_kind": "errata",
+      "format": null,
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sv04-099",
+      "payload": {
+        "once_per_turn_limit_removed": true,
+        "each_qualifying_energy_attachment_can_trigger": true,
+        "source_page": 11,
+        "full_effect_and_energy_symbols_require_source": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-minior-sv04-201",
+      "source_id": "pokemon-tcg-errata-pdf",
+      "assertion_kind": "errata",
+      "format": null,
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sv04-201",
+      "payload": {
+        "once_per_turn_limit_removed": true,
+        "each_qualifying_energy_attachment_can_trigger": true,
+        "source_page": 11,
+        "full_effect_and_energy_symbols_require_source": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-diancie-sv07-086",
+      "source_id": "pokemon-tcg-errata-pdf",
+      "assertion_kind": "errata",
+      "format": null,
+      "platform": null,
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sv07-086",
+      "payload": {
+        "counts_special_energy_cards_not_units_provided": true,
+        "source_page": 11,
+        "full_effect_requires_source": true
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    },
+    {
+      "assertion_id": "review20261022-expanded-oranguru",
+      "source_id": "review20261022-bans-en",
+      "assertion_kind": "restriction",
+      "format": "expanded",
+      "platform": "in_person",
+      "effective_from": "2026-10-22",
+      "effective_to": "2026-10-22",
+      "subject_id": "sm5-114",
+      "payload": {
+        "status": "banned",
+        "official_printing": "Ultra Prism 114/156"
+      },
+      "validation_status": "verified",
+      "confidence": "high"
+    }
+  ],
+  "deck_structure_rules": []
+}

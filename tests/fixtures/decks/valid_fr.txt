@@ -1,0 +1,22 @@
+Pokémon : 10
+4 Créature Éclair SYN 001
+3 Créature Forêt SYN 002
+3 Créature Rivière SYN 003
+
+Dresseur : 38
+4 Notes du Professeur SYN 101
+4 Ballon d’Essai SYN 102
+4 Échange Prudent SYN 103
+4 Canne de Récupération SYN 104
+4 Carte de la Ville SYN 105
+4 Corde de Sortie SYN 106
+4 Ceinture d’Entraînement SYN 107
+4 Courrier d’Essai SYN 108
+4 Attrape Équitable SYN 109
+2 Outil Unicode SYN 110
+
+Énergie : 12
+7 Énergie de base Électrique SYN 201
+5 Énergie de base Psy SYN 202
+
+Total de cartes : 60

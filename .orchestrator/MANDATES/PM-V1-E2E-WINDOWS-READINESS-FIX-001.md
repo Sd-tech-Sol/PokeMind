@@ -1,0 +1,26 @@
+# PM-V1-E2E-WINDOWS-READINESS-FIX-001 — Diagnostic et correction Windows CI
+
+**Statut READY — autorisation explicite d'un correctif ciblé entièrement hors ligne sur fixtures**, pour le test Windows rouge de `PM-V1-USER-JOURNEY-E2E-001` au SHA code `5b8a543242bd08f04327ac6f418f815120b5646c` et HEAD de rapport `c19e59ffb7dd946f09cf9400f0e6e4c4ae59e639`. **Ne pas rejouer l'ancien E2E complet en tant que tâche; réparer son test en échec puis revalider.** Le propriétaire veut finir V1, avec lots autonomes, sans demandes de « go » intermédiaires pour cette correction sûre.
+
+## A — Prévol et diagnostic sûr
+- Repo `Sd-tech-Sol/PokeMind`, branche `work/pm-v1-lotj-final-readiness-windows` uniquement. Synchronisation `fetch/pull --ff-only` si sûre; ne jamais effacer du travail local. Lire `AGENTS.md`, `SESSION_CONTINUITY.md`, premier `NEXT_ACTION.md`, `STATE.json`, `AUTONOMY_POLICY.md`, skill exécuteur, le présent mandat et audit `.orchestrator/VERIFICATION_PM_V1_USER_JOURNEY_E2E_001.md`.
+- Observer le HEAD exact et son CI. **Exception intentionnelle : la CI de départ peut être rouge avec précisément le test visé**, puisque le mandat est une correction de ce défaut. NE PAS STOPPER uniquement parce que ce test précis échoue. Si le HEAD a changé ou un autre défaut/non-conformité apparaît, STOP et documenter.
+- Consulter directement GitHub Actions [39467579068](https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/39467579068), [39468575580](https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/39468575580) et les traces du job Windows : `test_complete_player_journey_blocks_network_in_every_cli_child` échoue lors de `run("v1", "readiness")`, mais `demo.run` masque le stderr/stdout enfant et n'expose que `DEMO_CLI_STEP_FAILED:v1`. La cause sous-jacente est **UNKNOWN**.
+
+## B — Reproduction Windows sous barrières inchangées
+- Reproduire **sur fixture jetable seule** le sous-parcours fautif avec les protections actuelles, en isolant la commande enfant `v1 readiness`. Aucun accès au chemin DB par défaut, à une sauvegarde personnelle ni à son inventaire; aucune installation, privilège, OCR ou réseau. Reproduire d'abord le défaut, puis comparer Windows/Ubuntu si pertinent.
+- Introduire au besoin un diagnostic **neutre** des sorties enfants en échec, rapportant seulement code retour, famille de faute/classification et étape, jamais stdout brut privé, secrets, chemins absolus ou données propriétaire. Dans ce cadre explicitement synthétique, lire les détails enfant temporairement pour comprendre la vraie exception et écrire une preuve assainie.
+- Déterminer si c'est un garde de sécurité qui détecte un vrai accès extérieur à la fixture, un problème de sélection implicite DB, un comportement runtime Windows distinct, une divergence du mock/test, un verrou, etc. **Ne pas présumer la cause.** Documenter la trace avant correction et le lien causal. Si une vraie tentative d'accès hors fixture ou d'exécution interdite est détectée, la corriger à la source (ou STOP si impossible), **jamais enlever/assouplir le garde**.
+
+## C — Correction minimale, couverture et risques
+- Appliquer seulement le correctif justifié, limité à la commande/diagnostic/readiness ou à une hypothèse de test fausse démontrée. Conserver `sys.addaudithook` enfants, les cinq sondes négatives, `owner_database_opened=false` seulement si véridique, garde symlink/reparse, clés/données inconnues, et isolation des exports `demo-runs`.
+- Tester `v1 readiness` instrumenté sur Windows avec DB jetable, retour 0, `status=NOT_RELEASE_READY`; ajouter une régression spécifique Windows/agnostique et tester contrôle négatif : commande ne touche aucun chemin hors fixture. Aucun masquage/skip/xpass/if Windows qui contourne le test.
+- Si l'origine reste inconnue après reproduction raisonnable, laisser `BLOCKED_WITH_REASON`, avec diagnostic et preuve; ne pas marquer VERIFIED.
+
+## D — CI et remise finale
+- Tests ciblés, scénario E2E entier, suite complète sur Windows local puis compileall, hygiène Git, diffcheck, recherche d'artefacts secrets; poursuivre autonome tant que périmètre respecté.
+- Publier **code + tests + preuve assainie** `.orchestrator/EVIDENCE_PM_V1_E2E_WINDOWS_READINESS_FIX_001.md`, garder le guide et la matrice J honnêtes. `.orchestrator/{STATE.json,RESULT.md,HANDOFF.md,NEXT_ACTION.md}` à `AWAITING_AUDIT`, `execute_now=false`, commit/push sans merge/force-push. **Contrôler CI Windows+Ubuntu sur le SHA final exact**; si échec, STOP et demander audit, jamais masquer la panne. Si verte, STOP pour ChatGPT qui décidera seulement alors si le lot E2E peut être vérifié.
+- Les résultats antérieurs Windows rouges demeurent dans l'historique avec leurs SHA; ne pas les présenter comme réussis rétroactivement.
+
+## Interdictions
+Aucune DB, backup, deck, journal, screenshot, ACL ou métadonnée personnelle; **aucun réseau fournisseur**, restore plan/apply ou clone réel, installation OCR/scheduler, compte Pokémon Live, achat, dépense, données publiques externes, modification main, réexécution du lot TCGdex déjà consommé. Toutes fonctionnalités V1 conservées, `NOT_RELEASE_READY`. Les tests de recovery éventuellement hérités utilisent uniquement fixtures isolées, jamais source personnelle. La présente correction ciblée est le **seul lot exécutable**.

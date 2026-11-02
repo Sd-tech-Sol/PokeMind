@@ -1,0 +1,8 @@
+Setup
+Reference player: JoueurA
+JoueurA played Drifloon to the Active Spot.
+
+Turn # 1 - JoueurA's Turn
+JoueurA drew Nest Ball.
+JoueurA played Nest Ball.
+JoueurA ended their turn.

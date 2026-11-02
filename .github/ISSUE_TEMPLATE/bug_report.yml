@@ -1,0 +1,81 @@
+name: Report a bug
+description: Report incorrect behaviour in PokeMind.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **First of all: no personal data.**
+
+        Never paste a real battle log, a player name, an account screenshot or a real path. Reproduce the
+        problem with invented data, or anonymise it completely.
+
+        For a **security vulnerability**, do not open an issue: follow `SECURITY.md`.
+
+        PokeMind is a **pre-release**. Known limits are listed in `CHANGELOG.md` and the README; please
+        check them before reporting.
+
+        You may write in English or French.
+
+  - type: checkboxes
+    id: data
+    attributes:
+      label: Confirmation about data
+      options:
+        - label: This report contains no real battle log, player name, account screenshot or personal path.
+          required: true
+
+  - type: textarea
+    id: expected-observed
+    attributes:
+      label: Expected behaviour and observed behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction steps
+      description: On invented data only.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: PokeMind version
+      placeholder: "0.9.0, or the commit hash"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "Windows 11 26100, installed copy or from source, coach engine"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Interface language in use
+      options:
+        - English
+        - French
+        - Not relevant
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Diagnostic or extra detail (anonymised)
+      description: Settings → « Copy diagnostics » gives a masked summary; check it before pasting.
+    validations:
+      required: false

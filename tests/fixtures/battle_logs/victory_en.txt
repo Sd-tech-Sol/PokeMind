@@ -1,0 +1,13 @@
+Setup
+Reference player: JoueurA
+JoueurA played Ralts to the Active Spot.
+AdversaireB played Pikachu to the Active Spot.
+
+Turn # 1 - JoueurA's Turn
+JoueurA drew Iono.
+JoueurA played Iono.
+JoueurA's Ralts used Memory Skip on AdversaireB’s Pikachu for 10 damage.
+
+Turn # 1 - AdversaireB's Turn
+AdversaireB drew a card.
+All Prize cards taken. JoueurA wins.

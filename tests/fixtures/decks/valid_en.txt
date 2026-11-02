@@ -1,0 +1,22 @@
+Pokémon: 12
+4 Creature Alpha SYN 001
+3 Creature Beta SYN 002
+2 Creature Beta OLD 099
+3 Creature Gamma SYN 003
+
+Trainer: 36
+4 Research Notes SYN 101
+4 Practice Ball SYN 102
+4 Safe Switch SYN 103
+4 Recovery Rod SYN 104
+4 Town Map SYN 105
+4 Escape Rope SYN 106
+4 Training Belt SYN 107
+4 Practice Mail SYN 108
+4 Fair Catcher SYN 109
+
+Energy: 12
+7 Basic Lightning Energy SYN 201
+5 Basic Psychic Energy SYN 202
+
+Total Cards: 60

@@ -1,0 +1,33 @@
+# Données privées et reconstruites localement
+data/local/*
+!data/local/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+.venv-desktop/
+.venv-ci311/
+venv/
+
+# Bases et secrets, peu importe leur emplacement accidentel
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Éditeurs et système
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

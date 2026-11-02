@@ -1,0 +1,32 @@
+# PM-V1-COUNTER-DECK-LEARNING-LOOP-001 — READY
+
+**23 octobre 2026 (Québec).** Décision utilisateur D-196 : **continuer les lots ordinaires PUBLIC sans redemander de « go »**. Ce mandat relie la bibliothèque des decks à `Counter-Deck Lab (DKI-05)` et à `Learning Loop (DKI-06)` de [l'EPIC #1](https://github.com/Sd-tech-Sol/PokeMind-dev/issues/1). **Statut `READY`, `execute_now=true`, `consumed=false`; démarrage manuel d'un seul lot Codex ou Claude Code.** Les vrais matchs, la collection et le deck joué demeurent **hors portée** : tests des interactions privées sur **fixtures inventées exclusivement**, sans lecture des vrais journaux.
+
+## But concret
+Obtenir une commande locale qui explique **pourquoi tester un autre deck ou une adaptation** après une défaite, avec **preuves et incertitudes**, et un suivi de ses hypothèses d'une partie fictive à l'autre. Les listes/explications PUBLIC doivent être utilisables maintenant; les apprentissages personnels réels seront volontaires plus tard. Aucun « X bat Y à 70% » depuis deux tournois top16; aucun contre certifié sans matchs et règles suffisants. **V1 `NOT_RELEASE_READY`.**
+
+### Prévol et périmètre
+1. Sur `work/pm-v1-lotj-final-readiness-windows`, vérifier Git status/HEAD, synchroniser `fetch` + `pull --ff-only` sans perte. Lire AGENTS, SESSION_CONTINUITY, WORKFLOW_ADOPTION_V2, premier NEXT_ACTION, STATE, HANDOFF/RESULT, audit `VERIFICATION_PM_V1_DECK_LIBRARY_MATCHUP_FOUNDATION_001.md`, skill exécuteur et EPIC#1.
+2. Attendre **Windows et Ubuntu `completed/success` au nouveau HEAD contenant ce mandat**, pas seulement la CI ancienne, avant toute phase fonctionnelle.
+3. Réutiliser impérativement `deck_library.py`, `competitive.py`, `deck_knowledge.py`, `opponent_observer.py`, `matchup_analytics.py`, `battle_sample.py`, `lessons.py`, `recommendations.py`, `rules.py` et `decks.py`. Pas de second cerveau/doublon de DB ou plateforme cloud; code portable Claude/Codex.
+
+### A — Counter-Deck Lab PUBLIC
+- CLI `counter-plan` ou équivalent, avec `--db PUBLIC`, `--as-of`, archétype ciblé (ou résumé adversaire **artificiel** explicitement fourni), 1 à 4 alternatives disponibles, et références sources. Produire des **listes60/60 publiées exactes**, avant de proposer une variante; les autres suggestions non vérifiées restent **`hypothesis_to_test` sans export joué**. Aucun sourcing réseau ni nouveau download.
+- Expliquer avantages *potentiels et conditionnels* d'un contre, moteurs de pioche/recherche/accélération/perturbation, lignes de K.O. et coût de changement, **seulement** si texte daté TCGdex et références publiques disponibles. Calculer différences exactes de copies, conséquences structurales vérifiables; ne pas prétendre prouver un matchup. Les cartes MEE, errata, légalité Standard/Live, disponibilités, crédits et collection restent unknown si non prouvés. Source/date/échantillon explicites.
+- Comparer « conserver Dragapult et tester une adaptation », « changer vers Basic Box/Hydrapple/Dhelmise ou autre liste réelle » et « collecter davantage de parties avant de conclure ». Classer par **pertinence du plan et qualité des preuves** sans appeler ça classement de force ou prédiction.
+- Si la bibliothèque PUBLIC réelle manque, **`BLOCKED_WITH_REASON`** et aucune collecte de remplacement. Vrai cache PUBLIC **uniquement lecture explicite/ro** et rapports locaux; jamais de liste brute/rapport personnel envoyé à Git.
+
+### B — Learning Loop sur scénarios synthétiques
+- Créer une couche **versionnée et traçable** des hypothèses/expériences : `source_fact`, `observed_game_event`, `derived_statistic`, `hypothesis_to_test`, `test_plan`, `outcome_review`, `withdrawn/rejected`, dates et références, sans écraser événements/faits d'origine. Simulation avec plusieurs parties fictives FR/EN et plusieurs versions de deck attestées, avec W/L/unknown, doublons et ambiguïtés.
+- Mesurer et afficher `n`, dates, versions, provenance, ce qui change entre deux évaluations et ce qui **n'est pas démontré**. Petits `n` => prudence; corrélation ≠ causalité. Dédupliquer sans supprimer logs originaux; révisions idempotentes et réversibles. Un deck proxy PUBLIC de60 ne devient jamais la liste adverse exacte.
+- Une commande de préparation/simulation humain+JSON doit démontrer un cycle complet : défaite fictive → carte/archétype observé ou hypothétique → suggestion PUBLIC et plan de test → nouvelles parties fictives → état révisé de l'hypothèse. Interdire tout replay d'une vraie partie en absence d'ordre explicite.
+- Définir **l'interface d'import volontaire future** : entrée journaux fournis un par un par chemin/ID/deck/version, politique locale de consentement et corrections; mais **NE PAS ouvrir/scanner/écrire** les vraies DB/journaux/collection dans ce lot.
+
+### C — Validation et livraison
+- Tests synthétiques Windows/Linux : proxy non exact, manques de preuve => unknown, quatre alternatives, 60/60, différences de copies, dates, doublons, petits effectifs, changement de version, révision datée/révocable, idempotence, aucun moteur de causalité imaginaire, permissions et aucune donnée personnelle. **Zéro GET et zéro action client/clipboard/OS.** Dépendances existantes et CLI simple, pas de service résident.
+- Sur le cache PUBLIC existant déjà connu, permettre une validation **en lecture seule** d'une shortlist/fiche (si présent), sans modification, et publier seulement agrégats `CODEX_LOCAL_REPORTED`; garder corpus brut, matchs simulés et listes copiables complètes hors Git.
+- Exécuter suite complète, lint/compilation/hygiène et `git diff --check`. Mettre à jour guide `docs/COUNTER_DECK_LEARNING_LOOP.md`, preuves, `.orchestrator/STATE,NEXT_ACTION,NEXT_PROMPT,HANDOFF,RESULT,DECISIONS` et matrices sans retirer les autres gates V1. Publier sur la **même branche**. CI Windows+Ubuntu au SHA livré; AWAITING_AUDIT puis STOP. Ne pas demander de nouveau go au milieu du lot.
+
+## Exclusions strictes
+
+**GET fournisseurs 0**, aucun ancien budget réutilisé; aucun scan/lecture de parties, deck principal/collection/crédits/DB personnels; aucun import réel ou transcription de captures, aucune action TCG Live/presse-papiers, OCR, installation/scheduler Windows, sauvegarde, migration, restauration, purge, achat, merge, reset ou force-push. Un futur import de vrais matchs devra sélectionner explicitement les fichiers et être approuvé localement. Ne pas substituer un winrate ou une équivalence de nom d'Énergie non vérifiés. **V1 `NOT_RELEASE_READY`.**

@@ -1,0 +1,71 @@
+{
+  "schema_version": 2,
+  "project": "PokeMind",
+  "repository": "Sd-tech-Sol/PokeMind-dev",
+  "branch": "work/pm-v1-lotj-final-readiness-windows",
+  "updated": "2026-11-02",
+  "current_task": {
+    "id": "PM-AUDIT-CLAUDE-PLAN",
+    "status": "IN_PROGRESS",
+    "executor": "claude-code",
+    "authorization": "D-258",
+    "plan": "docs/audits/AUDIT_CLAUDE_2026-10-29.md#10",
+    "next_step": "owner reception (D-266 to D-271); on explicit owner GO only: rebuild EXE and installer, then docs/release-checklist.md sections C and D (public repository Sd-tech-Sol/PokeMind, author identity of the other public repositories, prerelease v0.9.0 with .sha256); otherwise step 5 (memory M-2/M-4) or step 6 (maintainability)"
+  },
+  "evidence": {
+    "code_sha": "a334dec",
+    "local_gate": {
+      "status": "GREEN",
+      "passed": 1640,
+      "failed": 0,
+      "skipped": 3,
+      "command": "python scripts/local_gate.py"
+    },
+    "github_actions": "REMOVED_2026-11-01_OWNER_NO_COST; local gate is the proof"
+  },
+  "installed_exe_current": true,
+  "installed_exe_source_sha": "c8b453a",
+  "owner_reception": "PENDING",
+  "release_status": "NOT_RELEASE_READY",
+  "private_data_rules": "never in Git; personal data copied only by the owner in the EXE (D-264), never moved or deleted",
+  "archive": ".orchestrator/archive/2026-10/",
+  "latest_decision": "D-271",
+  "installer": {
+    "file": "dist/installer/PokeMind-Setup-0.9.0.exe",
+    "source_sha": "c8b453a",
+    "sha256": "BEA4FDECF39D6F87DF3EB862996ED933CC9844AF84757D270A0D772418E89C6A",
+    "signed": false,
+    "signing_supported": true,
+    "published": false,
+    "current_with_code": false,
+    "rebuild_needed_for": "new LICENSE holder and English third-party notices (src unchanged since c8b453a)",
+    "sha256_file": "written by Build-PokeMindInstaller.ps1 next to the installer"
+  },
+  "licence": "MIT",
+  "history_audit": {
+    "commits": 710,
+    "head_tree_clean": true,
+    "history_has_windows_username_paths": true,
+    "publication_method": "new public repository, single commit, on owner GO",
+    "public_export": {
+      "script": "scripts/export_public.py",
+      "dry_run_same_tree": true,
+      "dry_run_gate": "GREEN",
+      "pushed": false
+    }
+  },
+  "audit_plan": {
+    "A-8": "done (explicit message mode)",
+    "A-7": "done (bounded and differential context)"
+  },
+  "public_standard": {
+    "source": "public repositories of Sd-tech-Sol (read-only)",
+    "files_aligned": true,
+    "binary_path_scan": "scripts/scan_binary_personal_paths.py (installer build fails on a match)",
+    "release_checklist": "docs/release-checklist.md",
+    "repository_name_conflict": "resolved D-271: private repository renamed to PokeMind-dev",
+    "public_repository": "Sd-tech-Sol/PokeMind (not created; owner GO required)",
+    "public_ci": "none, local gate only (D-271)",
+    "profile_readme": "unchanged (D-271)"
+  }
+}
