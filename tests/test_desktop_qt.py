@@ -160,6 +160,33 @@ def test_qt_delete_conversation_asks_first_then_erases_only_it(ui, app, monkeypa
     assert erased not in [row['id'] for row in ui.store.preferences()['conversations']]
 
 
+def test_qt_delete_all_conversations_asks_once_then_erases_every_one(ui, app, monkeypatch):
+    ui.cloud_consent.setChecked(True)
+    identities = []
+    for message in ('Première question inventée', 'Deuxième question inventée'):
+        ui.new_conversation()
+        ui.chat_input.setPlainText(message)
+        QTest.mouseClick(ui.send_button, Qt.MouseButton.LeftButton)
+        wait_until(app, lambda: not ui.chat_busy)
+        identities.append(ui.conversation['id'])
+    paths = [ui.store.path('conversation-' + identity + '.json') for identity in identities]
+    count = len(ui.preferences['conversations'])
+    asked = []
+    def refuse(*a):
+        asked.append(a[2])
+        return window.QMessageBox.StandardButton.No
+    monkeypatch.setattr(window.QMessageBox, 'question', refuse)
+    QTest.mouseClick(ui.delete_all_button, Qt.MouseButton.LeftButton)
+    assert all(p.exists() for p in paths) and count >= 2 and str(count) + ' discussion' in asked[0]
+    monkeypatch.setattr(window.QMessageBox, 'question', lambda *a: window.QMessageBox.StandardButton.Yes)
+    QTest.mouseClick(ui.delete_all_button, Qt.MouseButton.LeftButton)
+    assert not any(p.exists() for p in paths)
+    assert ui.conversation['messages'] == [] and ui.conversation['id'] not in identities
+    assert all(ui.history_picker.findData(identity) == -1 for identity in identities)
+    assert ui.store.preferences()['conversations'] == [] and ui.store.preferences()['current'] is None
+    assert 'Toutes les discussions' in ui.provider_status.text()
+
+
 def test_qt_chat_stop_is_responsive_and_keeps_partial(ui, app):
     class Slow(Fake):
         def ask_stream(self,prompt,history,emit,tool=None):
@@ -276,6 +303,22 @@ def test_chat_markdown_sources_and_emphasis_do_not_load_untrusted_images():
     assert '<img' not in value and '<script>' not in value and '&lt;script&gt;' in value
 
 
+def test_chat_tool_lines_become_one_friendly_line_and_markdown_blocks_stay_safe():
+    from pokemind.desktop.locale_text import variant
+    value = window.message_html('Début.\n\n[Outil · mcp__pokemind__pokemind_tool · cards]\n\n'
+        '[Tool · mcp__pokemind__pokemind_tool · cards]\n[Outil · mcp__pokemind__pokemind_tool · save_deck]\n'
+        '[Outil · Bash · git status]\n\n## Liste <b>inventée</b>\n- **4** Créature inventée\n'
+        '| Carte | Qté |\n|---|---:|\n| <img src=x> | 2 |\n```\n<script>x</script>\n```')
+    french, english = variant(value, 'fr'), variant(value, 'en')
+    assert 'mcp__' not in french and '[Outil' not in french and '[Tool' not in french
+    assert french.count('⚙') == 1 and 'cartes ×2' in french and 'Mes decks' in french and '<code>git status</code>' in french
+    assert 'cards ×2' in english and 'saved to My decks' in english
+    assert '<b>4</b>' in french and '•' in french and 'font-weight:700' in french
+    assert '<table' in french and '<b>Carte</b>' in french and '---' not in french
+    assert '<img' not in french and '<script>' not in french and '&lt;b&gt;inventée' in french
+    assert '&lt;img src=x&gt;' in french and '&lt;script&gt;x&lt;/script&gt;' in french
+
+
 def test_qt_refresh_calls_existing_service_on_worker(ui,app,monkeypatch):
     original=ui.services.load
     observed=[]
@@ -328,6 +371,32 @@ def test_qt_cancel_local_operation_preserves_previous_report(ui,app,monkeypatch)
     wait_until(app,lambda:not ui.data_busy)
     assert ui.services.report is before
     assert 'frontière sûre' in ui.statusBar().currentMessage()
+
+
+def test_qt_loading_banner_is_visible_during_analysis_with_progress(ui,app,monkeypatch):
+    assert ui.loading_banner.isHidden()
+    started,release=threading.Event(),threading.Event()
+    def slow(update=False, cancelled=None, progress=None):
+        started.set()
+        progress(3,7)
+        release.wait(3)
+        return {'report':ui.services.report}
+    monkeypatch.setattr(ui.services,'load',slow)
+    ui.reload(True)
+    wait_until(app,lambda:started.is_set() and ui.loading_bar.maximum()==7)
+    assert not ui.loading_banner.isHidden()
+    assert 'Analyse de tes combats' in ui.loading_title.text()
+    assert '3 / 7' in ui.loading_detail.text() and ui.loading_bar.value()==3
+    assert ui.metrics[0].text()=='6'  # the previous numbers stay, the banner says they will update
+    release.set()
+    wait_until(app,lambda:not ui.data_busy)
+    assert ui.loading_banner.isHidden()
+    report,ui.services.report=ui.services.report,None
+    ui.show_loading(False)  # first reading: no zero anywhere, the charts wait for real numbers
+    assert ui.statistics.isHidden() and ui.metrics[0].text()=='…' and 'Chargement' in ui.loading_title.text()
+    ui.hide_loading()
+    assert not ui.statistics.isHidden() and ui.metrics[0].text()=='—'
+    ui.services.report=report
 
 
 def test_background_failure_is_journaled_and_copyable(ui, app):

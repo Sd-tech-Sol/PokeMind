@@ -3,18 +3,23 @@
 2026-10-29 Québec. **Mandat actif. Exécuteur : Claude Code** (propriétaire, D-258 : « tu as toutes mes autorisations… fais tout »).
 Plan de référence : [`docs/audits/AUDIT_CLAUDE_2026-10-29.md`](../docs/audits/AUDIT_CLAUDE_2026-10-29.md) §10. Dernière session : voir [RESULT](RESULT.md).
 
-## Demande du propriétaire du 2026-11-01 — refonte visuelle et version publique (D-266 à D-271)
+## Demande du propriétaire du 2026-11-01 — refonte visuelle et version publique (D-266 à D-272)
 Fait : refonte visuelle (D-266); mode autonome, catalogue et installateur (D-267); licence MIT, logo original et audit
 de l'historique (D-268); export public vérifié et signature branchée (D-269); fichiers publics au standard des autres
-dépôts publics de `Sd-tech-Sol` et vérification des binaires (D-270, `a334dec`); dépôt privé renommé
-`Sd-tech-Sol/PokeMind-dev`, pas d'intégration continue publique, profil inchangé (D-271).
+dépôts publics (D-270); dépôt privé renommé `Sd-tech-Sol/PokeMind-dev` (D-271); **PokeMind 0.9.0 publié** :
+dépôt public `Sd-tech-Sol/PokeMind` et préversion `v0.9.0` (D-272).
 Reste, sur décision du propriétaire seulement :
-1. **GO de publication** (rendre PokeMind visible de tous sur GitHub). L'identité d'auteur est celle des autres dépôts
-   publics (relevée sur leurs commits, non recopiée ici). Au GO : `docs/release-checklist.md` sections A (recompiler
-   l'EXE et l'installateur : nouvelle `LICENSE` et avis), C (export, porte, `gh repo create Sd-tech-Sol/PokeMind`,
-   préversion `v0.9.0` avec `.sha256`) et D (description, sujets, signalement privé).
-2. **Signature** : avec un certificat, `Build-PokeMindInstaller.ps1 -SignArguments …`; sinon publier non signé.
+1. **Signature** : avec un certificat, `Build-PokeMindInstaller.ps1 -SignArguments …` puis nouvelle version.
+2. **Mise à jour publique** : chaque nouvelle version exige un GO; nouvel export appliqué dans le dépôt public,
+   jamais de push de l'historique privé (`docs/release-checklist.md`).
 3. Plus tard : actualiser le catalogue vers un commit TCGdex plus récent, avec repli sur l'instantané éprouvé.
+
+## Retours d'essai du propriétaire du 2026-11-02 (D-273)
+Fait à `9a9c6b4` : règle 1 ACE SPEC / 1 Radieux, enregistrement de deck par le coach, bandeau de chargement,
+« Tout supprimer », rendu du chat. Reste :
+1. **Vitesse au démarrage (M-4)** : obtenir du propriétaire les lignes « Analyse · étape · durée » (Réglages →
+   Copier le diagnostic, journal masqué) puis optimiser l'étape la plus lente; ne jamais lire ses données.
+2. **0.9.1 publique** (corrige la règle ACE SPEC de 0.9.0) : seulement sur GO, selon `docs/release-checklist.md`.
 
 ## Réception propriétaire en attente
 Ouvrir son `dist/PokeMind/PokeMind.exe` habituel et vérifier :

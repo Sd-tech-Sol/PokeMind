@@ -1,35 +1,41 @@
-# RESULT — PM-AUDIT-CLAUDE-PLAN : fichiers publics au standard des dépôts publics `Sd-tech-Sol` (D-270, D-271), 2026-11-02
+# RESULT — PM-AUDIT-CLAUDE-PLAN : retours d'essai du propriétaire corrigés (D-273), 2026-11-02
 
-Exécuteur : Claude Code (Opus 5.5). Autorisation : D-258; demande du propriétaire « standardiser comme mes repos publics ».
-Code : **`a334dec`**. Session précédente (D-269) :
-[archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D269_2026-11-02.md](archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D269_2026-11-02.md).
+Exécuteur : Claude Code (Opus 5.5). Demande : retours du propriétaire après essai de l'app (chargement invisible,
+suppression de toutes les discussions, lignes d'outils brutes et typographie du chat, erreurs du coach et
+enregistrement de deck refusé). Session précédente (D-272) :
+[archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D272_2026-11-02.md](archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D272_2026-11-02.md).
 
-## Lu (lecture seule, `gh`)
-Dépôts publics de l'organisation : BrainForgeMD, FileTopo (le plus complet), ClipPull, twenty-proofs et le dépôt de
-profil. Standard relevé : README anglais + `README.fr.md`, section Author, MIT au nom complet du propriétaire,
-`AI_ASSISTANCE.md`, `SECURITY.md` (signalement privé GitHub), `PRIVACY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-`CHANGELOG.md`, `PROJECT_VISION.md`, `ROADMAP.md`, `THIRD_PARTY_NOTICES.md`, `CODE_SIGNING.md`, gabarits `.github`,
-`docs/release-checklist.md`, guides EN/FR, version `vX.Y.Z` avec fichier `.sha256`, dépôt nommé comme le produit.
-
-## Livré (décision D-270)
-- Tous les fichiers ci-dessus adaptés à PokeMind; `docs/PUBLICATION.md` fusionné dans `docs/release-checklist.md`.
-- `LICENSE` et `pyproject.toml` au nom de l'auteur (comme les autres dépôts publics).
-- `scripts/scan_binary_personal_paths.py` + `tests/test_scan_binary_personal_paths.py`; branché dans
-  `Build-PokeMindInstaller.ps1` (arrêt si correspondance), qui écrit aussi `PokeMind-Setup-<version>.exe.sha256`.
-- `Build-PokeMindDesktop.ps1` copie le `THIRD_PARTY_NOTICES.md` racine; l'ancien avis sous `docs/` pointe vers lui.
+## Corrigé (commit `9a9c6b4`)
+- **Règle de deck manquante** : une liste avec deux cartes AS TACTIQUE (ACE SPEC) était déclarée valide, car
+  `special_card_rule_limits` restait « non vérifié ». `rules.check_deck_entries` compte maintenant les cartes ACE SPEC
+  et Radieux d'après la rareté du catalogue (`DECK_ACE_SPEC_LIMIT_EXCEEDED`, `DECK_RADIANT_LIMIT_EXCEEDED`);
+  `validate_deck` le signale carte par carte; `save_deck` refuse une liste qui viole une règle de deck.
+  **Ce défaut existe dans la préversion publique 0.9.0.**
+- **Enregistrement refusé** (`SAVE_DECK_REQUIRES_OWNER_REQUEST`) : la détection par mots-clés du message ne
+  reconnaissait pas la demande. `save_deck` (création seulement, jamais d'écrasement) n'en dépend plus;
+  `save_candidate` garde sa barrière. Le chat confirme « Deck ajouté à Mes decks : … ». Consignes du coach : chaque
+  carte lue avec `cards` et un rôle justifié, 1 ACE SPEC et 1 Radieux au plus.
+- **Chargement visible** : grand bandeau au-dessus de toutes les pages avec barre de progression (« N / M journaux
+  lus »); au premier chargement, « … » au lieu de zéros et graphiques masqués jusqu'aux vrais chiffres.
+- **Tout supprimer** dans l'historique du chat, avec une confirmation qui donne le nombre de discussions.
+- **Chat** : les lignes `[Outil · mcp__pokemind__…]` deviennent une seule ligne discrète (« Outils · cartes ×3 ·
+  validation du deck »); titres, listes, tableaux et blocs de code rendus de façon sûre (tout est échappé);
+  police Segoe UI Variable avec repli Segoe UI, interligne aéré; boutons de l'historique sur deux rangées.
+  Les discussions enregistrées gardent le texte brut; seul l'affichage change.
 
 ## Preuves
-- Porte locale `python scripts/local_gate.py` **VERTE** à `a334dec` : Qt 95, cœur 1545 réussis, 3 ignorés (1640 réussis au total).
-- Vérification sur l'EXE déployé : 796 fichiers, archive Python ouverte (310 modules), aucune correspondance.
-- Installateur d'essai construit sous `build/` avec la vérification branchée et le fichier `.sha256` (supprimé ensuite).
-- Liens relatifs des fichiers publics vérifiés (aucun lien cassé).
+- Porte locale **VERTE sur la suite complète** au contenu de `9a9c6b4` : Qt 99, cœur 1546 réussis, 3 ignorés.
+- Captures hors écran sur un dossier inventé : bandeau, tuiles « … », chat (ligne d'outils, tableau, listes) et
+  boutons de l'historique entiers.
+- EXE reconstruit depuis `9a9c6b4` : 75 modules `pokemind` identiques aux sources, aucun module QA; fumées mode
+  projet, mode autonome et copie installée : sortie 0; installation et désinstallation silencieuses propres.
+  Déployé dans `dist/PokeMind/` (ancien conservé sous `dist/PokeMind-before-0.9.0-fixes-<id>`); installateur copié
+  dans `dist/installer/` (celui publié renommé `-publie.exe`, hors Git). SHA-256 du nouvel installateur
+  `953D652B5ABEEB9084899387F1E5FD1CAF6C6CAADE4B665B1900AA8A9FACF9A2` (non publié).
 
 ## Limites
-- EXE non recompilé : `src/` inchangé depuis `c8b453a`. Le prochain installateur (au GO) devra être reconstruit pour
-  inclure la nouvelle `LICENSE` et les avis anglais.
-- Aucun dépôt créé ni renommé, aucune publication. V1 NOT_RELEASE_READY.
-
-## Suite (D-271, réponses du propriétaire)
-- Dépôt privé renommé `Sd-tech-Sol/PokeMind-dev` (toujours privé), `origin` local mis à jour, `git fetch` réussi.
-- 568 liens vers des commits, issues et fichiers du dépôt privé réécrits dans 126 documents; liens publics inchangés.
-- Pas d'intégration continue publique, profil inchangé. Publication : en attente du GO.
+- Vitesse de l'analyse au démarrage : pas encore optimisée. Le coût vient de la réanalyse de tout le corpus quand
+  un journal change (M-4). Il faut les lignes « Analyse · étape · durée » du diagnostic masqué du propriétaire
+  (Réglages → Copier le diagnostic) avant de toucher au moteur.
+- Pikachu ex « ASC 057 » de la réponse du coach : impression non vérifiée ici (catalogue du propriétaire non lu).
+- Dépôt public inchangé : une 0.9.1 publique exige un GO.

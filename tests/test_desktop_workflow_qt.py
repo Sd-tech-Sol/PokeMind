@@ -474,12 +474,21 @@ def test_owner_text_around_a_pasted_log_is_kept_as_the_question(ui,app,monkeypat
     assert ui.services.candidate_allowed
 
 
+def test_save_deck_refuses_a_list_that_breaks_a_deck_rule(local_tmp, monkeypatch):
+    services=window.Services(local_tmp)
+    export='Pokémon: 20\n20 Invented Alpha INV 1\nTrainer: 20\n20 Invented Beta INV 2\nEnergy: 20\n20 Basic Invented Energy INV 3'
+    monkeypatch.setattr(services,'validate_deck',lambda text:{'total_cards':60,
+        'legality':{'live':{'structure_problems':['DECK_ACE_SPEC_LIMIT_EXCEEDED']},'in_person':{'structure_problems':[]}}})
+    refused=services.tool_call({'operation':'save_deck','query':'Deux AS','export_text':export})
+    assert refused['error']=='DECK_RULES_VIOLATED' and refused['structure_problems']==['DECK_ACE_SPEC_LIMIT_EXCEEDED']
+    assert services.my_decks()==[] and services.saved_deck is None
+
+
 def test_save_deck_needs_a_name_and_exactly_60_and_never_overwrites(local_tmp):
     services=window.Services(local_tmp)
     export='Pokémon: 20\n20 Invented Alpha INV 1\nTrainer: 20\n20 Invented Beta INV 2\nEnergy: 20\n20 Basic Invented Energy INV 3'
+    # No keyword gate: a misspelt request (« creck-le dans mes deck ») still saves, create-only.
     services.candidate_allowed=False
-    assert services.tool_call({'operation':'save_deck','query':'X','export_text':export})['error']=='SAVE_DECK_REQUIRES_OWNER_REQUEST'
-    services.candidate_allowed=True
     assert services.tool_call({'operation':'save_deck','query':'  ','export_text':export})['error']=='DECK_NAME_REQUIRED'
     assert services.tool_call({'operation':'save_deck','query':'Court','export_text':export.replace('20 Basic','19 Basic')})['error']=='DECK_REQUIRES_EXACT_60'
     assert services.tool_call({'operation':'save_deck','query':'Premier nom','export_text':export})['status']=='SAVED_DECK'

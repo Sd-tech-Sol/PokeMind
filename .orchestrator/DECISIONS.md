@@ -1,3 +1,39 @@
+# D-273 — Retours d'essai : règle ACE SPEC / Radieux, enregistrement de deck, chargement visible, chat lisible
+
+2026-11-02 Québec. Retours du propriétaire après essai de l'EXE.
+
+1. **Règle de construction** : une seule carte AS TACTIQUE (ACE SPEC) et un seul Pokémon Radieux par deck, comptés
+   d'après la rareté du catalogue public. Une liste qui viole une règle de deck n'est plus « valide » et ne peut pas
+   être enregistrée. La préversion publique 0.9.0 n'a pas cette vérification.
+2. **Enregistrement par le coach** : la détection par mots-clés du message du propriétaire est retirée pour
+   `save_deck`, qui ne fait que créer (jamais d'écrasement) et reste limité aux listes valides. Demande du
+   propriétaire : le coach doit pouvoir ajouter un deck à « Mes decks » quand on le lui demande.
+3. **Interface** : bandeau de chargement avec progression, aucun zéro trompeur au premier chargement; « Tout
+   supprimer » avec une confirmation; lignes d'outils regroupées en une ligne lisible, Markdown sûr (titres, listes,
+   tableaux, code), police Segoe UI Variable avec repli.
+4. **Vitesse** : pas d'optimisation à l'aveugle du moteur d'analyse; mesure d'abord par le diagnostic masqué du
+   propriétaire (M-4). Une 0.9.1 publique attend un GO.
+
+---
+
+# D-272 — PokeMind 0.9.0 publié : dépôt public `Sd-tech-Sol/PokeMind` et préversion `v0.9.0`
+
+2026-11-02 Québec. Ordre du propriétaire : « GO publie », après explication de ce que publier veut dire.
+
+1. **Préparation (checklist A)** : README / CHANGELOG au présent (`0b6f6b1`); EXE et installateur reconstruits depuis
+   ce commit, fumées et installation/désinstallation sur données inventées, vérification des binaires passée.
+2. **Export (C)** : refus initial légitime (adresse webmail inventée en clair dans un test), corrigée par découpage
+   (`3d4af78`); export d'un seul commit au même arbre que `3d4af78`; porte complète VERTE dans l'export.
+3. **Publication (C, D)** : `gh repo create Sd-tech-Sol/PokeMind --public` (le nom libéré par D-271), préversion
+   `v0.9.0` « PokeMind v0.9.0 » avec l'installateur non signé et son `.sha256` (format ClipPull); réglages comme
+   FileTopo (issues, pas de wiki, signalement privé des vulnérabilités, sujets). Vérification externe : empreinte
+   du fichier téléchargé égale, dépôt public, dépôt de travail toujours privé.
+4. Le dépôt privé `PokeMind-dev` reste la source de travail et de l'orchestration; une mise à jour publique est un
+   nouvel export appliqué dans le dépôt public, sur GO, jamais un push de l'historique privé. V1 reste
+   NOT_RELEASE_READY : 0.9.0 est une préversion.
+
+---
+
 # D-271 — dépôt privé renommé `PokeMind-dev`; pas d'intégration continue publique; profil inchangé
 
 2026-11-02 Québec. Réponses du propriétaire aux questions de D-270 : « renomme le privé (par exemple PokeMind-dev) »,

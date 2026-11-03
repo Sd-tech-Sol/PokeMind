@@ -16,7 +16,10 @@ from pokemind.public_deck_preflight import SCOPED_PUBLIC_CACHES
 
 
 DECK_VIOLATIONS = {'DECK_TOTAL_QUANTITY_MISMATCH', 'DECK_TOTAL_NOT_REQUIRED_COUNT',
-                   'DECK_COPY_LIMIT_EXCEEDED', 'DECK_HAS_NO_BASIC_POKEMON'}
+                   'DECK_COPY_LIMIT_EXCEEDED', 'DECK_HAS_NO_BASIC_POKEMON',
+                   'DECK_ACE_SPEC_LIMIT_EXCEEDED', 'DECK_RADIANT_LIMIT_EXCEEDED'}
+SPECIAL_PROBLEMS = {'acespec': ('ACE_SPEC_MAXIMUM_1', 'Une seule carte AS TACTIQUE (ACE SPEC) par deck.'),
+                    'radiant': ('RADIANT_MAXIMUM_1', 'Un seul Pokémon Radieux par deck.')}
 # The owner's own recorded games, stats or decks. A pronoun alone (« fais-moi »,
 # « je veux ») is not personal data: it used to turn deck requests into a stats dump.
 PERSONAL = re.compile(r"\b(?:stats?|statistiques|statistics|combats?|défaites?|defaites?|victoires?|perdu|perds"
@@ -227,6 +230,11 @@ class Services:
         validation = self.validate_deck(export)
         if validation.get('total_cards') != 60:
             return {'error': 'DECK_REQUIRES_EXACT_60', 'validation': validation}
+        broken = sorted({code for verdict in (validation.get('legality') or {}).values() if isinstance(verdict, dict)
+                         for code in verdict.get('structure_problems', [])})
+        if broken:
+            return {'error': 'DECK_RULES_VIOLATED', 'structure_problems': broken, 'validation': validation,
+                    'hint': 'Corriger la liste (validate_deck) puis réessayer save_deck.'}
         folder, _ = battle_coach._directory(self.root, MY_DECKS)
         path = battle_batch.safe_path(self.root, folder / ('deck-' + battle_batch.digest(export) + '.json'), exists=False)
         if path.exists():
@@ -615,8 +623,8 @@ class Services:
             if op == 'validate_deck':
                 return self.validate_deck(arguments.get('export_text', ''))
             if op == 'save_deck':
-                if not self.candidate_allowed:
-                    return {'error': 'SAVE_DECK_REQUIRES_OWNER_REQUEST'}
+                # Create-only in the owner's own « Mes decks » (never an overwrite): no keyword gate,
+                # a misspelt « crée-le » must not block it (owner, 2026-11-02). The chat shows the result.
                 return self.save_deck(query, arguments.get('export_text', ''))
             if op == 'legality':
                 if not arguments.get('identity'):
@@ -752,6 +760,13 @@ class Services:
             structure = strict['structure_validation']
             # Missing or unverified structure evidence leaves the structure unknown, not violated.
             violations = [code for code in structure['reason_codes'] if code in DECK_VIOLATIONS]
+            exceeded = {marker for marker, code, _ in rules.SPECIAL_CARD_LIMITS if code in violations}
+            for card in strict['cards']:
+                marker = rules.special_card_class(card['structure_identity'].get('rarity'))
+                if marker in exceeded:
+                    code, hint = SPECIAL_PROBLEMS[marker]
+                    problems.append({'line': f"{card['quantity']} {card['card_name']} {card['set_code']} "
+                                             f"{card['collector_number']}", 'problem': code, 'hint': hint})
             if parsed.total_cards != 60 or violations or any(s in {'presumed_not_legal', 'not_legal'} for s in statuses):
                 overall = 'presumed_not_legal'
             elif statuses and all(s in {'presumed_legal', 'legal'} for s in statuses):

@@ -42,8 +42,17 @@
 - 2026-11-02 : **D-271** : dépôt privé renommé **`Sd-tech-Sol/PokeMind-dev`** (`origin` mis à jour; liens vers ses
   commits et issues réécrits); `Sd-tech-Sol/PokeMind` est réservé au futur dépôt public. Pas de GitHub Actions publique
   (porte locale seulement), profil `Sd-tech-Sol` inchangé.
-- Prochaine étape : réception propriétaire; au GO seulement, publication selon `docs/release-checklist.md` (sections A
-  et C à E); sinon étape 5 (mémoire M-2 fin / M-4) ou étape 6 (maintenabilité).
+- 2026-11-02 : **D-272 — PokeMind 0.9.0 publié** sur GO du propriétaire : dépôt public `Sd-tech-Sol/PokeMind` (un seul
+  commit, arbre de `3d4af78`) et préversion `v0.9.0` (installateur + `.sha256`). Le dépôt privé de travail reste
+  `Sd-tech-Sol/PokeMind-dev`; **ne jamais pousser l'historique privé vers le dépôt public**. Mise à jour publique :
+  nouvel export (`scripts/export_public.py`) appliqué dans un clone du dépôt public, commit « PokeMind x.y.z », sur GO.
+- 2026-11-02 : **D-273** à `9a9c6b4` : règle 1 ACE SPEC / 1 Radieux (`rules.special_card_class`, rareté du catalogue,
+  repli `NULL AS rarity` pour les anciens catalogues); `save_deck` sans détection de mots, refus si règle violée;
+  bandeau de chargement (`MainWindow.show_loading` / `hide_loading`); « Tout supprimer »
+  (`delete_all_conversations`); rendu du chat (`message_html` par blocs, `tool_chip`, `inline_html`). Écrire les
+  correctifs de code par scripts Python (outil Write), jamais par heredoc Bash : les barres obliques inverses y sont altérées.
+- Prochaine étape : réception propriétaire; vitesse (M-4) dès que le diagnostic masqué est fourni; 0.9.1 publique
+  seulement sur GO; sinon étape 5 (mémoire M-2 fin) ou étape 6 (maintenabilité).
 - Pour reprendre : `git fetch && git pull --ff-only`, lire `AGENTS.md` → `SESSION_CONTINUITY.md` → `STATE.json` → `NEXT_ACTION.md`.
 - Recompiler l'EXE : fixture `scripts/qa_unified_desktop.py --prepare-release`, `Build-PokeMindDesktop.ps1 -StagingRoot build/exe-upgrade-<32 hex>`,
   smoke `POKEMIND_DESKTOP_SMOKE=1` avec la fixture comme dossier courant, puis script de permutation local (sous `build/`, ignoré).

@@ -11,6 +11,7 @@ from pokemind.rules import (
     RulesError,
     check_card,
     check_deck,
+    check_deck_entries,
     default_registry_path,
     load_official_registry,
     rules_sources,
@@ -615,6 +616,50 @@ def test_fully_sourced_structure_can_be_legal_or_demonstrably_not_legal(
     assert "DECK_HAS_NO_BASIC_POKEMON" in no_basic["reason_codes"]
     assert sixty_one["structure_validation"]["status"] == "not_legal"
     assert "DECK_TOTAL_NOT_REQUIRED_COUNT" in sixty_one["reason_codes"]
+
+
+def test_one_ace_spec_and_one_radiant_per_deck(local_tmp: Path) -> None:
+    db_path = _ready_db(local_tmp / "special-limits.sqlite3")
+    connection = sqlite3.connect(db_path)
+    now = "2026-01-01T00:00:00Z"
+    for card_id, local_id, name, category, stage, rarity in (
+        ("synthetic-ace-1", "7", "Invented Stamp", "trainer", None, "ACE SPEC Rare"),
+        ("synthetic-ace-2", "8", "Invented Catcher", "trainer", None, "ACE SPEC Rare"),
+        ("synthetic-radiant-1", "9", "Radiant Inventmon", "pokemon", "Basic", "Radiant Rare"),
+        ("synthetic-radiant-2", "10", "Radiant Fakemon", "pokemon", "Basic", "Radiant Rare"),
+    ):
+        connection.execute(
+            """INSERT INTO catalog_printings (tcgdex_id, set_id, local_id, regulation_mark, category, stage, rarity,
+               discovered_at, updated_at, brief_source_url, brief_retrieved_at)
+               VALUES (?, 'synthetic-set', ?, 'H', ?, ?, ?, ?, ?, 'https://api.tcgdex.net/test', ?)""",
+            (card_id, local_id, category, stage, rarity, now, now, now))
+        connection.execute(
+            """INSERT INTO catalog_translations (printing_id, language, status, name, energy_type, source_url, retrieved_at)
+               VALUES (?, 'en', 'present', ?, NULL, 'https://api.tcgdex.net/test', ?)""", (card_id, name, now))
+    connection.commit()
+    connection.close()
+    _coverage(db_path)
+    _replace_structure_rule(db_path)
+
+    def deck(*extra):
+        lines = [(4, "Shared Name", "1"), *extra]
+        lines.append((60 - sum(q for q, _, _ in lines), "Basic Energy", "6"))
+        entries = [{"ordinal": i, "card_name": name, "set_code": "SYN", "collector_number": number, "quantity": q}
+                   for i, (q, name, number) in enumerate(lines, 1)]
+        return check_deck_entries(db_path, entries, total_cards=60, exact_confirmed=True, format="standard",
+                                  platform="live", as_of="2026-05-01")
+
+    one = deck((1, "Invented Stamp", "7"), (1, "Radiant Inventmon", "9"))
+    assert one["structure_validation"]["status"] == "legal"
+    assert one["structure_validation"]["checks"]["ace_spec_count"] == 1
+    two_aces = deck((1, "Invented Stamp", "7"), (1, "Invented Catcher", "8"))
+    assert two_aces["structure_validation"]["status"] == "not_legal"
+    assert "DECK_ACE_SPEC_LIMIT_EXCEEDED" in two_aces["reason_codes"]
+    same_ace_twice = deck((2, "Invented Stamp", "7"))
+    assert "DECK_ACE_SPEC_LIMIT_EXCEEDED" in same_ace_twice["reason_codes"]
+    two_radiants = deck((1, "Radiant Inventmon", "9"), (1, "Radiant Fakemon", "10"))
+    assert "DECK_RADIANT_LIMIT_EXCEEDED" in two_radiants["reason_codes"]
+    assert "DECK_ACE_SPEC_LIMIT_EXCEEDED" not in two_radiants["reason_codes"]
 
 
 def test_incomplete_exceptions_conflicts_and_expired_windows_stay_unknown(

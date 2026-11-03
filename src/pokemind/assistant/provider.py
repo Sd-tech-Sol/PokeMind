@@ -44,7 +44,11 @@ COACH_SYSTEM = SYSTEM.replace(
     'Valide ensuite la liste complete avec operation=validate_deck, qui controle structure et legalite presumee de '
     'chaque ligne (export_text au format TCG Live : sections '
     'Pokemon/Trainer/Energy, lignes "quantite nom-anglais CODE numero", 60 cartes) et corrige chaque probleme '
-    'signale avant de repondre. Presente les noms en francais avec code et numero, puis la liste exportable. '
+    'signale avant de repondre. Chaque carte de la liste doit avoir ete lue avec operation=cards et avoir un role '
+    'explique dans ta strategie; retire une carte que tu ne peux pas justifier. Une seule carte AS TACTIQUE '
+    '(ACE SPEC) et un seul Pokemon Radieux par deck. Si le proprietaire veut le deck dans ses decks, enregistre-le '
+    'avec operation=save_deck apres validation. Presente les noms en francais avec code et numero, puis la liste '
+    'exportable. '
     'Une legalite presumee cite sa base et sa date; collection, credits et taux de victoire restent inconnus. '
     'Propose une liste concrete a tester, avec sa strategie et ses incertitudes, plutot que de refuser. '
     'Journal colle par le proprietaire (selected_match fourni) : identifie l archetype adverse a partir de '
@@ -285,7 +289,7 @@ class ClaudeCode(ProviderAdapter):
                         self.on_event({'method':'item/completed', 'params':{'item':{
                             'type': 'tool_use', 'status': block['type'], 'name': block.get('name'),
                             'summary': str(tool_input.get('command') or tool_input.get('file_path')
-                                           or tool_input.get('pattern') or '')[:500]}}})
+                                           or tool_input.get('pattern') or tool_input.get('operation') or '')[:500]}}})
             if item.get('type') == 'stream_event':
                 event = item.get('event', {})
                 if streamed and event.get('type') == 'content_block_start' and event.get('content_block', {}).get('type') == 'text':

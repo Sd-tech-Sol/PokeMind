@@ -713,12 +713,15 @@ def _resolve_structure_identity(connection: Any, entry: Any, *, set_aliases: dic
     result: dict[str, Any] = {
         "ids": [], "canonical_name": None, "canonical_name_proven": False,
         "category": None, "stage": None, "basic_energy": None,
-        "basic_pokemon": None, "resolution_reason": "PRINTING_IDENTITY_INCOMPLETE",
+        "basic_pokemon": None, "rarity": None, "resolution_reason": "PRINTING_IDENTITY_INCOMPLETE",
     }
     if not entry["set_code"] or not entry["collector_number"]:
         return result
     alias_evidence = []
     set_ids = []
+    # Older or minimal catalogues have no rarity column: the special limits then stay unverified.
+    rarity = "p.rarity" if any(row[1] == "rarity" for row in connection.execute(
+        "PRAGMA table_info(catalog_printings)")) else "NULL AS rarity"
     if set_aliases is not None:
         from pokemind.set_code_aliases import alias_sets
         set_ids, alias_evidence = alias_sets(set_aliases, entry["set_code"])
@@ -729,7 +732,7 @@ def _resolve_structure_identity(connection: Any, entry: Any, *, set_aliases: dic
             result["alias_evidence"] = alias_evidence
             return result
     rows = connection.execute(
-        """SELECT p.tcgdex_id, p.category, p.stage, t.language, t.name,
+        f"""SELECT p.tcgdex_id, p.category, p.stage, {rarity}, t.language, t.name,
                   t.energy_type
            FROM catalog_printings p
            JOIN catalog_sets s ON s.tcgdex_id=p.set_id
@@ -741,7 +744,7 @@ def _resolve_structure_identity(connection: Any, entry: Any, *, set_aliases: dic
     if set_ids:
         from pokemind.set_code_aliases import collector_key
         candidates = connection.execute(
-            """SELECT p.tcgdex_id,p.category,p.stage,t.language,t.name,t.energy_type,p.local_id
+            f"""SELECT p.tcgdex_id,p.category,p.stage,{rarity},t.language,t.name,t.energy_type,p.local_id
                FROM catalog_printings p LEFT JOIN catalog_translations t
                ON t.printing_id=p.tcgdex_id AND t.status='present'
                WHERE p.set_id=? ORDER BY p.tcgdex_id,t.language""", (set_ids[0],)).fetchall()
@@ -779,6 +782,7 @@ def _resolve_structure_identity(connection: Any, entry: Any, *, set_aliases: dic
         canonical_name_proven=len(set(english_names)) == 1,
         category=first["category"],
         stage=first["stage"],
+        rarity=first["rarity"],
     )
     category = _normalized_name(first["category"])
     energy_types = {value["energy_type"] for value in values if value["energy_type"]}
@@ -898,6 +902,21 @@ def presume_mark(mark: str | None, rotation: dict[str, Any] | None) -> dict[str,
                       f"{rotation['last_verified_on'] or 'inconnue'}; aucune rotation plus récente connue.")}
 
 
+# At most one ACE SPEC card and one Radiant Pokémon per deck (official rules, printed on the cards).
+# TCGdex marks them by rarity (« ACE SPEC Rare », « Radiant Rare »).
+SPECIAL_CARD_LIMITS = (
+    ("acespec", "DECK_ACE_SPEC_LIMIT_EXCEEDED", "ace_spec_count"),
+    ("radiant", "DECK_RADIANT_LIMIT_EXCEEDED", "radiant_count"),
+)
+
+
+def special_card_class(rarity: Any) -> str | None:
+    key = re.sub(r"[^a-z]", "", unicodedata.normalize("NFKD", str(rarity or "")).casefold())
+    if "acespec" in key:
+        return "acespec"
+    return "radiant" if "radiant" in key or "radieux" in key else None
+
+
 def check_deck_entries(
     db_path: Path, entries: list, *, total_cards: int, exact_confirmed: bool,
     format: str, platform: str, as_of: str, set_aliases: dict | None = None,
@@ -1003,6 +1022,14 @@ def check_deck_entries(
         else:
             structure_reasons.append("COPY_LIMIT_INPUTS_INCOMPLETE")
         checks["over_copy_limit"] = over_limit
+        # A resolved printing carries its rarity: more than one of a kind is decisive even when
+        # other special limits stay unverified.
+        for marker, code, field in SPECIAL_CARD_LIMITS:
+            count = sum(int(card["quantity"]) for card in cards
+                        if special_card_class(card["structure_identity"].get("rarity")) == marker)
+            checks[field] = count
+            if count > 1:
+                violations.append(code)
 
         basic_count = sum(
             int(card["quantity"]) for card in cards

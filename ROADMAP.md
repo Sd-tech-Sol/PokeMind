@@ -9,8 +9,12 @@ This roadmap states intentions, not promises. The detailed plan and its current 
 - Explicit message mode, smaller coach context.
 - Standalone installed copy with a verified card catalogue download.
 
-## Next — publication
-- Public repository and a first GitHub prerelease with the installer and its SHA-256.
+## Done — 0.9.1 pre-release
+- Public repository with GitHub prereleases (installer and its SHA-256).
+- One ACE SPEC card and one Radiant Pokémon per deck enforced; the coach saves validated decks on request.
+- Visible loading banner, « Delete all » discussions, cleaner chat rendering.
+
+## Next
 - Code signing if a publisher identity is set up (see `CODE_SIGNING.md`).
 
 ## Later

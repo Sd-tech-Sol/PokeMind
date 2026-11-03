@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, 
 from PySide6.QtGui import QDesktopServices, QFont, QTextCursor, QColor
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget, QFileDialog,
     QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
-    QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem,
+    QProgressBar, QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem,
     QTabWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QLayout)
 
 from pokemind import diagnostics
@@ -143,16 +143,124 @@ def tool_activity(method, item):
     if kind == 'tool_use' and item.get('status') == 'tool_use':
         return T('\n[Outil · ') + str(item.get('name')) + (' · ' + item['summary'] if item.get('summary') else '') + ']\n'
     if kind == 'dynamicToolCall' and method == 'item/completed':
-        return T('\n[Outil · ') + str(item.get('tool') or kind) + ' · ' + str(item.get('status', '')) + ']\n'
+        arguments = item.get('arguments') if isinstance(item.get('arguments'), dict) else {}
+        return T('\n[Outil · ') + str(item.get('tool') or kind) + ' · ' + str(arguments.get('operation') or item.get('status', '')) + ']\n'
     return None
 
 
+# Friendly names for the tools an engine calls (owner, 2026-11-02: raw « mcp__pokemind__pokemind_tool »
+# lines were noise). Stored conversations keep the raw marker; only the display changes.
+TOOL_LINE = re.compile(r'^\[(?:Outil|Tool) · ([^\]\n]{1,600})\]$')
+# (French, English): explicit pairs, so no short word is added to the substitution catalogue.
+OPERATION_LABELS = {'cards': ('cartes', 'cards'), 'validate_deck': ('validation du deck', 'deck check'),
+    'save_deck': ('enregistrement dans Mes decks', 'saved to My decks'), 'legality': ('légalité', 'legality'),
+    'decks': ('listes de decks', 'deck lists'), 'matchups': ('matchups', 'matchups'),
+    'context': ('mémoire locale', 'local memory'), 'match': ('partie choisie', 'selected game'),
+    'reconstruct': ('reconstruction', 'reconstruction'), 'learning': ('apprentissage', 'learning'),
+    'annotate': ('note', 'note'), 'collection': ('collection', 'collection'),
+    'research': ('recherche publique', 'public research'), 'compare': ('comparaison', 'comparison'),
+    'save_candidate': ('candidat', 'candidate')}
+POKEMIND_TOOLS = {'pokemind_read': ('mémoire PokeMind', 'PokeMind memory'), 'pokemind_tool': ('outils PokeMind', 'PokeMind tools')}
+NATIVE_TOOL_LABELS = {'Bash': ('commande', 'command'), 'PowerShell': ('commande', 'command'), 'Read': ('lecture', 'read'),
+    'Grep': ('recherche', 'search'), 'Glob': ('recherche', 'search'), 'Edit': ('modification', 'edit'),
+    'Write': ('écriture', 'write'), 'WebFetch': ('page web', 'web page'), 'WebSearch': ('recherche web', 'web search')}
+CODE_STYLE = 'background-color:rgba(127,127,127,0.14); font-family:Consolas,monospace; font-size:12px;'
+
+
+def tool_chip(specs):
+    """One discreet line for a run of tool calls: PokeMind lookups are counted, real commands stay visible."""
+    counted, details = {}, []
+    for spec in specs:
+        name, _, detail = spec.partition(' · ')
+        short, detail = name.strip().rsplit('__', 1)[-1], detail.strip()
+        if short in POKEMIND_TOOLS:
+            label = OPERATION_LABELS.get(detail, POKEMIND_TOOLS[short]) if short == 'pokemind_tool' else POKEMIND_TOOLS[short]
+        else:
+            french, english = NATIVE_TOOL_LABELS.get(short, (short, short))
+            extra = detail if detail and detail not in {'completed', 'tool_use', 'inProgress'} else ''
+            details.append(rich(T(french, en=english)) + (T(' : ', en=': ') + '<code>' + rich(extra[:200]) + '</code>' if extra else ''))
+            continue
+        counted[label] = counted.get(label, 0) + 1
+    parts = [rich(T(fr, en=en)) + (' ×' + str(n) if n > 1 else '') for (fr, en), n in counted.items()] + details
+    return ('<p style="color:#8a94a6; font-size:12px; margin-top:4px; margin-bottom:4px;">⚙ ' + rich(T('Outils', en='Tools'))
+            + ' · ' + J(' · ', parts) + '</p>')
+
+
 def message_html(text):
-    """Small safe Markdown subset: text emphasis and opt-in clickable sources."""
+    """Safe Markdown subset: headings, lists, code blocks, emphasis, tool lines and opt-in clickable sources.
+    Everything is escaped first; no image, script or raw HTML from a message is ever interpreted."""
+    out, paragraph, lines, index = [], [], str(text).split('\n'), 0
+    def flush():
+        if paragraph:
+            out.append('<p style="margin-top:4px; margin-bottom:8px; line-height:140%;">' + inline_html('\n'.join(paragraph)).replace('\n', '<br>') + '</p>')
+            paragraph.clear()
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if stripped.startswith('```'):
+            flush()
+            block, index = [], index + 1
+            while index < len(lines) and not lines[index].strip().startswith('```'):
+                block.append(lines[index])
+                index += 1
+            index += 1
+            out.append('<pre style="' + CODE_STYLE + '">' + rich('\n'.join(block)) + '</pre>')
+            continue
+        if TOOL_LINE.match(stripped):
+            flush()
+            specs = []
+            while index < len(lines) and (TOOL_LINE.match(lines[index].strip()) or not lines[index].strip()):
+                found = TOOL_LINE.match(lines[index].strip())
+                if found:
+                    specs.append(found[1])
+                index += 1
+            out.append(tool_chip(specs))
+            continue
+        if stripped.startswith('|') and stripped.endswith('|') and len(stripped) > 1:
+            flush()
+            rows = []
+            while index < len(lines) and lines[index].strip().startswith('|') and lines[index].strip().endswith('|'):
+                cells = [cell.strip() for cell in lines[index].strip()[1:-1].split('|')]
+                if not all(re.fullmatch(r':?-{2,}:?', cell) for cell in cells if cell):
+                    rows.append(cells)
+                index += 1
+            out.append('<table cellspacing="0" cellpadding="5" style="margin-top:6px; margin-bottom:6px;">' + J('', (
+                '<tr>' + J('', ('<td style="border-bottom:1px solid rgba(127,127,127,0.35);">'
+                                + ('<b>' + inline_html(cell) + '</b>' if number == 0 else inline_html(cell)) + '</td>'
+                                for cell in cells)) + '</tr>'
+                for number, cells in enumerate(rows[:200]))) + '</table>')
+            continue
+        heading = re.match(r'^(#{1,4})\s+(.{1,300})$', stripped)
+        bullet = re.match(r'^[-*•]\s+(.+)$', stripped)
+        number = re.match(r'^(\d{1,3})[.)]\s+(.+)$', stripped)
+        if heading:
+            flush()
+            size = {1: '18px', 2: '16px', 3: '15px', 4: '14px'}[len(heading[1])]
+            out.append('<p style="font-size:' + size + '; font-weight:700; margin-top:12px; margin-bottom:4px;">'
+                       + inline_html(heading[2]) + '</p>')
+        elif bullet or number:
+            flush()
+            marker = '•' if bullet else number[1] + '.'
+            out.append('<p style="margin-left:16px; margin-top:2px; margin-bottom:3px; line-height:135%;">' + marker + '&nbsp; '
+                       + inline_html(bullet[1] if bullet else number[2]) + '</p>')
+        elif re.fullmatch(r'-{3,}|\*{3,}|_{3,}', stripped):
+            flush()
+            out.append('<hr>')
+        elif not stripped:
+            flush()
+        else:
+            paragraph.append(lines[index])
+        index += 1
+    flush()
+    return J('', out)
+
+
+def inline_html(text):
+    """Emphasis, inline code and opt-in clickable sources inside one block."""
     def plain(value):
         escaped = rich(value)
         escaped = re.sub(r'\*\*([^*\n]{1,2000})\*\*', r'<b>\1</b>', escaped)
-        return re.sub(r'`([^`\n]{1,2000})`', r'<code>\1</code>', escaped)
+        escaped = re.sub(r'(?<![*\w])\*([^*\n]{1,500})\*(?![*\w])', r'<i>\1</i>', escaped)
+        return re.sub(r'`([^`\n]{1,2000})`', r'<code style="' + CODE_STYLE + r'">\1</code>', escaped)
     parts, position = [], 0
     pattern = r'\[([^\]\n]{1,200})\]\(((?:https://|pokemind://)[^\s<>"\)]+)\)|((?:https://|pokemind://)[^\s<>"\]\)]+)'
     for match in re.finditer(pattern, text):
@@ -172,7 +280,7 @@ def message_html(text):
             parts.append(plain(match[0]))
         position = match.end()
     parts.append(plain(text[position:]))
-    return J('',(parts)).replace('\n', '<br>')
+    return J('', parts)
 
 
 class MainWindow(QMainWindow):
@@ -190,6 +298,7 @@ class MainWindow(QMainWindow):
         self.catalog_busy, self.catalog_cancel = False, threading.Event()
         self.preferences = self.store.preferences()
         set_language(self.preferences['language'])
+        QFont.insertSubstitution('Segoe UI Variable Text', 'Segoe UI')  # Windows 10 has no variable font
         self.setStatusBar(QStatusBar(self))
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(4)
@@ -267,7 +376,13 @@ class MainWindow(QMainWindow):
         side.addWidget(self.navigation)
         outer.addWidget(sidebar)
         self.stack = AnimatedStack()
-        outer.addWidget(self.stack, 1)
+        content = QWidget()
+        column = QVBoxLayout(content)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addWidget(self._loading_banner())
+        column.addWidget(self.stack, 1)
+        outer.addWidget(content, 1)
         self.setCentralWidget(central)
         self._dashboard()
         self._battles()
@@ -433,6 +548,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(T('Service indisponible · ') + code)
 
     def load_failed(self, code):
+        self.hide_loading()
         self.data_busy = False
         self.refresh_button.setEnabled(True)
         self.cancel_data_button.hide()
@@ -1050,14 +1166,19 @@ class MainWindow(QMainWindow):
         self.history_picker = QComboBox()
         self.history_picker.setAccessibleName(T('Historique des discussions'))
         self.history_picker.activated.connect(self.resume_conversation)
+        # Two rows so no history button gets cut in a narrow chat panel (owner, 2026-11-02).
+        history_row = QHBoxLayout()
+        history_row.addWidget(self.history_picker, 1)
+        layout.addLayout(history_row)
         history_controls = QHBoxLayout()
-        history_controls.addWidget(self.history_picker, 1)
         self.history_picker.setMinimumContentsLength(8)
         self.history_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         # The closed box is narrow; the open list must still show readable titles.
         wrap_popup(self.history_picker, 460)
         layout.addLayout(history_controls)
         self.transcript = browser()
+        self.transcript.setObjectName('chatTranscript')
+        self.transcript.document().setDocumentMargin(10)
         self.transcript.anchorClicked.connect(self.internal_link)
         layout.addWidget(self.transcript, 1)
         self.source_toggle = QPushButton(T('Sources regroupées'))
@@ -1135,19 +1256,73 @@ class MainWindow(QMainWindow):
         self.delete_button = QPushButton(T('Supprimer'))
         self.delete_button.setToolTip(T('Supprimer cette discussion'))
         self.delete_button.clicked.connect(self.delete_conversation)
-        history_controls.addWidget(self.new_button)
-        history_controls.addWidget(copy)
-        history_controls.addWidget(self.delete_button)
+        self.delete_all_button = QPushButton(T('Tout supprimer'))
+        self.delete_all_button.setToolTip(T('Supprimer toutes les discussions de l’historique'))
+        self.delete_all_button.clicked.connect(self.delete_all_conversations)
+        history_row.addWidget(self.new_button)
+        for button in (copy, self.delete_button, self.delete_all_button):
+            button.setObjectName('compact')
+            last = button is self.delete_all_button  # keeps its natural width; the two others share the rest
+            button.setSizePolicy(QSizePolicy.Policy.Preferred if last else QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            history_controls.addWidget(button, 0 if last else 1)
         dock.setWidget(body)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.chat_dock = dock
         self.refresh_history()
+
+    def _loading_banner(self):
+        """Large notice above every page while battles are read or analysed (owner, 2026-11-02:
+        a small status-bar line left « 0 » or « — » looking like lost data)."""
+        banner = QFrame()
+        banner.setObjectName('loadingBanner')
+        row = QHBoxLayout(banner)
+        row.setContentsMargins(22, 10, 18, 10)
+        row.setSpacing(16)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        self.loading_title = QLabel()
+        self.loading_title.setObjectName('loadingTitle')
+        self.loading_detail = QLabel()
+        self.loading_detail.setObjectName('loadingDetail')
+        self.loading_detail.setWordWrap(True)
+        text.addWidget(self.loading_title)
+        text.addWidget(self.loading_detail)
+        row.addLayout(text, 1)
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setTextVisible(False)
+        self.loading_bar.setFixedSize(220, 10)
+        row.addWidget(self.loading_bar)
+        self.loading_banner = banner
+        banner.hide()
+        return banner
+
+    def show_loading(self, update):
+        first = not self.services.report
+        self.loading_title.setText(T('Analyse de tes combats en cours…') if update else T('Chargement de tes combats…'))
+        self.loading_detail.setText(J(' ', (
+            T('Tes statistiques apparaissent dès que la lecture est finie.') if first
+            else T('Les chiffres affichés viennent de la dernière analyse et seront mis à jour à la fin.'),
+            T('Tu peux continuer à utiliser PokeMind.'))))
+        self.loading_bar.setRange(0, 0)  # moving bar until the number of journals is known
+        self.loading_banner.show()
+        if first:
+            self.statistics.hide()  # empty charts read « 0 parties » while nothing is loaded yet
+            for value in list(self.metrics) + list(self.battle_tiles.values()):
+                value.setText('…')
+
+    def hide_loading(self):
+        self.loading_banner.hide()
+        self.statistics.show()
+        if not self.services.report:
+            for value in list(self.metrics) + list(self.battle_tiles.values()):
+                value.setText('—')
 
     def reload(self, update=False, auto=False):
         if self.data_busy:
             return
         self._auto_refresh = auto
         self._before_matches = set(self.services.match_index)
+        self.show_loading(update)
         self.data_busy = True
         self.data_cancel.clear()
         self.cancel_data_button.show()
@@ -1181,8 +1356,14 @@ class MainWindow(QMainWindow):
 
     def data_progress(self, done, total):
         self.statusBar().showMessage(str(done) + ' / ' + str(total) + T(' fichiers traités · analyse locale en cours'))
+        if total:
+            self.loading_bar.setRange(0, total)
+            self.loading_bar.setValue(done)
+            self.loading_detail.setText(J(' ', (str(done) + ' / ' + str(total) + T(' journaux lus.'),
+                T('Ensuite viennent les familles et les plans; tu peux continuer à utiliser PokeMind.'))))
 
     def loaded(self, result):
+        self.hide_loading()
         self.data_busy = False
         self.refresh_button.setEnabled(True)
         self.cancel_data_button.hide()
@@ -1723,6 +1904,43 @@ class MainWindow(QMainWindow):
         self.provider_status.setText(T('Discussion supprimée.') if saved is not False
                                      else T('Discussion supprimée; index des discussions non enregistré.'))
 
+    def delete_all_conversations(self):
+        """Erase every saved discussion in one go, after one explicit confirmation (owner, 2026-11-02)."""
+        if self.chat_busy:
+            return
+        identities = list(dict.fromkeys([r['id'] for r in self.preferences['conversations']]
+                                        + ([self.conversation['id']] if self.conversation['messages'] else [])))
+        if not identities:
+            self.provider_status.setText(T('Aucune discussion à supprimer.'))
+            return
+        answer = QMessageBox.question(self, T('Supprimer toutes les discussions?'),
+            T('Effacer définitivement toutes les discussions de PokeMind?') + '\n\n'
+            + str(len(identities)) + ' ' + T('discussion(s) seront effacées.') + '\n\n'
+            + T('Les copies gardées par Codex ou Claude dans leurs propres dossiers ne sont pas touchées.'),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        kept = []
+        for identity in identities:
+            try:
+                self.store.delete(identity)
+            except (OSError, ValueError):
+                kept.append(identity)
+        self.conversation = self.store.new(self.provider.currentData())
+        if self.adapter:
+            self.adapter.session = None
+        self.sent_context.clear()
+        self.preferences.update(current=None,
+            conversations=[r for r in self.preferences['conversations'] if r['id'] in kept])
+        saved = self.save_preferences()
+        self.refresh_history()
+        self.render_chat()
+        if kept:
+            self.provider_status.setText(T('Certaines discussions n’ont pas pu être supprimées; elles sont conservées.'))
+        else:
+            self.provider_status.setText(T('Toutes les discussions ont été supprimées.') if saved is not False
+                                         else T('Discussions supprimées; index des discussions non enregistré.'))
+
     def update_permission_badge(self):
         full = self.preferences['permission_mode'] == 'full'
         self.permission_badge.setText(T('Accès complet · données privées accessibles') if full
@@ -1910,9 +2128,12 @@ class MainWindow(QMainWindow):
         urls = () if user else tuple(html.unescape(url) for url in re.findall(r'<a href="(https://[^"]+)"', content))
         background = '#a9233c' if user else c['surface']
         foreground = '#ffffff' if user else c['text']
-        bubble = ('<td width="88%" bgcolor="' + background + '" style="border:1px solid ' + c['border'] + ';">'
-                  '<p style="color:' + foreground + ';font-size:11px;"><b>' + title + '</b></p>'
-                  '<p style="color:' + foreground + ';">' + content + '</p></td>')
+        heading = '#ffffff' if user else c['accent']
+        body = ('<p style="color:' + foreground + '; margin-top:2px;">' + content + '</p>' if user
+                else '<div style="color:' + foreground + ';">' + content + '</div>')
+        bubble = ('<td width="88%" bgcolor="' + background + '" style="border:1px solid ' + c['border'] + '; color:'
+                  + foreground + ';"><p style="color:' + heading + '; font-size:11px; font-weight:800; letter-spacing:1px;'
+                  ' margin-bottom:2px;">' + title + '</p>' + body + '</td>')
         spacer = '<td width="12%"></td>'
         table = ('<table width="100%" cellspacing="0" cellpadding="12"><tr>' +
                  (spacer + bubble if user else bubble + spacer) + '</tr></table><p></p>')
@@ -2398,6 +2619,10 @@ class MainWindow(QMainWindow):
             if self.chat_failed:
                 message['content'] += T('\nRéponse du fournisseur indisponible; le reçu local est conservé.')
             self.services.last_research_receipt = None
+        last = self.conversation['messages'][-1] if self.conversation['messages'] else {}
+        if getattr(self.services, 'saved_deck', None) and last.get('role') == 'assistant':
+            # Visible in the conversation itself, not only in the status bar.
+            last['content'] += '\n\n✅ ' + T('Deck ajouté à Mes decks : ') + self.services.saved_deck
         self.render_chat()
         if getattr(self.services, 'saved_deck', None):
             # The coach saved a deck: show it in Deck Lab without waiting for a restart.

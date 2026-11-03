@@ -703,6 +703,22 @@ Mode du message|||Message mode
 Coach : ta mémoire locale et le catalogue, sans Internet.|||Coach: your local memory and the catalogue, no Internet.
 Recherche web : collecte publique bornée avant la réponse, pour ce message seulement.|||Web research: a bounded public collection before the answer, for this message only.
 Développement : Codex ou Claude travaillent sur le code de PokeMind.|||Development: Codex or Claude work on the PokeMind code.
+Analyse de tes combats en cours…|||Analysing your battles…
+Chargement de tes combats…|||Loading your battles…
+Tes statistiques apparaissent dès que la lecture est finie.|||Your statistics appear as soon as reading is done.
+Les chiffres affichés viennent de la dernière analyse et seront mis à jour à la fin.|||The numbers shown come from the last analysis and will update when it ends.
+Tu peux continuer à utiliser PokeMind.|||You can keep using PokeMind.
+journaux lus.|||logs read.
+Ensuite viennent les familles et les plans; tu peux continuer à utiliser PokeMind.|||Families and plans come next; you can keep using PokeMind.
+Tout supprimer|||Delete all
+Supprimer toutes les discussions de l’historique|||Delete every discussion in the history
+Aucune discussion à supprimer.|||No discussion to delete.
+Supprimer toutes les discussions?|||Delete all discussions?
+Effacer définitivement toutes les discussions de PokeMind?|||Permanently erase every PokeMind discussion?
+discussion(s) seront effacées.|||discussion(s) will be erased.
+Certaines discussions n’ont pas pu être supprimées; elles sont conservées.|||Some discussions could not be deleted; they are kept.
+Toutes les discussions ont été supprimées.|||All discussions were deleted.
+Discussions supprimées; index des discussions non enregistré.|||Discussions deleted; discussion index not saved.
 '''
 
 CATALOG = {}

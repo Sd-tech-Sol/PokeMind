@@ -7,6 +7,25 @@ All notable public changes to PokeMind are recorded here. The format follows
 This file is for people who use or read the project. The far more detailed internal log of the work lives
 in `.orchestrator/DECISIONS.md`, in French.
 
+## [0.9.1] — 2026-11-03
+
+### Fixed
+
+- Deck validation now enforces one ACE SPEC card and one Radiant Pokémon per deck; a list breaking either
+  rule is no longer reported as valid, and the coach cannot save it.
+- The coach can save a validated deck to **My decks** when asked, without needing exact wording.
+
+### Changed
+
+- While battles are read or analysed, a large banner with a progress bar sits above every page, and empty
+  numbers show « … » instead of zeros.
+- Chat: tool calls appear as one short line (« Tools · cards ×3 · deck check »), and answers render headings,
+  lists, tables and code blocks with a more readable font.
+
+### Added
+
+- **Delete all** in the chat history, after one confirmation.
+
 ## [0.9.0] — 2026-11-02 — first public pre-release
 
 ### Added

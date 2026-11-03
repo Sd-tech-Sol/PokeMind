@@ -95,6 +95,8 @@ QPushButton:pressed { background:@alternate; }
 QPushButton:focus { border:2px solid #d84559; padding:9px 13px; }
 QPushButton#primary { background:#bd2c43; color:white; border:1px solid #ee6376; font-weight:700; }
 QPushButton#primary:hover { background:#a31f35; border-color:#ffcc55; }
+QPushButton#compact { padding:6px 8px; font-size:13px; }
+QPushButton#compact:focus { padding:5px 7px; }
 QPushButton#primary:pressed { background:#851b2d; }
 QPushButton:disabled { background:@alternate; color:@muted; border:1px solid @border; }
 QPushButton#primary:disabled { background:@alternate; color:@muted; border:1px solid @border; }
@@ -112,6 +114,12 @@ QWidget#chatBody QPushButton { padding:7px 10px; }
 QCheckBox { spacing:8px; padding:6px; }
 QCheckBox::indicator { width:16px; height:16px; }
 QProgressBar { background:@alternate; border:0; border-radius:4px; }
+QTextBrowser#chatTranscript { font-family:"Segoe UI Variable Text"; font-size:14px; padding:2px; }
+QFrame#loadingBanner { background:@alternate; border:0; border-bottom:3px solid #d84559; }
+QFrame#loadingBanner QLabel { background:transparent; }
+QFrame#loadingBanner QProgressBar { background:@surface; }
+QLabel#loadingTitle { color:@text; font-size:17px; font-weight:800; }
+QLabel#loadingDetail { color:@muted; font-size:12px; }
 QProgressBar::chunk { background:#d84559; border-radius:4px; }
 QFrame#activityCard { background:transparent; border:1px solid transparent; border-radius:12px; }
 QFrame#activityCard[busy="true"] { background:@alternate; border:1px solid #d84559; }
