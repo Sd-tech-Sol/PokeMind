@@ -68,9 +68,11 @@ def write_entry(project_root, value):
 
 
 def legacy_data(project_root):
-    """True while the project folder holds owner data (anything but synthetic test output)."""
+    """True while the project folder holds owner data (anything but synthetic test output or a reset's copy)."""
+    from pokemind.data_reset import REQUEST, kept_aside
     try:
-        return any(child.name not in EXCLUDED + ('.gitkeep',) for child in (Path(project_root) / 'data/local').iterdir())
+        return any(child.name not in EXCLUDED + ('.gitkeep', REQUEST) and not kept_aside(child.name)
+                   for child in (Path(project_root) / 'data/local').iterdir())
     except OSError:
         return False
 

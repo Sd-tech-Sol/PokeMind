@@ -1,6 +1,11 @@
 """Read-only PUBLIC alternatives and conditional experiments, never matchup odds."""
 from __future__ import annotations
 
+import copy
+import os
+import threading
+from pathlib import Path
+
 from pokemind import competitive, deck_knowledge, deck_library, recommendations, rules
 from pokemind.decks import parse_deck_export
 
@@ -42,7 +47,44 @@ def _structure(guide):
             "energy_colors_consistency_prize_trade": "unknown"}
 
 
-def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None, use_set_aliases=False):
+_MEMOS, _MEMOS_LOCK = {}, threading.Lock()
+
+
+def public_memo(db, reference_db, as_of):
+    """Plan work kept from one analysis to the next while none of its public files changes.
+
+    Every imported game rebuilt the same five plans, about 18 s (owner's diagnostic, 2026-11-05).
+    A plan reads only public data and its target; the key stamps the competitive sample (database,
+    ledger, the pages it names) and the catalogue. No folder is listed.
+    """
+    snapshot = competitive._snapshot_key(db, as_of)
+    try:
+        info = Path(reference_db).stat()
+    except (OSError, TypeError):
+        return {}
+    if snapshot is None:
+        return {}
+    key = (snapshot, os.path.normcase(str(Path(reference_db).absolute())), info.st_mtime_ns, info.st_size)
+    with _MEMOS_LOCK:
+        if key not in _MEMOS:
+            if len(_MEMOS) >= 2:
+                _MEMOS.clear()
+            _MEMOS[key] = {}
+        return _MEMOS[key]
+
+
+def _shared(shared, key):
+    """Work that does not depend on the target, reused by the plans of one analysis (same inputs only)."""
+    if shared is None:
+        return {'guides': {}, 'diffs': {}}
+    if shared.get('key') != key:
+        shared.clear()
+        shared.update(key=key, guides={}, diffs={})
+    return shared
+
+
+def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None, use_set_aliases=False,
+                 shared=None):
     competitive._advisor_context(as_of)
     if not isinstance(target, str) or not target.strip() or len(target) > 100:
         raise ValueError("COUNTER_EXPLICIT_TARGET_ARCHETYPE_REQUIRED")
@@ -50,11 +92,32 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
         raise ValueError("COUNTER_OPTIONS_1_TO_4")
     if db is None or reference_db is None:
         raise ValueError("COUNTER_EXPLICIT_PUBLIC_DATABASES_REQUIRED")
+    memo = _shared(shared, (str(root), str(db), str(reference_db), as_of, options, base, use_set_aliases))
+    plans = memo.setdefault('plans', {})
+    if target in plans:
+        return copy.deepcopy(plans[target])
+
+    def guide_for(selector):
+        if selector not in memo['guides']:
+            memo['guides'][selector] = deck_knowledge.knowledge_show(root, db, reference_db,
+                selector=selector, as_of=as_of, use_set_aliases=use_set_aliases)
+        return copy.deepcopy(memo['guides'][selector])
+
+    def changes(left, right):
+        if (left, right) not in memo['diffs']:
+            memo['diffs'][left, right] = competitive.competitive_compare(
+                root, db, left, right, as_of=as_of, limit=60)["changes"]
+        return copy.deepcopy(memo['diffs'][left, right])
+
     # Same composition verification, medoid selection and printing exact diffs.
-    inventory = deck_library.library_list(root, db, as_of=as_of)
+    if 'inventory' not in memo:
+        memo['inventory'] = deck_library.library_list(root, db, as_of=as_of)
+    inventory = copy.deepcopy(memo['inventory'])
     try:
-        shortlist = competitive.competitive_shortlist(root, db, as_of=as_of, options=max(2, options), base=base)
-        selected = shortlist["options"][:options]
+        if 'selected' not in memo:
+            shortlist = competitive.competitive_shortlist(root, db, as_of=as_of, options=max(2, options), base=base)
+            memo['selected'] = shortlist["options"][:options]
+        selected = copy.deepcopy(memo['selected'])
     except ValueError as exc:
         if options != 1 or str(exc) != "COMPETITIVE_ADVISOR_DISTINCT_ALTERNATIVE_MISSING":
             raise
@@ -65,8 +128,7 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
         reference = competitive._select_group(groups, base) if base else min(candidates, key=lambda g: (
             sum(competitive._quantitative_diff(g, other, 1)["counts"]["removed"] for other in candidates), g["composition_id"]))
         selected = [competitive._group_public(reference, detail=True)]
-    guides = {o["reference"]: deck_knowledge.knowledge_show(root, db, reference_db,
-        selector=o["reference"], as_of=as_of, use_set_aliases=use_set_aliases) for o in selected}
+    guides = {o["reference"]: guide_for(o["reference"]) for o in selected}
     baseline = selected[0]["reference"]
     target_rows = [r for r in inventory["library"] if any(
         rules._normalized_name(competitive._family(label)) == rules._normalized_name(target)
@@ -74,8 +136,7 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
     target_guide = None
     if target_rows:
         selector = min(target_rows, key=lambda r: r["composition_id"])["selector"]
-        target_guide = guides.get(selector) or deck_knowledge.knowledge_show(root, db, reference_db,
-            selector=selector, as_of=as_of, use_set_aliases=use_set_aliases)
+        target_guide = guides.get(selector) or guide_for(selector)
     target_mechanics = _mechanics(target_guide) if target_guide else []
     alternatives = []
     base_structure = _structure(guides[baseline])
@@ -84,7 +145,7 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
         guide = guides[selector]
         mechanics = _mechanics(guide)
         # Full exact differences, including every printing/copy, never a top-N truncation.
-        diff = competitive.competitive_compare(root, db, baseline, selector, as_of=as_of, limit=60)["changes"]
+        diff = changes(baseline, selector)
         structure = _structure(guide)
         roles = sorted({r["role"] for m in mechanics for r in m["roles"]})
         interactions = _interactions(mechanics, target_mechanics)
@@ -118,7 +179,7 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
         -o["evidence_quality"]["supported_mechanics"],
         -(o["evidence_quality"]["dated_text_rows"] / max(1, o["evidence_quality"]["total_rows"])),
         o["switch_cost"]["copies_replaced"], o["source"]["composition_id"]))
-    return {"model_version": "counter-deck-v1", "as_of": as_of, "status": "PARTIAL_WITH_EVIDENCE",
+    plan = {"model_version": "counter-deck-v1", "as_of": as_of, "status": "PARTIAL_WITH_EVIDENCE",
         "target": {"label": target, "basis": "caller_supplied_archetype_hypothesis",
             "public_reference_proxy": target_guide["variant"] if target_guide else None,
             "source_list": target_guide["source_list"] if target_guide else None,
@@ -137,6 +198,8 @@ def counter_plan(root, db, reference_db, *, as_of, target, options=4, base=None,
         "predicted_winrate": None, "matchup_advantage": "unknown", "causal_loss_reason": "unknown",
         "read_only": True, "network_used": False, "owner_database_opened": False,
         "database_mutated": False, "release_status": "NOT_RELEASE_READY"}
+    plans[target] = copy.deepcopy(plan)
+    return plan
 
 
 def human_counter(report):

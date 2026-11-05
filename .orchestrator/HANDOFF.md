@@ -51,8 +51,34 @@
   bandeau de chargement (`MainWindow.show_loading` / `hide_loading`); « Tout supprimer »
   (`delete_all_conversations`); rendu du chat (`message_html` par blocs, `tool_chip`, `inline_html`). Écrire les
   correctifs de code par scripts Python (outil Write), jamais par heredoc Bash : les barres obliques inverses y sont altérées.
-- Prochaine étape : réception propriétaire; vitesse (M-4) dès que le diagnostic masqué est fourni; 0.9.1 publique
-  seulement sur GO; sinon étape 5 (mémoire M-2 fin) ou étape 6 (maintenabilité).
+- 2026-11-03 : **D-274 — PokeMind 0.9.1 publié** sur GO : commit public `a6446e1` (arbre de `bc90012`) et préversion
+  `v0.9.1`. Le propriétaire modifie parfois le dépôt public dans l'interface GitHub : **avant chaque mise à jour
+  publique, `git fetch` du dépôt public et reporter ses commits dans le dépôt privé** (checklist C.0).
+- 2026-11-03 : **D-275** à `c7f8271` : coach local d'abord puis web (`provider.WEB_GUIDANCE`, `WEB_TOOLS`,
+  Codex `web_search="live"`), mémoire web locale (`pokemind.web_memory`, outils `web_memory` / `remember_web`),
+  « Recherche web » garde la réponse du modèle + `receipts.public_memory_summary`, modèle du terminal pour
+  Claude (`provider.terminal_model`; neutralisé dans les tests par `conftest.no_terminal_model`).
+- 2026-11-03 : **D-276** à `1593f0b` : réinitialisation complète (`pokemind.data_reset`, demande écrite par
+  `MainWindow.reset_application`, appliquée par `desktop.app.launch` avant toute ouverture de `data/local`;
+  copie datée par défaut, retour complet si verrou).
+- 2026-11-03 : **D-277** à `b53eee3` : réinitialisation au choix (`data_reset.CATEGORIES` / `selection`,
+  fenêtre `desktop.reset_dialog`); tous les types cochés = complet.
+- 2026-11-03 : **D-278** à `c4338f5` : diagnostic du propriétaire traité : plantage `ingest_done`
+  (suppression pendant un import), échantillon public mémorisé (`competitive._advisor_snapshot`), partage
+  entre plans (`counter_plan(shared=…)`), diagnostic qui garde les lignes récentes et liste les erreurs.
+- 2026-11-05 : **D-279** à `4cf50ea` : 2e diagnostic : gain D-278 confirmé (environ 85 s → 31 s); `decks` et
+  `research` ne dépassent plus le plafond d'outil (liste compacte + un deck par numéro, reçu borné, filet
+  `truncated`); plans contre-deck et contexte public réutilisés d'un import à l'autre tant que les fichiers
+  publics ne changent pas.
+- 2026-11-05 : **D-280** à `1cdb9cd` : « Réinitialiser » ne faisait rien pendant une analyse ou une réponse
+  (seule une ligne d'état) : il arrête l'opération puis s'applique; scripts `archive_data` / `reset_data` /
+  `restore_data` (`pokemind.data_archive`, zip vérifié de tout `%LOCALAPPDATA%\PokeMind`), exécutés sur
+  demande explicite; saisons TCG Live (`pokemind.seasons`, saison actuelle depuis 2026-11-05, passées, cumul).
+- 2026-11-05 : **D-281** à `b3c533c` : « Archiver… » et « Restaurer… » dans Réglages → Données (boîtes
+  natives de Windows; archive en arrière-plan relue entière; restauration au relancement, données actuelles
+  archivées d'abord à côté du zip). Les scripts restent pour le dépannage.
+- Prochaine étape : réception propriétaire (D-275 à D-281); premières parties de la saison; 0.9.2 publique
+  seulement sur GO; sinon étape 5 ou étape 6.
 - Pour reprendre : `git fetch && git pull --ff-only`, lire `AGENTS.md` → `SESSION_CONTINUITY.md` → `STATE.json` → `NEXT_ACTION.md`.
 - Recompiler l'EXE : fixture `scripts/qa_unified_desktop.py --prepare-release`, `Build-PokeMindDesktop.ps1 -StagingRoot build/exe-upgrade-<32 hex>`,
   smoke `POKEMIND_DESKTOP_SMOKE=1` avec la fixture comme dossier courant, puis script de permutation local (sous `build/`, ignoré).

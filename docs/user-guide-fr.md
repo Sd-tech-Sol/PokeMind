@@ -16,8 +16,10 @@ Choisis un moteur en haut du chat (Codex CLI, Claude Code ou Ollama), puis autor
 dans **Réglages → Coach IA** si tu utilises un moteur cloud. La liste à gauche d'**Envoyer** choisit ce que
 fait le message :
 
-- **Coach** : répond avec ta mémoire locale et le catalogue, sans Internet;
-- **Recherche web** : une collecte publique bornée avant la réponse, pour ce message seulement;
+- **Coach** : regarde d'abord ta mémoire locale et le catalogue; avec Codex ou Claude, il cherche sur le web
+  seulement si la réponse manque ou est trop ancienne, puis mémorise ce qu'il a trouvé pour la prochaine fois;
+- **Recherche web** : le moteur cherche sur le web tout de suite, même si PokeMind sait déjà quelque chose,
+  plus une collecte publique bornée, pour ce message seulement;
 - **Développement** (depuis le dossier des sources seulement) : Codex ou Claude travaillent sur le code.
 
 **Agrandir** ouvre la discussion en grande fenêtre. **Arrêter** interrompt une réponse.
@@ -30,3 +32,10 @@ et sa légalité datée.
 ## Tes données
 Tout est dans `%LOCALAPPDATA%\PokeMind`; **Réglages → Données** montre le dossier. La désinstallation
 (Paramètres Windows → Applications) garde tes données. N'ouvre pas deux copies de PokeMind en même temps.
+
+Pour effacer une partie de tes données, ou repartir comme à la toute première ouverture : **Réglages →
+Données → Réinitialiser PokeMind**, puis coche ce qu'il faut effacer : parties et statistiques, mes decks,
+discussions, connaissances (mémoire web, recherches gardées, ancienne base locale du cerveau), catalogue et
+méta publics, préférences, fichiers techniques, ou **Tout**. PokeMind se ferme ensuite et se rouvre. Ce qui
+est retiré est gardé dans une copie datée (`avant-reinitialisation-…` dans le dossier de données), sauf si
+tu décoches cette option; sans copie, c'est effacé. Retirer les préférences ramène l'assistant de bienvenue.

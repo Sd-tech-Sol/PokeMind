@@ -31,6 +31,16 @@ def isolated_app_folder(tmp_path_factory):
             os.environ[name] = value
 
 
+@pytest.fixture(scope='session', autouse=True)
+def no_terminal_model():
+    """Tests never read the owner's Claude Code settings (~/.claude/settings.json); one test opts in."""
+    from pokemind.assistant import provider
+    previous = provider.terminal_model
+    provider.terminal_model = lambda: None
+    yield previous
+    provider.terminal_model = previous
+
+
 @pytest.fixture(autouse=True)
 def isolated_coach_chat():
     """The shipped default sends typed chat to Codex/Claude in the project folder (D-265).
@@ -43,6 +53,28 @@ def isolated_coach_chat():
     sessions.DEFAULTS['chat_project'], sessions.DEFAULTS['language'] = False, 'fr'
     yield
     sessions.DEFAULTS['chat_project'], sessions.DEFAULTS['language'] = previous
+
+
+@pytest.fixture(autouse=True)
+def cold_analysis_memos():
+    """Public work is reused within a process while its files are unchanged; every test starts cold."""
+    from pokemind import battle_batch, competitive, counter_deck
+    for memo in (competitive._SNAPSHOTS, counter_deck._MEMOS, battle_batch._CONTEXTS):
+        memo.clear()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def every_game_in_one_season():
+    """Whatever today's date, the season shown holds every invented game; test_seasons sets the ladders back.
+
+    Set by hand, not with monkeypatch: an early monkeypatch would be undone after local_tmp is cleaned, while
+    a test's own patches (no directory listing) still apply.
+    """
+    from pokemind import seasons
+    real, seasons.OFFICIAL = seasons.OFFICIAL, ()
+    yield
+    seasons.OFFICIAL = real
 
 
 @pytest.fixture(scope='session')

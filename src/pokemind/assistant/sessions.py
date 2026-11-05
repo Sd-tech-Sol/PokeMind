@@ -14,7 +14,7 @@ DEFAULTS = {'provider': 'codex', 'theme': 'dark', 'cloud_consent': False,
             'startup_refresh': False, 'card_images': True, 'watch_logs': False,
             'permission_mode': 'workspace', 'project_relative': '.', 'language': None,
             'development_privacy_acknowledgements': [], 'reduced_motion': False,
-            'favorite_decks': [], 'sidebar_collapsed': False, 'chat_project': True}
+            'favorite_decks': [], 'sidebar_collapsed': False, 'chat_project': True, 'season_view': 'current'}
 
 
 def system_language():
@@ -94,7 +94,8 @@ class Store:
                 or not isinstance(result['project_relative'], str) or len(result['project_relative']) > 160
                 or result['theme'] not in {'dark', 'light'}
                 or any(type(result[k]) is not bool for k in ('startup_refresh', 'card_images', 'watch_logs', 'reduced_motion', 'sidebar_collapsed', 'chat_project'))
-                or not isinstance(result['conversations'], list) or len(result['conversations']) > 500):
+                or not isinstance(result['conversations'], list) or len(result['conversations']) > 500
+                or not isinstance(result['season_view'], str) or not re.fullmatch(r'current|all|before|\d{4}-\d{2}-\d{2}', result['season_view'])):
             raise ValueError('CHAT_PREFERENCES_INVALID')
         return result
 

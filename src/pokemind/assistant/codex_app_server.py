@@ -12,7 +12,7 @@ from pathlib import Path
 import uuid
 
 from pokemind import __version__
-from pokemind.assistant.provider import (ProviderAdapter, ProviderError, COACH_SYSTEM, COACH_TIMEOUT, AGENT_SYSTEM,
+from pokemind.assistant.provider import (ProviderAdapter, ProviderError, COACH_WEB_SYSTEM, COACH_TIMEOUT, AGENT_SYSTEM,
     PROJECT_SYSTEM, executable, spawn)
 from pokemind.assistant.tools import READ_TOOL as TOOL, TOOL as ACTION_TOOL, run_tool
 DISABLED = ('shell_tool', 'unified_exec', 'code_mode', 'apps', 'plugins', 'hooks',
@@ -189,7 +189,8 @@ class CodexAppServer(ProviderAdapter):
             args += ['-c', 'features.' + feature + '=true']
         if self.development:
             args += ['-c', 'features.shell_tool=true', '-c', 'features.unified_exec=true']
-        args += ['-c', 'mcp_servers={}', '-c', 'web_search="disabled"', '-c', 'include_apps_instructions=false',
+        # Live web search in every channel (owner, 2026-11-03); the coach still has no shell.
+        args += ['-c', 'mcp_servers={}', '-c', 'web_search="live"', '-c', 'include_apps_instructions=false',
                  '-c', 'features.skip_host_skill_discovery=true']
         if not self.development:
             # The Pokemon coach sees no repository rules or environment. Development
@@ -244,14 +245,14 @@ class CodexAppServer(ProviderAdapter):
     def start(self, session=None):
         self._connect()
         self.stopped.clear()
-        system = (PROJECT_SYSTEM if self.coach_tools else AGENT_SYSTEM) if self.development else COACH_SYSTEM
+        system = (PROJECT_SYSTEM if self.coach_tools else AGENT_SYSTEM) if self.development else COACH_WEB_SYSTEM
         disabled = {f: False for f in DISABLED if not self.development or f not in {'shell_tool','unified_exec'}}
         disabled.update(dict.fromkeys(REQUIRED, True))
         if self.development:
             disabled.update(shell_tool=True, unified_exec=True)
         params = {'cwd': str(self.cwd), 'sandbox': 'read-only', 'approvalPolicy': 'on-request',
             'baseInstructions': system, 'developerInstructions': system,
-            'config': {'mcp_servers': {}, 'web_search': 'disabled',
+            'config': {'mcp_servers': {}, 'web_search': 'live',
                        'include_environment_context': False, 'include_permissions_instructions': False,
                        'project_doc_max_bytes': 0,
                        'skills': {'include_instructions': False},
@@ -262,7 +263,7 @@ class CodexAppServer(ProviderAdapter):
             # Keep the native Codex base instructions (tools, patch format, working
             # style) and the repository AGENTS.md; PokeMind only adds its rules.
             del params['baseInstructions']
-            params['config'] = {'mcp_servers': {}, 'web_search': 'disabled',
+            params['config'] = {'mcp_servers': {}, 'web_search': 'live',
                                 'features': {**disabled, 'skip_host_skill_discovery': True}}
         if session:
             params['threadId'] = session

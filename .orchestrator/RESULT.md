@@ -1,41 +1,41 @@
-# RESULT — PM-AUDIT-CLAUDE-PLAN : retours d'essai du propriétaire corrigés (D-273), 2026-11-02
+# RESULT — PM-AUDIT-CLAUDE-PLAN : archiver et restaurer depuis l'application (D-281), 2026-11-05
 
-Exécuteur : Claude Code (Opus 5.5). Demande : retours du propriétaire après essai de l'app (chargement invisible,
-suppression de toutes les discussions, lignes d'outils brutes et typographie du chat, erreurs du coach et
-enregistrement de deck refusé). Session précédente (D-272) :
-[archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D272_2026-11-02.md](archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D272_2026-11-02.md).
+Exécuteur : Claude Code (Opus 5.5). Demande du propriétaire après D-280 : pas de script ni de zip à la main;
+l'archive doit être **dans l'interface**, avec l'explorateur Windows pour choisir où la mettre.
+Session précédente (D-280) :
+[archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D280_2026-11-05.md](archive/2026-11/RESULT_PM-AUDIT-CLAUDE-PLAN_D280_2026-11-05.md).
 
-## Corrigé (commit `9a9c6b4`)
-- **Règle de deck manquante** : une liste avec deux cartes AS TACTIQUE (ACE SPEC) était déclarée valide, car
-  `special_card_rule_limits` restait « non vérifié ». `rules.check_deck_entries` compte maintenant les cartes ACE SPEC
-  et Radieux d'après la rareté du catalogue (`DECK_ACE_SPEC_LIMIT_EXCEEDED`, `DECK_RADIANT_LIMIT_EXCEEDED`);
-  `validate_deck` le signale carte par carte; `save_deck` refuse une liste qui viole une règle de deck.
-  **Ce défaut existe dans la préversion publique 0.9.0.**
-- **Enregistrement refusé** (`SAVE_DECK_REQUIRES_OWNER_REQUEST`) : la détection par mots-clés du message ne
-  reconnaissait pas la demande. `save_deck` (création seulement, jamais d'écrasement) n'en dépend plus;
-  `save_candidate` garde sa barrière. Le chat confirme « Deck ajouté à Mes decks : … ». Consignes du coach : chaque
-  carte lue avec `cards` et un rôle justifié, 1 ACE SPEC et 1 Radieux au plus.
-- **Chargement visible** : grand bandeau au-dessus de toutes les pages avec barre de progression (« N / M journaux
-  lus »); au premier chargement, « … » au lieu de zéros et graphiques masqués jusqu'aux vrais chiffres.
-- **Tout supprimer** dans l'historique du chat, avec une confirmation qui donne le nombre de discussions.
-- **Chat** : les lignes `[Outil · mcp__pokemind__…]` deviennent une seule ligne discrète (« Outils · cartes ×3 ·
-  validation du deck »); titres, listes, tableaux et blocs de code rendus de façon sûre (tout est échappé);
-  police Segoe UI Variable avec repli Segoe UI, interligne aéré; boutons de l'historique sur deux rangées.
-  Les discussions enregistrées gardent le texte brut; seul l'affichage change.
+## Réglages → Données (commit `b3c533c`)
+- **« Archiver… »** : la vraie boîte « Enregistrer sous » de Windows (Bureau, clé USB, OneDrive…), nom proposé
+  `PokeMind-AAAAMMJJ-HHMMSS.zip` dans Documents. PokeMind reste ouvert : l'archive se fait en arrière-plan
+  (pourcentage dans la barre d'état) et seulement quand aucune analyse, aucun import ni réponse du coach n'est
+  en cours (sinon un message l'explique); rien de nouveau ne démarre pendant ce temps. Le zip est écrit sous
+  un nom partiel, relu entier (CRC, mêmes noms et tailles), puis gardé; message final avec le chemin, la taille
+  et un bouton « Afficher dans l'explorateur ».
+- **« Restaurer… »** : la boîte « Ouvrir » de Windows pour choisir un zip; confirmation qui dit où les données
+  actuelles seront archivées (à côté du zip choisi); un zip qui n'est pas une archive PokeMind, ou placé dans
+  le dossier des données, est refusé tout de suite, rien n'est changé. Sinon PokeMind se ferme (comme la
+  réinitialisation, l'opération en cours est arrêtée) et le lancement suivant, avant toute ouverture de
+  `data/local` : archive vérifiée des données actuelles, puis données du zip en place avec la date de chaque
+  fichier (chaque partie reste dans sa saison), puis un message. Un échec laisse tout en place.
+- L'application ne touche que `data/local` (et l'espace `workspace` du terminal quand les données sont hors du
+  projet); les tests synthétiques (`test-runs`) et les restes cachés de réinitialisation ne sont jamais
+  archivés. Une archive faite par les scripts (dossier entier) se restaure aussi depuis l'application.
+- Les scripts de D-280 restent, pour le dépannage seulement (PokeMind fermé). Ce sont les boîtes natives de
+  Windows ici, alors que les autres boîtes de fichiers de l'application restent celles de Qt (langue choisie).
 
 ## Preuves
-- Porte locale **VERTE sur la suite complète** au contenu de `9a9c6b4` : Qt 99, cœur 1546 réussis, 3 ignorés.
-- Captures hors écran sur un dossier inventé : bandeau, tuiles « … », chat (ligne d'outils, tableau, listes) et
-  boutons de l'historique entiers.
-- EXE reconstruit depuis `9a9c6b4` : 75 modules `pokemind` identiques aux sources, aucun module QA; fumées mode
-  projet, mode autonome et copie installée : sortie 0; installation et désinstallation silencieuses propres.
-  Déployé dans `dist/PokeMind/` (ancien conservé sous `dist/PokeMind-before-0.9.0-fixes-<id>`); installateur copié
-  dans `dist/installer/` (celui publié renommé `-publie.exe`, hors Git). SHA-256 du nouvel installateur
-  `953D652B5ABEEB9084899387F1E5FD1CAF6C6CAADE4B665B1900AA8A9FACF9A2` (non publié).
+- Porte locale **VERTE sur la suite complète** au contenu de `b3c533c` : Qt 110, cœur 1589 passed, 3 skipped.
+- Tests : archive de l'application à l'endroit choisi (nom sans `.zip` complété, `test-runs` et restes exclus,
+  refus dans le dossier des données); restauration demandée puis appliquée au lancement (données remplacées,
+  dates gardées, ancien contenu archivé à côté du zip, une seule tentative); zip étranger ou placé dedans refusé
+  avant la fermeture; zip abîmé au lancement : rien de changé; archive des scripts restaurable. Fenêtre : bouton
+  « Archiver… » avec boîte native et zip vérifié, refus expliqué pendant une analyse; bouton « Restaurer… » :
+  « Non » ne change rien, « Oui » écrit la demande et ferme. Capture de la section Données vérifiée.
+- EXE recompilé depuis `b3c533c` et déployé dans `dist/PokeMind/` (ancien conservé sous
+  `dist/PokeMind-before-archive-ui-<id>`); installateur non publié `dist/installer/PokeMind-Setup-0.9.1-archive.exe`.
 
 ## Limites
-- Vitesse de l'analyse au démarrage : pas encore optimisée. Le coût vient de la réanalyse de tout le corpus quand
-  un journal change (M-4). Il faut les lignes « Analyse · étape · durée » du diagnostic masqué du propriétaire
-  (Réglages → Copier le diagnostic) avant de toucher au moteur.
-- Pikachu ex « ASC 057 » de la réponse du coach : impression non vérifiée ici (catalogue du propriétaire non lu).
-- Dépôt public inchangé : une 0.9.1 publique exige un GO.
+- Pas de restauration d'une seule saison : une saison passée reste consultable dans le choix « Saison », sans
+  rien déplacer (D-280).
+- Dépôt public inchangé : une 0.9.2 publique exige un GO.

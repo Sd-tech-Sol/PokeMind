@@ -161,8 +161,10 @@ def test_successful_persistence_receipt_is_visible_as_soon_as_the_answer_finishe
 def test_research_answers_subject_with_citations_and_limits_not_only_write_counts(
         ui, app, monkeypatch, provider, topic, question, expected):
     from pokemind import batch_public_research as research
+    prompts = []
     class FalseClaims(Fake):
         def ask_stream(self, prompt, history, emit, tool=None):
+            prompts.append(prompt)
             emit("Rien n'a été enregistré et cette carte est 100% légale.")
     url = ('https://www.pokemon.com/us/play-pokemon/about/tournaments-rules-and-resources'
            if topic == 'rules' else 'https://www.limitlesstcg.com/decks')
@@ -185,12 +187,12 @@ def test_research_answers_subject_with_citations_and_limits_not_only_write_count
     identity = ui.conversation['id']
     ui.send_chat();wait_until(app, lambda:not ui.chat_busy)
     saved = ui.store.load(identity)['messages'][-1]
+    # The collected facts reach the model, which answers the subject itself (owner, 2026-11-03); the host
+    # receipt under its answer keeps the real write counts.
+    assert url in prompts[0] and 'MODE RECHERCHE WEB' in prompts[0] and (topic == 'rules' or expected in prompts[0])
     for content in (saved['content'], ui.transcript.toPlainText()):
-        assert expected in content
-        assert 'Pistes conditionnelles' in content and 'unverified' in content
-        assert url in content and fact['retrieved_at'] in content and fact['version'] in content
+        assert content.index("Rien n'a été enregistré") < content.index('Reçu PokeMind')
         assert '1 faits ajoutés' in content
-        assert '100% légale' not in content and "Rien n'a été enregistré" not in content
     assert len(calls) == 1 and ui.stack.count() == 7 and ui.conversation['id'] == identity
     assert len(ui.conversation['messages']) == 2
 
@@ -228,11 +230,15 @@ def test_deeper_public_fields_render_save_and_reopen_without_provider_certainty(
     ui.chat_input.setPlainText(question);ui.send_chat();wait_until(app,lambda:not ui.chat_busy)
     identity=ui.conversation['id']
     saved=ui.store.load(identity)['messages'][-1]
-    assert saved['content']==public_research_message(receipt,question)
-    for content in (saved['content'],ui.transcript.toPlainText()):
-        assert all(part in content for part in expected)
-        assert '100% légale' not in content and "Rien n'a été mémorisé" not in content
+    # The model answers (owner, 2026-11-03); the host receipt under it keeps the write counts.
+    assert saved['content'].startswith("Rien n'a été mémorisé; 100% légale")
+    assert 'Reçu PokeMind · collecte publique bornée — État : ' + receipt['status'] in saved['content']
+    assert 'Validation sur la source : non attestée.' in saved['content']
+    assert saved['memory_receipt']['status']==receipt['status']
+    assert saved['content']!=public_research_message(receipt,question)
+    assert 'Reçu PokeMind' in ui.transcript.toPlainText()
     assert len(calls)==1 and ui.stack.count()==7
+    expected=('Reçu PokeMind',)
     from pokemind.desktop.window import MainWindow
     from test_desktop_qt import dispose_window
     reopened=MainWindow(ui.root)
@@ -269,7 +275,8 @@ def test_model_denial_cannot_contradict_the_saved_and_rendered_receipt(ui, app, 
     wait_until(app, lambda:not ui.chat_busy)
     saved = ui.store.load(ui.conversation['id'])['messages'][-1]['content']
     for text in (ui.transcript.toPlainText(), saved):
-        assert "Rien n'a été mémorisé" not in text
+        # The model's sentence is shown as its own; the host receipt states the real counts after it.
+        assert text.index("Rien n'a été mémorisé") < text.index('Reçu PokeMind')
         assert '2 faits ajoutés' in text and '2 non vérifiés' in text
     assert len(calls) == 1
 
@@ -287,26 +294,33 @@ def test_all_receipt_outcomes_control_rendered_and_saved_response(ui, app, statu
         'sources':['https://www.pokemon.com/invented-receipt']}
     ui.conversation['messages'] = [{'role':'assistant','content':''}]
     ui.services.last_research_receipt = receipt
-    ui.chat_delta("Rien n'a été mémorisé; 999 faits ajoutés, règles certaines.")
+    ui.chat_delta("Réponse inventée du modèle.")
     ui.render_chat()
-    assert '999' not in ui.transcript.toPlainText()
+    assert 'Réponse inventée du modèle.' in ui.transcript.toPlainText()  # streamed like any answer
     ui.chat_done(None)
     saved = ui.store.load(ui.conversation['id'])['messages'][-1]
     assert saved == ui.conversation['messages'][-1]
+    confirmed = (persisted is True and type(added) is int
+                 and status in {'SAVED','PARTIAL','CACHE_FRESH','OFFLINE_STALE_OR_EMPTY','SOURCE_COOLDOWN'})
     for text in (saved['content'], ui.transcript.toPlainText()):
-        assert "Rien n'a été mémorisé" not in text and '999' not in text
-        assert 'État : ' + status in text and 'commentaire du modèle est écarté' in text
-        assert 'Validation sur la source : non attestée' in text
-        assert 'Utilisation par le modèle : non attestée' in text
-        assert receipt['sources'][0] in text
-        if persisted is not True or type(added) is not int or status == 'CACHE_FRESH' and added:
-            assert 'aucun compte d’écriture annoncé' in text and '2 faits ajoutés' not in text
-        else:
-            assert f'{added} faits ajoutés' in text
-            if status in {'CACHE_FRESH','OFFLINE_STALE_OR_EMPTY','SOURCE_COOLDOWN'}:
-                assert 'Aucune nouvelle écriture' in text
+        assert text.startswith('Réponse inventée du modèle.') or 'Réponse inventée du modèle.' in text
+        assert 'État : ' + status in text and 'Validation sur la source : non attestée' in text
+        assert ('faits ajoutés' in text) == confirmed
+        assert ('enregistrement local non confirmé' in text) != confirmed
     assert saved['memory_receipt']['offline_fact_count'] == facts
     assert ui.services.last_research_receipt is None
+
+
+def test_research_without_model_answer_keeps_the_full_host_receipt(ui, app):
+    receipt = {'status':'SAVED', 'persisted':True, 'added':1, 'updated':0, 'already_known':0, 'unverified':1,
+        'facts':[{'validation':'unverified'}], 'sources':['https://www.pokemon.com/invented-receipt']}
+    ui.conversation['messages'] = [{'role':'user','content':'Cherche les règles.'}, {'role':'assistant','content':''}]
+    ui.services.last_research_receipt = receipt
+    ui.chat_failed = True
+    ui.chat_done(None)
+    text = ui.conversation['messages'][-1]['content']
+    assert 'Résultat PokeMind — mémoire publique' in text and 'le reçu local est conservé' in text
+    ui.chat_failed = False
 
 
 @pytest.mark.parametrize('code', ['INVENTED_PROVIDER_ERROR', 'DESKTOP_CANCELLED'])
@@ -327,7 +341,9 @@ def test_provider_failure_or_interruption_preserves_completed_write_receipt(ui, 
     ui.send_chat();wait_until(app, lambda:not ui.chat_busy)
     message = ui.store.load(ui.conversation['id'])['messages'][-1]
     assert message['memory_receipt']['added'] == 2
-    assert '2 faits ajoutés' in message['content'] and "Rien n'a été mémorisé" not in message['content']
+    assert '2 faits ajoutés' in message['content']
+    # A failed engine leaves only the host receipt; an interrupted one keeps its partial answer above it.
+    assert ("Rien n'a été mémorisé" in message['content']) == (not ui.chat_failed)
     assert '2 faits ajoutés' in ui.transcript.toPlainText()
     assert ('indisponible' if ui.chat_failed else 'interrompu') in message['content']
 
@@ -367,8 +383,8 @@ def test_receipt_history_reopens_in_the_same_thread_after_window_close(ui, app):
         wait_until(app, lambda:not reopened.jobs)
         assert reopened.conversation['id'] == identity
         assert reopened.conversation['messages'][-1] == expected
-        assert '2 faits ajoutés' in reopened.transcript.toPlainText()
-        assert "Rien n'a été mémorisé" not in reopened.transcript.toPlainText()
+        painted = reopened.transcript.toPlainText()
+        assert '2 faits ajoutés' in painted and painted.index("Rien n'a été mémorisé") < painted.index('Reçu PokeMind')
         reopened.provider.setCurrentIndex(1);wait_until(app, lambda:not reopened.jobs)
         assert reopened.conversation['id'] == identity and reopened.conversation['messages'][-1] == expected
     finally:
@@ -1098,6 +1114,55 @@ def test_release_qa_never_opens_a_real_application_folder(local_tmp, monkeypatch
         assert desktop_app.launch(local_tmp / 'no-project-here') == 2  # before any folder or window
     finally:
         set_language('fr')
+
+
+def test_launch_applies_a_requested_reset_before_the_welcome_assistant(local_tmp, monkeypatch, app):
+    from pokemind import data_reset, diagnostics
+    from pokemind.desktop import app as desktop_app
+    from pokemind.desktop.i18n import set_language
+    root = local_tmp / 'standalone'
+    (root / 'data/local/chat').mkdir(parents=True)
+    (root / 'data/local/chat/preferences.json').write_text('{}', encoding='utf-8')
+    (root / 'data/local/web_memory.sqlite3').write_bytes(b'invented')
+    data_reset.request(root, True)
+    monkeypatch.setenv('POKEMIND_STANDALONE', '1')
+    monkeypatch.setenv('POKEMIND_DATA_ROOT', str(root))
+    monkeypatch.delenv('POKEMIND_DESKTOP_SMOKE', raising=False)
+    monkeypatch.setattr(diagnostics, 'setup', lambda selected: None)
+    seen = []
+    monkeypatch.setattr(desktop_app, 'reset_notice', lambda reset: seen.append(
+        ('notice', reset['status'], Path(reset['kept_copy']).parent)))
+    def first_run(selected):
+        seen.append(('welcome', (selected / 'data/local/chat/preferences.json').exists()))
+        return 'accepted', False
+    monkeypatch.setattr(desktop_app, 'first_run', first_run)
+    class Window:
+        def __init__(self, selected, **kwargs):
+            seen.append(('window', selected))
+        def show(self):
+            pass
+    monkeypatch.setattr(window, 'MainWindow', Window)
+    monkeypatch.setattr(app, 'exec', lambda: 0)
+    try:
+        assert desktop_app.launch(local_tmp / 'no-project-here') == 0
+    finally:
+        set_language('fr')
+    assert seen == [('notice', 'RESET', root / 'data/local'), ('welcome', False), ('window', root)]
+
+
+def test_reset_notice_names_the_kinds_removed_and_where_the_copy_is(monkeypatch, app):
+    from pokemind.desktop import app as desktop_app
+    from pokemind.desktop.i18n import QMessageBox
+    shown = []
+    monkeypatch.setattr(QMessageBox, 'information', lambda parent, title, text: shown.append(str(text)))
+    monkeypatch.setattr(QMessageBox, 'warning', lambda parent, title, text: shown.append('!' + str(text)))
+    desktop_app.reset_notice({'status': 'RESET', 'full': False, 'categories': ['games', 'chats'],
+                              'kept_copy': 'dossier-inventé'})
+    desktop_app.reset_notice({'status': 'RESET', 'full': True, 'categories': [], 'kept_copy': None})
+    desktop_app.reset_notice({'status': 'FAILED', 'kept_copy': None})
+    assert shown[0].startswith('Données retirées : Parties et statistiques, Discussions.') and 'dossier-inventé' in shown[0]
+    assert shown[1].startswith('PokeMind a été réinitialisé.') and 'effacées' in shown[1]
+    assert shown[2].startswith('!La réinitialisation n’a pas pu se faire') and 'Rien n’a été effacé' in shown[2]
 
 
 def test_words_never_choose_research_or_development_only_the_mode_under_the_chat_does(ui, app, monkeypatch):

@@ -13,6 +13,7 @@ import os
 import re
 import sqlite3
 import stat
+import threading
 import time
 import unicodedata
 from collections import Counter, defaultdict
@@ -172,7 +173,63 @@ def database_preflight(root, db):
         return {"status": "BLOCKED_MISSING_OR_UNAVAILABLE", "can_import": False}
 
 
+_CONTEXTS, _CONTEXTS_LOCK = {}, threading.Lock()
+RESEARCH_INDEX = 'data/local/public-campaigns/battle-intelligence-index.jsonl'
+
+
+def _public_context_key(root, paths, as_of):
+    """Every file the public context is read from, by size and date; no folder is listed."""
+    snapshot = competitive._snapshot_key(paths[0], as_of)
+    if snapshot is None:
+        return None
+    try:
+        index = Path(root) / RESEARCH_INDEX
+        fallback = Path(root) / ('data/local/public-campaigns/lot-i-battle-intelligence-'
+                                 + as_of.replace('-', '') + '/research.json')
+        named = [paths[1], index, fallback]
+        if index.is_file():
+            if index.stat().st_size > 1024 * 1024:
+                return None
+            for line in index.read_text(encoding='utf-8').splitlines():
+                manifest = json.loads(line).get('manifest') if line.strip() else None
+                if isinstance(manifest, str):
+                    named.append(Path(root) / manifest)
+        stamps = []
+        for path in named:
+            info = path.stat() if path.exists() else None
+            stamps.append((os.path.normcase(str(path)), info and info.st_mtime_ns, info and info.st_size))
+        return os.path.normcase(str(Path(root).absolute())), as_of, snapshot, tuple(stamps)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
 def public_context(root, as_of):
+    """Public families and signatures, reused while none of their files changed (a private copy each time).
+
+    Rebuilt for every imported game, about 5 s each (owner's diagnostic, 2026-11-05).
+    """
+    paths = [Path(root) / p for p in SCOPED_PUBLIC_CACHES]
+    key = _public_context_key(root, paths, as_of)
+    if key is not None:
+        with _CONTEXTS_LOCK:
+            hit = _CONTEXTS.get(key)
+        if hit is not None:
+            try:
+                for path in paths:
+                    safe_path(root, path)
+            except (ValueError, OSError):
+                return None, paths, {"status": "BLOCKED_PUBLIC_REFERENCE", "references": 0}
+            return copy.deepcopy(hit[0]), paths, dict(hit[1])
+    index, paths, source = _public_context_uncached(root, as_of)
+    if index is not None and key is not None and key == _public_context_key(root, paths, as_of):
+        with _CONTEXTS_LOCK:
+            if len(_CONTEXTS) >= 2:
+                _CONTEXTS.clear()
+            _CONTEXTS[key] = (copy.deepcopy(index), dict(source))
+    return index, paths, source
+
+
+def _public_context_uncached(root, as_of):
     paths = [Path(root) / p for p in SCOPED_PUBLIC_CACHES]
     try:
         for path in paths:
@@ -607,12 +664,15 @@ def batch_analyze(root, *, folder, player, db, as_of, apply=False, recommendatio
     recos = []
     if recommendations and index:
         targets = [g for g in groups if g["losses"] and g["archetype"] != "unknown"][:5]
+        # Plans read public data only: kept for the next analysis while none of those files changes.
+        shared_plans = counter_deck.public_memo(*pair, as_of)
         for number, g in enumerate(targets, 1):
             if number > 1:
                 lap(f'plan contre-deck {number - 1}/{len(targets)}')
             checkpoint()
             try:
-                plan = counter_deck.counter_plan(root, *pair, as_of=as_of, target=g["archetype"], use_set_aliases=True)
+                plan = counter_deck.counter_plan(root, *pair, as_of=as_of, target=g["archetype"], use_set_aliases=True,
+                                                 shared=shared_plans)
                 signature = next((r["opponent"].get("signature_id") for r in records
                                   if r["opponent"]["label"] == g["archetype"] and r["opponent"].get("signature_id")), None)
                 if not plan["target"]["mechanics"] and signature:

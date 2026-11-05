@@ -309,8 +309,9 @@ def navigation_icon(index):
 
 SETTING_TINTS = {'theme': '#b79cff', 'language': '#7cc4ff', 'motion': '#7be0c3', 'images': '#ffb86b',
                  'cloud': '#8ebcff', 'share': '#7be0c3', 'folder': '#ffda73', 'shield': '#ff8493',
-                 'key': '#ffda73', 'pulse': '#7be0c3', 'refresh': '#7cc4ff', 'eye': '#b79cff',
+                 'key': '#ffda73', 'pulse': '#7be0c3', 'refresh': '#7cc4ff', 'reset': '#ff8493', 'eye': '#b79cff',
                  'database': '#ffb86b', 'copy': '#8ebcff', 'info': '#7cc4ff', 'general': '#ffda73',
+                 'archive': '#7be0c3', 'restore': '#ffda73',
                  'coach': '#ff8493', 'battles': '#ffb86b', 'data': '#7be0c3', 'about': '#7cc4ff'}
 
 
@@ -381,7 +382,7 @@ def setting_icon(kind, size=32):
     elif kind == 'pulse':
         p.drawPolyline([QPointF(6, 17), QPointF(11, 17), QPointF(13.5, 10), QPointF(17, 23), QPointF(20, 14),
                         QPointF(22, 17), QPointF(26, 17)])
-    elif kind == 'refresh':
+    elif kind in ('refresh', 'reset'):
         p.drawArc(QRectF(8, 8, 16, 16), 40 * 16, 280 * 16)
         p.drawPolyline([QPointF(22, 7), QPointF(22.5, 12), QPointF(17.5, 12)])
     elif kind == 'eye':
@@ -396,6 +397,14 @@ def setting_icon(kind, size=32):
         p.drawLine(QPointF(23, 9.5), QPointF(23, 22.5))
         p.drawArc(QRectF(9, 13.5, 14, 5), 180 * 16, 180 * 16)
         p.drawArc(QRectF(9, 20, 14, 5), 180 * 16, 180 * 16)
+    elif kind in ('archive', 'restore'):
+        p.drawRoundedRect(QRectF(7, 8, 18, 5), 1.5, 1.5)
+        p.drawPolyline([QPointF(8.5, 13), QPointF(8.5, 24), QPointF(23.5, 24), QPointF(23.5, 13)])
+        if kind == 'archive':
+            p.drawLine(QPointF(13.5, 17), QPointF(18.5, 17))
+        else:
+            p.drawLine(QPointF(16, 22), QPointF(16, 16))
+            p.drawPolyline([QPointF(13, 18.5), QPointF(16, 15.5), QPointF(19, 18.5)])
     elif kind == 'copy':
         p.drawRoundedRect(QRectF(11, 10, 12, 14), 2, 2)
         p.drawPolyline([QPointF(9, 20), QPointF(9, 8), QPointF(19, 8)])

@@ -10,7 +10,7 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from pokemind import battle_batch, battle_coach, cards, coach_cards, competitive, decks, diagnostics, legacy_bridge, rules
+from pokemind import battle_batch, battle_coach, cards, coach_cards, competitive, decks, diagnostics, legacy_bridge, rules, seasons
 from pokemind.database import connect_readonly
 from pokemind.public_deck_preflight import SCOPED_PUBLIC_CACHES
 
@@ -37,6 +37,39 @@ def personal_kind(option):
     return 'personnelle' in getattr(option['kind'], 'fr', option['kind'])
 
 MATCHUPS_SHOWN = 15
+TOOL_BUDGET = 20000  # under the coach tool cap (assistant.tools.MAX_TOOL_BYTES), envelope included
+
+
+def _bytes(value):
+    return len(json.dumps(value, ensure_ascii=False).encode())
+
+
+def research_view(receipt):
+    """The coach's copy of a research receipt: counts and sources, then whole facts while they fit.
+
+    The host keeps the complete receipt; a whole one exceeded the tool cap, so the coach got only
+    an error (owner's diagnostic, 2026-11-05).
+    """
+    facts = list(receipt.get('facts') or [])
+    sources = list(receipt.get('sources') or [])
+    view = {key: value for key, value in receipt.items() if key not in {'facts', 'history', 'meta_evidence'}}
+    view.update(sources=sources[:12], facts_total=len(facts), facts=[])
+    used = _bytes(view)
+    if receipt.get('meta_evidence') is not None:
+        size = _bytes(receipt['meta_evidence']) + 20
+        if used + size <= TOOL_BUDGET // 2:
+            view['meta_evidence'] = receipt['meta_evidence']
+            used += size
+        else:
+            view['meta_evidence'] = 'Trop long ici; operation matchups pour le détail.'
+    for fact in facts:
+        size = _bytes(fact) + 2
+        if used + size <= TOOL_BUDGET:
+            view['facts'].append(fact)
+            used += size
+    if len(view['facts']) < len(facts) or len(sources) > 12:
+        view['shortened'] = 'Reçu raccourci à la taille permise; la mémoire locale garde tout.'
+    return view
 
 
 def context_delta(context, previous=None):
@@ -58,7 +91,11 @@ def context_delta(context, previous=None):
 class Services:
     def __init__(self, root):
         self.root = Path(root).absolute()
-        self.report = None
+        self.report = None  # the season shown (owner, 2026-11-05); full_report holds every game
+        self.full_report = None
+        self.season_key = seasons.CURRENT
+        self.season_rows = []
+        self.season_dates = {}
         self.learning = None
         self._loaded = None
         self.match_index = {}
@@ -87,7 +124,9 @@ class Services:
         if not report:
             return T('Aucun rapport local valide disponible. Utilise Actualiser ou colle un journal complet; aucune partie inventée.')
         outcomes = report['outcomes']
-        text = (T('PokeMind · données locales\n') + str(report['coverage']['valid']) + T(' parties uniques enregistrées : ')
+        season = report.get('season', {}).get('name')
+        text = (T('PokeMind · données locales\n') + (T('Saison : ') + season + '\n' if season else '')
+            + str(report['coverage']['valid']) + T(' parties uniques enregistrées : ')
             + str(outcomes['wins']) + T(' victoires, ') + str(outcomes['losses']) + T(' défaites, ')
             + str(outcomes.get('unknown', 0)) + T(' issues inconnues.\n')
             + T('Corpus choisi; taux de victoire global inconnu. Les défaites orientent les priorités pédagogiques.\n'))
@@ -130,7 +169,8 @@ class Services:
             if self._loaded and self._loaded[0] == key:
                 # Every coach question reloads; an unchanged snapshot is not re-parsed.
                 _, result, self.match_index = self._loaded
-                self.report, self.learning = result.get('report'), result.get('learning')
+                self.learning = result.get('learning')
+                self.set_full_report(result.get('report'))
                 return result
             result = None
             if paired.exists():
@@ -144,11 +184,30 @@ class Services:
                     result['learning_status'] = 'UNAVAILABLE_NOT_MODIFIED'
         if cancelled and cancelled():
             raise ValueError('DESKTOP_CANCELLED')
-        self.report, self.learning = result.get('report'), result.get('learning')
+        self.learning = result.get('learning')
+        self.set_full_report(result.get('report'))
         from pokemind.desktop.ingestion import match_index
         self.match_index = match_index(self.root)
         self._loaded = (key, result, self.match_index) if not update else None
         return result
+
+    def set_full_report(self, report):
+        """Every game; the report shown is the chosen season of it."""
+        self.full_report = report
+        self.season_dates = seasons.added_dates(self.root, (report or {}).get('matches', []))
+        self.set_season(self.season_key)
+
+    def set_season(self, key):
+        self.season_key = key if isinstance(key, str) else seasons.CURRENT
+        self.season_rows = seasons.periods(self.root)
+        if self.full_report is None and self.report is not None:
+            return self.report  # a report given directly (tests) keeps its own scope
+        self.report = seasons.scoped(self.full_report, seasons.resolve(self.season_key, self.season_rows),
+                                     self.season_dates)
+        return self.report
+
+    def season_summary(self):
+        return seasons.summary(self.full_report, self.season_dates, self.season_rows or seasons.periods(self.root))
 
     def _public_db(self, catalog=True):
         path = self.root / SCOPED_PUBLIC_CACHES[1 if catalog else 0]
@@ -311,6 +370,49 @@ class Services:
         return [r | {'total': decks.parse_deck_export(r['export']).total_cards} for r in mine + result
                 if decks.parse_deck_export(r['export']).total_cards == 60]
 
+    def deck_listing(self, sharing, query='', reference=''):
+        """Every deck name with its reference, whole lists while they fit, one deck's list on request.
+
+        All the lists at once exceeded the coach tool cap, so the coach saw no deck at all
+        (owner's diagnostic, 2026-11-05). References stay the deck_options() positions.
+        """
+        allowed = sharing == 'aggregates' and self.private_decks_allowed
+        visible = [(str(i), d) for i, d in enumerate(self.deck_options()) if allowed or not personal_kind(d)]
+
+        def row(ref, deck):
+            source = deck['source']
+            if isinstance(source, dict):
+                source = {key: value[:3] if isinstance(value, list) else value for key, value in source.items()}
+            return {'reference': ref, 'label': deck['label'], 'kind': deck['kind'], 'version': deck.get('version'),
+                    'played_version_attested': False, 'source': source, 'legality': deck['legality'],
+                    'collection': deck.get('collection', 'unknown'), 'total_cards': deck.get('total')}
+        if reference:
+            chosen = next((row(ref, d) | {'export': d['export']} for ref, d in visible if ref == reference), None)
+            return {'deck': chosen} if chosen else {'error': 'DECK_REFERENCE_INVALID',
+                                                    'hint': 'reference = un numéro donné par decks.'}
+        if query.strip():
+            wanted = query.strip().casefold()
+            visible = [(ref, d) for ref, d in visible if wanted in str(d['label']).casefold()]
+        result = {'decks': [], 'total': len(visible)}
+        used = _bytes(result) + 300
+        for ref, deck in visible:
+            entry = row(ref, deck)
+            size = _bytes(entry) + 2
+            if used + size > TOOL_BUDGET:
+                break
+            result['decks'].append(entry)
+            used += size
+        for entry, (_, deck) in zip(result['decks'], visible):
+            size = _bytes(deck['export']) + 12
+            if used + size > TOOL_BUDGET:
+                break
+            entry['export'] = deck['export']
+            used += size
+        if len(result['decks']) < len(visible) or any('export' not in entry for entry in result['decks']):
+            result['hint'] = ('Liste complète d’un deck : operation decks avec reference = son numéro; '
+                              'query = un nom pour filtrer.')
+        return result
+
     def compare(self, left, right):
         return competitive._quantitative_diff({'cards': competitive._card_map(left['export'])},
             {'cards': competitive._card_map(right['export'])}, 60)
@@ -386,6 +488,9 @@ class Services:
             result['observed_own_decks'] = report.get('own_decks', {})
             result['own_deck_scope'] = 'Familles inférées des cartes observées, version jouée non attestée; ne pas inventer une liste exacte.'
             result['matchup_groups_total'] = len(groups)
+            if report.get('season'):  # the counts above are the season shown in the app
+                result['season_shown'] = {k: v for k, v in report['season'].items() if k != 'key'}
+                result['seasons'] = self.season_summary()
             result['corpus_scope'] = {'kind': 'corpus enregistré volontairement sélectionné',
                 'representative': False, 'global_win_rate': 'unknown',
                 'pedagogical_priority': 'défaites enregistrées; ne pas confondre fréquence de collecte et force du joueur'}
@@ -467,7 +572,7 @@ class Services:
         return self.context(str(arguments.get('query', ''))[:2000], sharing)
 
     def match(self, reference=None):
-        matches = (self.report or {}).get('matches', [])
+        matches = (self.full_report or self.report or {}).get('matches', [])  # any season, e.g. the game just imported
         chosen = next((m for m in matches if m['match'] == (reference or self.selected_match)), None)
         result = chosen or (matches[-1] if matches and not reference else None)
         return dict(result, **self.played_reference(result)) if result else None
@@ -534,6 +639,13 @@ class Services:
         self.candidate_allowed = bool(SAVE_REQUEST.search(question)) or log_followup
         result = self.context(question, sharing)
         progress(T('Consultation de la mémoire publique locale'))
+        from pokemind import web_memory
+        try:
+            remembered = web_memory.search(self.root, question)
+        except (ValueError, OSError, sqlite3.Error):
+            remembered = {'status': 'UNAVAILABLE'}
+        if remembered.get('notes'):  # local first: what an earlier web search already found
+            result['web_memory'] = remembered
         topic = 'rules' if re.search(r'règles|rules|rotation|légalité', question, re.I) else 'meta'
         if self.research_allowed:
             progress(T('Recherche publique bornée → validation → mémoire locale'))
@@ -596,10 +708,11 @@ class Services:
     def tool_call(self, arguments, sharing='public'):
         from pokemind.assistant.tools import OPERATIONS
         from pokemind import batch_public_research, collection, meta
-        allowed = {'operation', 'query', 'reference', 'left', 'right', 'topic', 'identity', 'export_text'}
+        allowed = {'operation', 'query', 'reference', 'left', 'right', 'topic', 'identity', 'export_text', 'summary', 'sources'}
+        limits = {'export_text': 12000, 'summary': 4000}
         if (not isinstance(arguments, dict) or set(arguments) - allowed
                 or arguments.get('operation') not in OPERATIONS
-                or any(not isinstance(v, str) or len(v) > (12000 if k == 'export_text' else 2000) for k,v in arguments.items())):
+                or any(not isinstance(v, str) or len(v) > limits.get(k, 2000) for k,v in arguments.items())):
             return {'error': 'POKEMIND_TOOL_ARGUMENTS_INVALID'}
         if self.cancelled and self.cancelled():
             return {'error': 'DESKTOP_CANCELLED'}
@@ -622,6 +735,13 @@ class Services:
                 return self.annotate(query, withdraw=arguments.get('reference') == 'withdraw')
             if op == 'validate_deck':
                 return self.validate_deck(arguments.get('export_text', ''))
+            if op == 'web_memory':
+                from pokemind import web_memory
+                return web_memory.search(self.root, query)
+            if op == 'remember_web':
+                # Public summaries the coach wrote from web pages: a local cache, never personal data.
+                from pokemind import web_memory
+                return web_memory.remember(self.root, query, arguments.get('summary', ''), arguments.get('sources', ''))
             if op == 'save_deck':
                 # Create-only in the owner's own « Mes decks » (never an overwrite): no keyword gate,
                 # a misspelt « crée-le » must not block it (owner, 2026-11-02). The chat shows the result.
@@ -633,10 +753,7 @@ class Services:
             if op == 'cards':
                 return self.find_cards(query or arguments.get('identity', ''), batch=True)
             if op == 'decks':
-                return {'decks': [{'reference': str(i), 'label': d['label'], 'export': d['export'],
-                    'kind': d['kind'], 'version': d.get('version'), 'played_version_attested': False,
-                    'source': d['source'], 'legality': d['legality'], 'collection': d.get('collection', 'unknown')}
-                    for i, d in enumerate(self.deck_options()) if sharing == 'aggregates' and self.private_decks_allowed or not personal_kind(d)]}
+                return self.deck_listing(sharing, query, arguments.get('reference', ''))
             if op in {'compare', 'save_candidate'}:
                 options = self.deck_options()
                 def option(key):
@@ -683,12 +800,12 @@ class Services:
                     # Preparation already consumed this turn's bounded request.
                     # A provider cannot perform a second collection or overwrite
                     # the positive write receipt with a subsequent cache hit.
-                    return self.last_research_receipt
+                    return research_view(self.last_research_receipt)
                 self.last_research_receipt = {'status':'ERROR', 'persisted':None}
                 result = batch_public_research.research(self.root, as_of=date.today().isoformat(),
                     topic=arguments.get('topic', 'meta'), identity=arguments.get('identity'), cancelled=self.cancelled)
                 self.last_research_receipt = result
-                return result
+                return research_view(result)
         except (ValueError, KeyError, OSError, sqlite3.Error) as error:
             diagnostics.get('coach').warning('Outil %s refusé ou en échec : %s', op, type(error).__name__)
             return {'status': 'UNAVAILABLE_OR_INSUFFICIENT_EVIDENCE', 'operation': op,

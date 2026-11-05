@@ -25,6 +25,9 @@ qu'avec un **GO explicite** du propriétaire.
 
 ## C. Publication — GO spécial obligatoire
 
+0. Mise à jour d'un dépôt public existant : `git fetch` de celui-ci d'abord. Si le propriétaire y a fait des
+   commits dans l'interface GitHub, les reporter dans le dépôt privé avant l'export, puis créer le commit
+   « PokeMind x.y.z » **par-dessus** eux (`git commit-tree <arbre exporté> -p origin/main`), jamais à leur place.
 1. Export propre, sans push :
    `python scripts/export_public.py <dossier hors dépôt> --author-name "<auteur>" --author-email "<noreply>"`.
    Le script refuse fichier privé, base, clé, secret, courriel personnel, nom d'utilisateur Windows et nom

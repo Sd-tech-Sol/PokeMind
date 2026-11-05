@@ -10,36 +10,40 @@
     "executor": "claude-code",
     "authorization": "D-258",
     "plan": "docs/audits/AUDIT_CLAUDE_2026-10-29.md#10",
-    "next_step": "owner reception of D-273; startup speed (M-4) once the owner pastes the masked diagnostic timings; public 0.9.1 only on explicit owner GO (new export, never the private history); otherwise step 5 (memory M-2) or step 6 (maintainability)"
+    "next_step": "owner reception of D-275 to D-281 (fresh first launch after the scripted reset; Archive and Restore in Settings > Data; first games of the 2026-11-05 season); public 0.9.2 only on explicit owner GO (fetch the public repository first); otherwise step 5 or step 6"
   },
   "evidence": {
-    "code_sha": "9a9c6b4",
+    "code_sha": "b3c533c",
     "local_gate": {
       "status": "GREEN",
-      "passed": 1645,
+      "passed": 1589,
       "failed": 0,
       "skipped": 3,
-      "command": "python scripts/local_gate.py (full suite, content of 9a9c6b4)"
+      "command": "python scripts/local_gate.py (full suite, content of b3c533c)"
     },
     "github_actions": "REMOVED_2026-11-01_OWNER_NO_COST; local gate is the proof"
   },
   "installed_exe_current": true,
-  "installed_exe_source_sha": "9a9c6b4",
+  "installed_exe_source_sha": "b3c533c",
   "owner_reception": "PENDING",
   "release_status": "NOT_RELEASE_READY",
   "private_data_rules": "never in Git; personal data copied only by the owner in the EXE (D-264), never moved or deleted",
   "archive": ".orchestrator/archive/2026-10/",
-  "latest_decision": "D-273",
+  "latest_decision": "D-281",
   "installer": {
-    "file": "dist/installer/PokeMind-Setup-0.9.0.exe",
-    "source_sha": "9a9c6b4",
-    "sha256": "953D652B5ABEEB9084899387F1E5FD1CAF6C6CAADE4B665B1900AA8A9FACF9A2",
+    "file": "dist/installer/PokeMind-Setup-0.9.1.exe",
+    "source_sha": "4e6a595",
+    "sha256": "C3FD796CD19D1BC61F5AA2158C3C50C5A577125EA3B54F3941042DC74471DE4C",
     "signed": false,
     "signing_supported": true,
-    "published": false,
-    "current_with_code": true,
+    "published": true,
+    "current_with_code": false,
     "sha256_file": "written by Build-PokeMindInstaller.ps1 next to the installer",
-    "published_copy": "dist/installer/PokeMind-Setup-0.9.0-publie.exe (v0.9.0, source 0b6f6b1)"
+    "unpublished_build": {
+      "file": "dist/installer/PokeMind-Setup-0.9.1-archive.exe",
+      "source_sha": "b3c533c",
+      "sha256": "52BA7EFB61423CAED44EFC9218C4125AD911C91B26D600B8D98658439525969E"
+    }
   },
   "licence": "MIT",
   "history_audit": {
@@ -72,18 +76,24 @@
     "repository": "Sd-tech-Sol/PokeMind",
     "visibility": "PUBLIC",
     "branch": "main",
-    "commits": 1,
-    "tree_of_private_commit": "3d4af78",
-    "tag": "v0.9.0",
+    "commits": 4,
+    "tree_of_private_commit": "bc90012",
+    "tag": "v0.9.1",
     "prerelease": true,
     "assets": [
-      "PokeMind-Setup-0.9.0.exe",
-      "PokeMind-Setup-0.9.0.exe.sha256"
+      "PokeMind-Setup-0.9.1.exe",
+      "PokeMind-Setup-0.9.1.exe.sha256"
     ],
     "private_vulnerability_reporting": true,
     "wiki": false,
     "ci": "none (D-271)",
-    "published": "2026-11-02",
-    "behind_private": "D-273 fixes not published; public 0.9.0 lacks the ACE SPEC / Radiant deck rule"
+    "published": "2026-11-03",
+    "head": "a6446e1",
+    "tags": [
+      "v0.9.0",
+      "v0.9.1"
+    ],
+    "owner_web_edits": "ccf2909 and 8415c14 (README intro), ported to private bc90012",
+    "behind_private": "D-275 to D-281 not published (public is 0.9.1)"
   }
 }

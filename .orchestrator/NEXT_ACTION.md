@@ -19,7 +19,14 @@ Fait à `9a9c6b4` : règle 1 ACE SPEC / 1 Radieux, enregistrement de deck par le
 « Tout supprimer », rendu du chat. Reste :
 1. **Vitesse au démarrage (M-4)** : obtenir du propriétaire les lignes « Analyse · étape · durée » (Réglages →
    Copier le diagnostic, journal masqué) puis optimiser l'étape la plus lente; ne jamais lire ses données.
-2. **0.9.1 publique** (corrige la règle ACE SPEC de 0.9.0) : seulement sur GO, selon `docs/release-checklist.md`.
+2. ~~0.9.1 publique~~ : **publiée** le 2026-11-03 (D-274, préversion `v0.9.1`, commit public `a6446e1`).
+3. **Recherche web du coach (D-275)** faite à `c7f8271`; **réinitialisation complète (D-276)** faite à
+   `1593f0b`, puis au choix par type de données (D-277) à `b53eee3`; diagnostic du propriétaire traité (D-278 à `c4338f5` : plantage d'import, analyse plus rapide,
+   diagnostic complet), puis 2e diagnostic (D-279 à `4cf50ea` : decks et recherche visibles par le coach,
+   analyse réutilisée d'un import à l'autre), puis réinitialisation réparée, scripts d'archive et saisons
+   (D-280 à `1cdb9cd`), puis archive et restauration dans l'application (D-281 à `b3c533c`);
+   réception propriétaire en cours. Une 0.9.2 publique seulement sur GO (checklist C.0 : récupérer
+   d'abord les modifications faites sur GitHub).
 
 ## Réception propriétaire en attente
 Ouvrir son `dist/PokeMind/PokeMind.exe` habituel et vérifier :

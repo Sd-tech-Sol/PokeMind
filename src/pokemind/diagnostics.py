@@ -23,6 +23,7 @@ LOG_NAME = 'pokemind.log'
 MAX_BYTES = 1024 * 1024
 BACKUPS = 4
 MAX_MESSAGE = 2000
+REPORT_CHARS = 12000
 
 _PATH = re.compile(r'(?<![A-Za-z0-9])(?:[A-Za-z]:[\\/]|\\\\)[^\s"\'<>|]+')
 _POSIX_HOME = re.compile(r'/(?:home|Users)/[^/\s"\']+')
@@ -106,8 +107,26 @@ def get(name=''):
     return logging.getLogger(LOGGER + ('.' + name if name else ''))
 
 
+STAMP = re.compile(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}')
+
+
+def recent_errors(lines, limit=5):
+    """The last errors, each with the line that names its exception, so a paste cut short still shows them."""
+    found = []
+    for index, line in enumerate(lines):
+        if ' CRITICAL ' not in line and ' ERROR ' not in line:
+            continue
+        cause = ''
+        for following in lines[index + 1:]:
+            if STAMP.match(following):
+                break
+            cause = following.strip() or cause
+        found.append(line.rstrip() + (' → ' + cause if cause else ''))
+    return found[-limit:]
+
+
 def report(root, lines=200):
-    """Text the owner can copy into a bug report: versions and the journal tail."""
+    """Text the owner can copy into a bug report: versions, recent errors first, then the journal tail."""
     from pokemind import __version__
     header = [f'PokeMind {__version__}', f'Python {platform.python_version()} · {platform.platform(terse=True)}',
               f'Exécutable figé : {bool(getattr(sys, "frozen", False))}']
@@ -117,12 +136,27 @@ def report(root, lines=200):
     except ImportError:
         pass
     path = log_path(root)
-    tail = []
+    journal = []
     if path.is_file():
         with path.open(encoding='utf-8', errors='replace') as stream:
-            tail = stream.readlines()[-lines:]
-    body = ''.join(tail) if tail else 'Journal vide.\n'
-    return redact('\n'.join(header) + '\n\n' + body, root)
+            journal = stream.readlines()
+    tail = journal[-lines:]
+    errors = recent_errors(journal)
+    summary = ('Erreurs récentes (' + str(len(errors)) + ') :\n' + '\n'.join(errors) + '\n\n') if errors else (
+        'Erreurs récentes : aucune.\n\n' if journal else '')
+    head = redact('\n'.join(header) + '\n\n' + summary, root)
+    if not tail:
+        return head + 'Journal vide.\n'
+    # Masking caps any text it is given; the newest lines are the ones kept (the owner's diagnostic of
+    # 2026-11-03 stopped two days early because the whole report used to be cut from its end).
+    kept, used = [], len(head) + 20
+    for line in reversed(tail):
+        line = redact(line, root)
+        if used + len(line) > REPORT_CHARS:
+            break
+        kept.append(line)
+        used += len(line)
+    return head + 'Fin du journal :\n' + ''.join(reversed(kept))
 
 
 def reset_for_tests():

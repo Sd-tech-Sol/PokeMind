@@ -8,6 +8,11 @@ PM-0001 n'installe aucun service, planificateur ou automatisme du client de jeu.
 `--keep` conserve la copie). Il copie le dépôt sans `data/local` dans un dossier temporaire court et rejoue
 compilation, hygiène Git, tests Qt et suite complète hors ligne, comme la CI.
 
+Pour le joueur, l'archive et la restauration sont dans l'application (Réglages, Données : « Archiver… » et « Restaurer… », avec l'explorateur Windows). Les scripts servent au dépannage. `archive_data.py`, `reset_data.py` et `restore_data.py` (PokeMind fermé) : un zip vérifié de
+tout `%LOCALAPPDATA%\PokeMind` dans `%LOCALAPPDATA%\PokeMind-archives`; une remise à zéro qui archive tout
+d'abord et ne garde que le pointeur et des dossiers vides; une restauration qui archive d'abord le contenu
+actuel et garde la date de chaque fichier (elle place chaque partie dans sa saison). Aucun contenu n'est lu.
+
 `pokemind_build_backend.py` est un petit backend d'installation hors ligne. Il
 ne lance aucune commande externe et n'accède pas au réseau.
 

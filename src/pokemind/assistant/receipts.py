@@ -41,6 +41,22 @@ def public_memory_message(record, *, text=str, join=str.join):
     lines.append(text('Le commentaire du modèle est écarté pour ce tour de recherche; PokeMind présente le reçu local.'))
     return join('\n', lines)
 
+def public_memory_summary(record, *, text=str, join=str.join):
+    """Short host-owned line shown under the model's answer after « Recherche web » (owner, 2026-11-03):
+    the answer is the model's, the write counts stay PokeMind's."""
+    status = record.get('status', 'UNKNOWN')
+    confirmed = record.get('persisted') is True
+    counts_valid = all((type(record.get(k)) is int and record[k] >= 0 for k in COUNTS))
+    head = text('Reçu PokeMind · collecte publique bornée — État : ') + str(status)
+    if confirmed and counts_valid and status in {'SAVED', 'PARTIAL'} | CACHE:
+        counts = join('', [' · ', f"{record['added']}", text(' faits ajoutés · '), f"{record['updated']}",
+                           text(' révisés · '), f"{record['already_known']}", text(' déjà connus · '),
+                           f"{record['unverified']}", text(' non vérifiés.')])
+    else:
+        counts = text(' · enregistrement local non confirmé.')
+    return join('', [head, counts, ' ', text('Validation sur la source : non attestée.')])
+
+
 def public_research_answer(receipt, question='', *, text=str, join=str.join):
     """Read-only, bounded explanation of the existing snapshot's typed fields.
 

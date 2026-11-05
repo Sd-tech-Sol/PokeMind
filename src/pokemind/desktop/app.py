@@ -75,6 +75,52 @@ def offer_move(project):
     return target, 'outside', 'données copiées hors du projet · %d fichiers vérifiés' % receipt['files']
 
 
+def relaunch(project_root):
+    """Start PokeMind again (after a reset request): the same executable, or the same command from the sources."""
+    from PySide6.QtCore import QProcess
+    if getattr(sys, 'frozen', False):
+        started = QProcess.startDetached(sys.executable, [], str(Path(sys.executable).parent))
+    else:
+        started = QProcess.startDetached(sys.executable, ['-m', 'pokemind', 'desktop'], str(project_root))
+    return bool(started[0] if isinstance(started, tuple) else started)
+
+
+def reset_notice(reset):
+    """Tell the owner what the reset did, before the welcome assistant."""
+    from pokemind.desktop.i18n import QMessageBox
+    from pokemind.desktop.reset_dialog import LABELS
+    if reset['status'] == 'RESET':
+        head = (T('PokeMind a été réinitialisé.') if reset.get('full') else
+                T('Données retirées :') + ' ' + J(', ', [LABELS[c] for c in reset.get('categories', ())]) + '.')
+        text = head + '\n\n' + (
+            T('Une copie de tes anciennes données est gardée ici :') + '\n' + reset['kept_copy'] if reset.get('kept_copy')
+            else T('Les anciennes données ont été effacées.'))
+        QMessageBox.information(None, 'PokeMind', text)
+        return
+    text = T('La réinitialisation n’a pas pu se faire : un fichier était encore utilisé. Rien n’a été effacé; '
+             'recommence depuis Réglages, Données.')
+    if reset.get('blocked'):
+        text = text + '\n\n' + T('Élément encore utilisé :') + ' ' + reset['blocked']
+    if reset.get('kept_copy'):
+        text = text + '\n\n' + T('Une partie des données est restée ici :') + '\n' + reset['kept_copy']
+    QMessageBox.warning(None, 'PokeMind', text)
+
+
+def restore_notice(restored):
+    """Tell the owner what « Restaurer une archive… » did, and where the data it replaced is kept."""
+    from pokemind import data_archive
+    from pokemind.desktop.i18n import QMessageBox
+    if restored['status'] == 'RESTORED':
+        text = T('Archive restaurée :') + ' ' + restored['zip'] + '\n' + T('Fichiers remis en place :') + ' ' + str(restored['files'])
+        if restored.get('previous_archive'):
+            text += '\n\n' + T('Tes données d’avant sont gardées dans :') + '\n' + restored['previous_archive']
+        QMessageBox.information(None, 'PokeMind', text)
+        return
+    reason = data_archive.MESSAGES.get(restored.get('error'), '')
+    QMessageBox.warning(None, 'PokeMind', T('La restauration n’a pas pu se faire. Tes données actuelles sont restées en place.')
+                        + ('\n\n' + T(reason) if reason else '') + ('\n\n' + restored['zip'] if restored.get('zip') else ''))
+
+
 def first_run(root):
     """Show the welcome assistant once, when no preferences were ever saved for this data folder.
 
@@ -157,11 +203,31 @@ def launch(root=None):
     else:
         project = selected
         selected, data_state = data_location.resolve(project)
+    reset = restored = None
+    if not release_qa:  # a reset asked from the window, before anything opens a file in data/local
+        from pokemind import data_reset
+        try:
+            reset = data_reset.apply(selected)
+        except (ValueError, OSError) as error:
+            reset = {'status': 'FAILED', 'error': type(error).__name__, 'erased': False, 'kept_copy': None}
+        from pokemind import data_archive
+        try:  # « Restaurer une archive… »: the current data is archived first, then replaced
+            restored = data_archive.apply_restore(selected)
+        except (ValueError, OSError) as error:
+            restored = {'status': 'FAILED', 'error': type(error).__name__, 'zip': ''}
+        if (reset or restored) and not standalone:
+            selected, data_state = data_location.resolve(project)
     if data_state == 'offer' and not release_qa:
         selected, data_state, outcome = offer_move(project)
     diagnostics.setup(selected)
     if outcome:
         diagnostics.get('desktop').info('Dossier de données · %s', outcome)
+    if reset:
+        diagnostics.get('desktop').info('Réinitialisation · %s · %s éléments%s', reset['status'], reset.get('items', 0),
+                                        ' · bloqué : ' + reset['blocked'] if reset.get('blocked') else '')
+    if restored:
+        diagnostics.get('desktop').info('Restauration · %s · %s fichiers%s', restored['status'], restored.get('files', 0),
+                                        ' · ' + restored['error'] if restored.get('error') else '')
     if data_state == 'missing':
         diagnostics.get('desktop').warning('Dossier de données introuvable; dossier du projet utilisé')
         QMessageBox.warning(None, 'PokeMind', T('Le dossier de données copié est introuvable. PokeMind utilise le '
@@ -170,6 +236,10 @@ def launch(root=None):
         diagnostics.get('desktop').info('Mode autonome · données dans le dossier de l’application')
     catalog = False
     if not release_qa and os.environ.get('POKEMIND_DESKTOP_SMOKE') != '1':
+        if reset:
+            reset_notice(reset)
+        if restored:
+            restore_notice(restored)
         welcome, catalog = first_run(selected)
         diagnostics.get('desktop').info('Premier lancement · %s', welcome)
     try:

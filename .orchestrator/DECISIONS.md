@@ -1,3 +1,118 @@
+# D-281 — Archiver et restaurer depuis l'application
+
+2026-11-05 Québec. Demande du propriétaire : l'archive doit être dans l'interface, avec l'explorateur Windows.
+
+1. Réglages → Données offre « Archiver… » et « Restaurer… » avec les boîtes natives de Windows (exception
+   voulue aux boîtes Qt du reste de l'application). L'archive se fait PokeMind ouvert, seulement quand rien
+   d'autre n'écrit, et n'est gardée qu'une fois relue entière.
+2. Une restauration se fait comme la réinitialisation : demande, fermeture, puis au lancement suivant, avant
+   toute ouverture de `data/local` ; les données actuelles sont d'abord archivées (vérifié) à côté du zip
+   choisi; un échec ne change rien. L'application ne touche que `data/local` (et `workspace` hors projet).
+3. Les scripts de D-280 restent un outil de dépannage, PokeMind fermé.
+
+---
+
+# D-280 — Réinitialisation jamais bloquée, archive du dossier, statistiques par saison
+
+2026-11-05 Québec. Demandes du propriétaire (bouton « Réinitialiser » sans effet, scripts d'archive et de
+remise à zéro, saisons TCG Live avec cumul).
+
+1. Une réinitialisation demandée arrête l'opération en cours au lieu d'être refusée; elle s'applique toujours
+   au lancement suivant, avant toute ouverture de `data/local`.
+2. Les scripts `archive_data`, `reset_data` et `restore_data` agissent sur tout le dossier PokeMind du compte,
+   PokeMind fermé; rien n'est retiré avant qu'une archive zip relue entièrement existe. Leur exécution sur les
+   données du propriétaire exige sa demande explicite (faite le 2026-11-05) et ne lit aucun contenu.
+3. Une saison va d'un Ladder classé officiel (sourcé dans `seasons.OFFICIAL`) ou d'un départ choisi par le
+   propriétaire au suivant; une partie compte dans la saison du jour d'ajout de son journal. Les vues de saison
+   recalculent les comptes avec le regroupement du moteur; recommandations et apprentissage restent sur tout le
+   corpus. Rien n'est déplacé ni supprimé.
+
+---
+
+# D-279 — 2e diagnostic : decks et recherche visibles par le coach, analyse réutilisée entre imports
+
+2026-11-05 Québec. Le propriétaire a recollé son diagnostic masqué (non versionné : aucun extrait ici).
+
+1. Une réponse d'outil ne doit jamais être perdue entière : `decks` donne tous les noms et un deck par
+   numéro, `research` un reçu borné (l'hôte garde le complet), et `run_tool` raccourcit la plus longue liste
+   (`truncated`) avant de refuser.
+2. Le travail public d'une analyse (contexte public, plans contre-deck) est gardé d'un import à l'autre tant
+   qu'aucun de ses fichiers ne change (taille et date, date d'analyse incluse), sans lister de dossier,
+   avec une copie privée à chaque appel.
+
+---
+
+# D-278 — Diagnostic du propriétaire : plantage d'import, analyse plus rapide, diagnostic complet
+
+2026-11-03 Québec. Le propriétaire a collé son diagnostic masqué (non versionné : aucun extrait ici).
+
+1. Aucune suppression de discussion pendant un import ou un tour; un rapport d'import trouve toujours sa place.
+2. Une même analyse ne refait plus le travail public indépendant de la cible : échantillon public mémorisé
+   tant qu'aucun de ses fichiers ne change (copie privée, aucun listage de dossier, 15 min au plus) et
+   partage entre plans contre-deck. Résultats identiques, vérifiés par test.
+3. Le diagnostic garde les lignes les plus récentes et liste d'abord les erreurs; plafond 12 000 caractères.
+
+---
+
+# D-277 — Réinitialisation au choix, par type de données
+
+2026-11-03 Québec. Demande : cocher les types de données à effacer, ou tout.
+
+1. Sept types lisibles par le propriétaire, définis par chemins sous `data/local`; tous cochés = complet
+   (D-276), seul cas qui prend aussi ce que PokeMind ne connaît pas.
+2. Effacement au niveau des fichiers et dossiers seulement : aucune ligne n'est supprimée dans une base.
+   Seule retouche : la liste des discussions dans `preferences.json` quand les discussions partent et les
+   préférences restent (original gardé dans la copie).
+3. Rien n'est coché au départ; copie gardée par défaut; mêmes garanties que D-276 (retour complet si verrou).
+
+---
+
+# D-276 — Réinitialisation complète de PokeMind, sur demande explicite du propriétaire
+
+2026-11-03 Québec. Demande : remettre l'application comme à sa première ouverture, avec avertissement.
+
+1. Seule l'application l'exécute, sur clic du propriétaire et après avertissement; aucun agent ne
+   réinitialise ni n'ouvre les données. Par défaut une copie datée est gardée dans `data/local`; l'effacement
+   exige de décocher la copie et une seconde confirmation.
+2. La réinitialisation s'applique au lancement suivant, avant toute ouverture de fichier dans `data/local`,
+   en déplaçant tout en un bloc; un échec remet tout en place et n'efface rien.
+3. Ne sont pas touchés : copies antérieures, pointeur de dossier de données, dossier de travail du terminal,
+   historiques propres à Codex/Claude, original resté dans un dossier projet.
+
+---
+
+# D-275 — Coach : mémoire locale d'abord, puis recherche web, résultat mémorisé localement
+
+2026-11-03 Québec. Demande du propriétaire : le chat doit chercher sur le web quand PokeMind n'a pas la
+réponse, garder ce qu'il trouve pour la prochaine question semblable, et « Recherche web » doit montrer une
+vraie réponse; chat sans restriction inutile, aussi capable que Claude Code dans le terminal.
+
+1. Codex et Claude reçoivent leur recherche web native dans tous les canaux du chat. Le coach isolé garde
+   l'absence de shell et d'outils de fichiers : la recherche web n'ajoute aucune exécution locale.
+2. Ordre imposé par la consigne : outils et données PokeMind, puis web si absent ou trop ancien, puis
+   `remember_web` (résumé, URLs https, date) dans une base locale dédiée, consultée en premier ensuite.
+3. Supplante l’ancienne règle du reçu seul : en « Recherche web », la réponse du modèle n'est plus écartée. Les
+   comptes d'écriture de la collecte bornée restent affichés par PokeMind seul (ligne de reçu), et le reçu
+   complet demeure quand le moteur ne répond pas.
+4. Le chat Claude prend le modèle choisi pour le terminal (clé `model` des réglages utilisateur de Claude
+   Code, seule lue). Ollama ne cherche jamais sur le web.
+
+---
+
+# D-274 — PokeMind 0.9.1 publié (préversion `v0.9.1`)
+
+2026-11-03 Québec. Ordre du propriétaire : « go » à la proposition d'une 0.9.1 publique (D-273 : la 0.9.0 publique
+déclarait valide un deck à deux cartes ACE SPEC).
+
+1. Version 0.9.1 (`4e6a595`), porte complète VERTE, EXE et installateur reconstruits et vérifiés.
+2. Le dépôt public contenait deux commits du propriétaire faits dans l'interface GitHub (intro des README). Ils sont
+   conservés : reportés dans le dépôt privé (`bc90012`) et le commit « PokeMind 0.9.1 » est créé par-dessus, avec
+   l'arbre exact de l'export. Règle ajoutée à `docs/release-checklist.md` (C.0).
+3. Porte complète VERTE dans l'export; push de `main` seulement; préversion `v0.9.1` avec installateur non signé et
+   `.sha256`; empreinte vérifiée sur le fichier téléchargé. L'historique privé n'est jamais poussé.
+
+---
+
 # D-273 — Retours d'essai : règle ACE SPEC / Radieux, enregistrement de deck, chargement visible, chat lisible
 
 2026-11-02 Québec. Retours du propriétaire après essai de l'EXE.

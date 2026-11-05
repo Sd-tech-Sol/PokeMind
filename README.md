@@ -9,7 +9,7 @@ your PC, and lets you review them with an AI coach.
 
 > ## Status: pre-release
 >
-> PokeMind **0.9.1** is a public pre-release (the first one was 0.9.0). The Windows installer is **unsigned**,
+> PokeMind **0.9.2** is a public pre-release (the first one was 0.9.0). The Windows installer is **unsigned**,
 > and before these releases PokeMind had been used by **its author only**. Expect defects and missing features, and keep
 > your own copy of anything important.
 
@@ -37,7 +37,8 @@ The installer is not code-signed yet: if Windows shows « Windows protected your
 - **Battles**: import your TCG Live battle logs (paste them in the chat, or drop `.txt` / `.log` files).
   Every game stays on your PC; opponents are ranked by losses and each game is shown as a timeline.
 - **Coach**: talk to your own **Codex CLI**, **Claude Code** or a local **Ollama** model. A list next to
-  **Send** chooses what a message does: **Coach** (local memory, no Internet), **Web research** (one
+  **Send** chooses what a message does: **Coach** (local memory first; Codex or Claude search the web only
+  when it lacks the answer, then remember what they found), **Web research** (search the web now, plus one
   bounded public collection) or **Development** (when run from the source folder).
 - **Deck Lab**: save decks, compare them, export 60-card lists to copy into TCG Live.
 - **Cards & meta**: an offline card binder (French and English texts, printings, dated legality) built
@@ -62,7 +63,7 @@ These absences are **design choices**:
 The interface follows Windows on first launch: a French Windows gets French, any other language gets
 English. Change it at any time in **Settings → General**; your choice is remembered.
 
-## Exact limits of version 0.9.1
+## Exact limits of version 0.9.2
 
 | Limit | Detail |
 |---|---|
@@ -78,7 +79,8 @@ English. Change it at any time in **Settings → General**; your choice is remem
 
 - Your data stays in `%LOCALAPPDATA%\PokeMind`, outside the program folder; uninstalling keeps it.
 - Network use is explicit: the one-time card catalogue download, card images from the public TCGdex API
-  (can be turned off), **Web research** messages, and the cloud coach engines you allow.
+  (can be turned off), **Web research** messages, and the cloud coach engines you allow, which may search
+  the web when local memory lacks an answer.
 - Raw logs, player identities and file paths are never part of the automatic coach context.
 - All data in this repository is invented; the test suite never reads a real user folder.
 - Release binaries are scanned for build-machine paths before they leave the PC.

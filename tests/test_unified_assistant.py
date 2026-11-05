@@ -268,8 +268,9 @@ def test_prepared_research_tool_reuses_the_write_receipt_without_second_search(l
     monkeypatch.setattr(research,'research',collect)
     context = services.prepare_question('Recherche les règles et mémorise les sources.', 'public', research=True)
     assert context['public_research']['added'] == 2
-    assert services.tool_call({'operation':'research','topic':'meta'}) is receipt
-    assert services.tool_call({'operation':'research','topic':'rules'}) is receipt
+    view = services.tool_call({'operation':'research','topic':'meta'})
+    assert view['added'] == 2 and view['facts'] == [] and view['facts_total'] == 0
+    assert services.tool_call({'operation':'research','topic':'rules'}) == view
     assert len(calls) == 1 and services.last_research_receipt['added'] == 2
     services.prepare_question('Cherche sur le web les règles actuelles', 'public')  # words alone never collect
     assert services.last_research_receipt is None and len(calls) == 1
@@ -355,3 +356,37 @@ def test_tool_activity_shows_commands_output_and_changed_files_once():
     claude = {'type': 'tool_use', 'status': 'tool_use', 'name': 'Bash', 'summary': 'git status'}
     assert 'Bash' in tool_activity('item/completed', claude) and 'git status' in tool_activity('item/completed', claude)
     assert tool_activity('item/completed', dict(claude, status='tool_result')) is None
+
+
+def test_deck_list_fits_the_tool_cap_and_gives_one_list_by_reference(local_tmp, monkeypatch):
+    services = Services(local_tmp)
+    decks = [{'label': f'Famille inventée {i}', 'kind': 'Référence PUBLIC', 'legality': 'Standard / Live inconnus',
+              'export': '\n'.join(f'4 Carte inventée {i}-{n} IVN {n:03d}' for n in range(15)),
+              'source': {'urls': [f'https://example.invalid/{i}/{n}' for n in range(8)]},
+              'collection': 'Inconnue', 'total': 60} for i in range(40)]
+    decks.insert(0, dict(decks[0], label='Mon deck inventé', kind='Mon deck · référence personnelle'))
+    monkeypatch.setattr(Services, 'deck_options', lambda self: decks)
+    value, ok = tools.run_tool('pokemind_tool', {'operation': 'decks'}, lambda a: services.tool_call(a, 'public'))
+    assert ok and value['total'] == 40 and len(value['decks']) == 40  # every name, where the whole lists were refused
+    assert 'Mon deck inventé' not in [d['label'] for d in value['decks']]  # personal decks stay out of a public context
+    assert value['decks'][0]['export'] == decks[1]['export'] and 'export' not in value['decks'][-1]
+    assert 'reference' in value['hint'] and len(value['decks'][0]['source']['urls']) == 3
+    one = services.tool_call({'operation': 'decks', 'reference': value['decks'][-1]['reference']}, 'public')
+    assert one['deck']['export'] == decks[-1]['export'] and one['deck']['label'] == 'Famille inventée 39'
+    assert services.tool_call({'operation': 'decks', 'reference': '0'}, 'public')['error'] == 'DECK_REFERENCE_INVALID'
+    found = services.tool_call({'operation': 'decks', 'query': 'inventée 7'}, 'public')
+    assert [d['label'] for d in found['decks']] == ['Famille inventée 7'] and 'hint' not in found
+
+
+def test_research_receipt_reaches_the_coach_within_the_tool_cap(local_tmp):
+    facts = [{'kind': 'deck60', 'source_url': f'https://example.invalid/{i}', 'export': 'x' * 1500} for i in range(40)]
+    receipt = {'status': 'CACHE_FRESH', 'persisted': True, 'added': 0, 'updated': 0, 'already_known': 40,
+               'unverified': 0, 'gets': 0, 'facts': facts, 'sources': [f['source_url'] for f in facts],
+               'fresh': True, 'meta_evidence': {'rows': ['y' * 200] * 100}}
+    services = Services(local_tmp)
+    services.research_allowed, services.last_research_receipt = True, receipt
+    value, ok = tools.run_tool('pokemind_tool', {'operation': 'research'}, lambda a: services.tool_call(a, 'public'))
+    assert ok and value['already_known'] == 40 and value['facts_total'] == 40 and 0 < len(value['facts']) < 40
+    assert value['facts'][0] == facts[0] and len(value['sources']) == 12 and value['shortened']
+    assert isinstance(value['meta_evidence'], str)
+    assert services.last_research_receipt is receipt and len(receipt['facts']) == 40  # the host keeps it whole

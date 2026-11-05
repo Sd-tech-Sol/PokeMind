@@ -187,6 +187,183 @@ def test_qt_delete_all_conversations_asks_once_then_erases_every_one(ui, app, mo
     assert 'Toutes les discussions' in ui.provider_status.text()
 
 
+def test_qt_reset_warns_then_closes_and_starts_again_for_a_first_launch(ui, app, monkeypatch):
+    from pokemind import data_reset
+    relaunched, warnings = [], []
+    monkeypatch.setattr(ui, 'relaunch', lambda: relaunched.append(True))
+    monkeypatch.setattr(ui, 'reset_choice', lambda: (False, [], True))        # Annuler
+    QTest.mouseClick(ui.reset_button, Qt.MouseButton.LeftButton)
+    assert data_reset.pending(ui.root) is None and ui.isVisible()
+    def refuse(*a):
+        warnings.append(a[1])
+        return window.QMessageBox.StandardButton.No
+    monkeypatch.setattr(window.QMessageBox, 'warning', refuse)
+    monkeypatch.setattr(ui, 'reset_choice', lambda: (True, ['games', 'chats'], False))  # no copy: asked again
+    QTest.mouseClick(ui.reset_button, Qt.MouseButton.LeftButton)
+    assert warnings == ['Effacer sans copie?'] and data_reset.pending(ui.root) is None and ui.isVisible()
+    preferences = ui.store.path('preferences.json')
+    preferences.unlink(missing_ok=True)
+    monkeypatch.setattr(ui, 'reset_choice', lambda: (True, ['chats', 'games'], True))
+    QTest.mouseClick(ui.reset_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.isVisible())
+    request = data_reset.pending(ui.root)
+    assert request['keep_copy'] is True and request['pid'] == os.getpid() and relaunched == [True]
+    assert request['categories'] == ['games', 'chats']
+    assert not preferences.exists()  # closing for a reset writes no preference back
+    ui.close()
+    assert relaunched == [True]
+
+
+def test_qt_reset_during_an_analysis_stops_it_then_closes_instead_of_doing_nothing(ui, app, monkeypatch):
+    from pokemind import data_reset
+    relaunched, reloads = [], []
+    monkeypatch.setattr(ui, 'relaunch', lambda: relaunched.append(True))
+    monkeypatch.setattr(ui, 'reset_choice', lambda: (True, ['games'], True))
+    ui.data_busy = True  # the analysis of an import, about 30 s on the owner's PC (2026-11-05)
+    QTest.mouseClick(ui.reset_button, Qt.MouseButton.LeftButton)
+    assert data_reset.pending(ui.root)['categories'] == ['games'] and ui.data_cancel.is_set()
+    assert 'arrêt de l’opération en cours' in ui.statusBar().currentMessage() and not ui.reset_button.isEnabled()
+    monkeypatch.setattr(ui.services, 'load', lambda *a, **k: reloads.append(True))
+    ui.data_busy = False
+    ui.reload(True)  # nothing new starts once the reset is asked
+    wait_until(app, lambda: not ui.isVisible())
+    assert relaunched == [True] and reloads == []
+
+
+def test_qt_archive_button_saves_a_verified_zip_where_the_owner_chose(ui, app, monkeypatch, tmp_path):
+    import zipfile
+    from pathlib import Path
+    log = Path(ui.root) / 'data/local/battle_logs/partie-inventee.log'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text('Tour 1 inventé', encoding='utf-8')
+    asked, notices = [], []
+
+    def save(parent, caption, directory, filter, native=False):
+        asked.append((Path(directory).name, native))
+        return str(tmp_path / 'Bureau' / 'mes-donnees.zip'), ''
+    monkeypatch.setattr(window.QFileDialog, 'getSaveFileName', save)
+    monkeypatch.setattr(ui, 'archive_notice', notices.append)
+    QTest.mouseClick(ui.archive_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: bool(notices), 15000)
+    assert asked[0][1] is True and asked[0][0].startswith('PokeMind-') and asked[0][0].endswith('.zip')
+    with zipfile.ZipFile(tmp_path / 'Bureau' / 'mes-donnees.zip') as archive:
+        assert 'data/local/battle_logs/partie-inventee.log' in archive.namelist()
+    assert notices[0]['status'] == 'ARCHIVED' and ui.archive_button.isEnabled() and ui.restore_button.isEnabled()
+    assert 'Archive vérifiée' in ui.statusBar().currentMessage() and not ui.archiving
+    infos = []
+    monkeypatch.setattr(window.QMessageBox, 'information', lambda *a, **k: infos.append(str(a[2])))
+    monkeypatch.setattr(window.QFileDialog, 'getSaveFileName', lambda *a, **k: pytest.fail('no dialog while busy'))
+    ui.data_busy = True  # an analysis is writing: the zip would be incomplete
+    QTest.mouseClick(ui.archive_button, Qt.MouseButton.LeftButton)
+    assert infos and 'en cours' in infos[0]
+    ui.data_busy = False
+
+
+def test_qt_restore_button_asks_then_closes_and_the_next_launch_restores(ui, app, monkeypatch, tmp_path):
+    from pathlib import Path
+    from pokemind import data_archive
+    source = tmp_path / 'ancien'
+    (source / 'data/local/battle_logs').mkdir(parents=True)
+    (source / 'data/local/battle_logs/ancienne.log').write_text('Partie inventée', encoding='utf-8')
+    saved = data_archive.archive(source, target=tmp_path / 'cle' / 'archive.zip', parts=('data/local',), app=True)
+    relaunched, questions = [], []
+    monkeypatch.setattr(ui, 'relaunch', lambda: relaunched.append(True))
+    monkeypatch.setattr(window.QFileDialog, 'getOpenFileName',
+                        lambda parent, caption, directory, filter, native=False: (saved['zip'], '') if native else None)
+
+    def refuse(parent, title, text, *rest):
+        questions.append(str(text))
+        return window.QMessageBox.StandardButton.No
+    monkeypatch.setattr(window.QMessageBox, 'question', refuse)
+    QTest.mouseClick(ui.restore_button, Qt.MouseButton.LeftButton)
+    assert data_archive.pending_restore(ui.root) is None and ui.isVisible()
+    assert str(Path(saved['zip']).parent) in questions[0]  # where the current data will be archived
+    monkeypatch.setattr(window.QMessageBox, 'question', lambda *a, **k: window.QMessageBox.StandardButton.Yes)
+    QTest.mouseClick(ui.restore_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.isVisible())
+    request = data_archive.pending_restore(ui.root)
+    assert request['zip'] == saved['zip'] and request['parts'] == ['data/local'] and request['pid'] == os.getpid()
+    assert relaunched == [True] and not ui.archive_button.isEnabled()
+
+
+def test_qt_season_picker_shows_the_current_season_then_every_season(ui, app, monkeypatch):
+    from pokemind import seasons
+    from test_seasons import corpus
+    monkeypatch.setattr(seasons, 'periods', lambda root, today=None: [
+        {'key': 'before', 'name': 'Avant le 2026-11-05', 'start': None, 'end': '2026-11-05'},
+        {'key': '2026-11-05', 'name': 'Delta Reign', 'start': '2026-11-05', 'end': None}])
+    report = corpus(ui.root)
+    report['recommendations'] = []
+    ui.services.set_full_report(report)
+    ui.loaded({'report': report, 'learning': None})
+    wait_until(app, lambda: not ui.jobs)
+    picker = ui.season_pickers[0]
+    texts = [picker.itemText(i) for i in range(picker.count())]
+    assert texts == ['Saison actuelle · Delta Reign (2026-11-05 →) · n=3', 'Avant le 2026-11-05 · n=2',
+                     'Cumul · toutes les saisons · n=6']
+    assert [m.text() for m in ui.metrics] == ['3', '1', '1'] and ui.battle_tiles['games'].text() == '2'
+    picker.activated.emit(2)
+    assert [m.text() for m in ui.metrics] == ['6', '3', '2'] and ui.battle_tiles['games'].text() == '5'
+    assert ui.preferences['season_view'] == 'all' and all(p.currentData() == 'all' for p in ui.season_pickers)
+    assert ui.store.preferences()['season_view'] == 'all'  # kept for the next launch
+    ui.season_pickers[1].activated.emit(1)
+    assert [m.text() for m in ui.metrics] == ['2', '1', '1'] and ui.season_pickers[0].currentData() == 'before'
+    assert report['coverage']['valid'] == 6  # every game stays in the full report
+
+
+def test_qt_new_season_starts_today_and_becomes_the_current_season(ui, app, monkeypatch):
+    from datetime import date
+    from pokemind import seasons
+    monkeypatch.setattr(window.W.QInputDialog, 'getText', lambda *a, **k: ('Saison inventée', True))
+    QTest.mouseClick(ui.new_season_button, Qt.MouseButton.LeftButton)
+    today = date.today().isoformat()
+    assert ui.season_pickers[0].itemText(0) == 'Saison actuelle · Saison inventée (' + today + ' →)'
+    assert seasons.owner_starts(ui.root) == [{'start': today, 'name': 'Saison inventée'}]
+    monkeypatch.setattr(window.W.QInputDialog, 'getText', lambda *a, **k: ('', False))
+    QTest.mouseClick(ui.new_season_button, Qt.MouseButton.LeftButton)
+    assert seasons.owner_starts(ui.root) == [{'start': today, 'name': 'Saison inventée'}]  # Annuler changes nothing
+
+
+def test_qt_reset_window_starts_with_nothing_ticked_and_everything_ticks_all(app):
+    from pokemind.data_reset import CATEGORIES
+    from pokemind.desktop.reset_dialog import ResetDialog
+    dialog = ResetDialog()
+    try:
+        assert dialog.choices() == [] and not dialog.confirm.isEnabled() and dialog.keep.isChecked()
+        assert dialog.cancel.isDefault() and not dialog.everything.isChecked()
+        dialog.boxes['decks'].setChecked(True)
+        assert dialog.choices() == ['decks'] and dialog.confirm.isEnabled() and not dialog.everything.isChecked()
+        dialog.everything.click()
+        assert dialog.choices() == list(CATEGORIES) and dialog.everything.isChecked()
+        dialog.boxes['technical'].setChecked(False)
+        assert not dialog.everything.isChecked() and len(dialog.choices()) == len(CATEGORIES) - 1
+        dialog.boxes['technical'].setChecked(True)
+        assert dialog.everything.isChecked()
+        dialog.everything.click()
+        assert dialog.choices() == [] and not dialog.confirm.isEnabled()
+    finally:
+        dialog.deleteLater()
+
+
+def test_qt_an_import_ending_after_its_discussion_was_emptied_does_not_crash(ui, app, monkeypatch):
+    ui.chat_controls(True)
+    assert not ui.delete_button.isEnabled() and not ui.delete_all_button.isEnabled()
+    ui.chat_controls(False)
+    ui.ingest_busy = True
+    monkeypatch.setattr(window.QMessageBox, 'question', lambda *a, **k: pytest.fail('no deletion during an import'))
+    ui.delete_conversation()
+    ui.delete_all_conversations()
+    ui.conversation = ui.store.new(ui.provider.currentData())  # emptied while the import ran (diagnostic 2026-11-03)
+    ui._before_matches = set()
+    ui.ingest_phase('Validation du journal local')
+    ui.ingest_done([{'status': 'REFUSED', 'reasons': []}])
+    messages = ui.conversation['messages']
+    assert [m['role'] for m in messages] == ['assistant']
+    assert 'Validation du journal local' in messages[0]['content'] and 'Importation refusée' in messages[0]['content']
+    ui.ingest_failed('BATCH_CANCELLED')
+    assert 'Traitement interrompu' in ui.conversation['messages'][-1]['content']
+
+
 def test_qt_chat_stop_is_responsive_and_keeps_partial(ui, app):
     class Slow(Fake):
         def ask_stream(self,prompt,history,emit,tool=None):

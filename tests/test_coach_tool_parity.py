@@ -234,15 +234,46 @@ def test_claude_coach_gets_same_tools_without_safe_mode_or_memory(local_tmp, mon
         client.ask_stream('Flambo?', [], out.append, tool=lambda a: calls.append(a) or {'cards': [{'nom': 'Flambo inventé'}]})
         assert out == ['Flambo inventé'] and calls == [{'operation': 'cards', 'query': 'Flambo'}]
         argv = captured[0]
-        assert '--safe-mode' not in argv and argv[argv.index('--tools') + 1] == ''
-        assert argv[argv.index('--system-prompt') + 1] == provider.COACH_SYSTEM
-        assert argv[argv.index('--allowedTools') + 1] == 'mcp__pokemind__pokemind_read,mcp__pokemind__pokemind_tool'
+        # No shell or file tool; only the web search and web page reading are built in (owner, 2026-11-03).
+        assert '--safe-mode' not in argv and argv[argv.index('--tools') + 1] == 'WebSearch,WebFetch'
+        assert argv[argv.index('--system-prompt') + 1] == provider.COACH_WEB_SYSTEM
+        assert 'remember_web' in provider.COACH_WEB_SYSTEM and 'web_memory' in provider.COACH_WEB_SYSTEM
+        assert argv[argv.index('--allowedTools') + 1] == (
+            'mcp__pokemind__pokemind_read,mcp__pokemind__pokemind_tool,WebSearch,WebFetch')
         assert json.loads(argv[argv.index('--settings') + 1]) == {'autoMemoryEnabled': False, 'disableAllHooks': True}
         assert '--strict-mcp-config' in argv and argv[argv.index('--setting-sources') + 1] == ''
     finally:
         client.close()
     assert client.bridge is None
 
+
+
+def test_claude_chat_uses_the_model_chosen_for_the_terminal(local_tmp, monkeypatch, no_terminal_model):
+    home = local_tmp / 'invented-home'
+    (home / '.claude').mkdir(parents=True)
+    monkeypatch.setattr(provider.Path, 'home', staticmethod(lambda: home))
+    assert no_terminal_model() is None  # no settings file: the CLI default
+    (home / '.claude' / 'settings.json').write_text('{"model": "opus", "hooks": {"invented": 1}}', encoding='utf-8')
+    assert no_terminal_model() == 'opus'
+    for value in ('"opus; rm"', '42', '"--dangerous"', 'not json'):
+        (home / '.claude' / 'settings.json').write_text('{"model": ' + value + '}', encoding='utf-8')
+        assert no_terminal_model() is None
+    script = local_tmp / 'invented-claude.py'
+    script.write_text(FAKE_CLAUDE, encoding='utf-8')
+    original, captured = provider.spawn, []
+    def spawn(argv, cwd):
+        captured.append(argv)
+        return original([sys.executable, '-u', str(script), json.dumps(argv)], cwd)
+    monkeypatch.setattr(provider, 'spawn', spawn)
+    monkeypatch.setattr(provider, 'executable', lambda name: 'invented-claude')
+    monkeypatch.setattr(provider, 'terminal_model', lambda: 'opus')
+    client = provider.ClaudeCode(local_tmp)
+    try:
+        client.ask_stream('Flambo?', [], lambda text: None, tool=lambda a: {'cards': [{'nom': 'Flambo inventé'}]})
+        argv = captured[0]
+        assert argv[argv.index('--model') + 1] == 'opus' and argv[argv.index('--setting-sources') + 1] == ''
+    finally:
+        client.close()
 
 
 def test_claude_in_the_project_folder_keeps_folder_rules_native_tools_and_coach_tools(local_tmp, monkeypatch):
@@ -265,8 +296,10 @@ def test_claude_in_the_project_folder_keeps_folder_rules_native_tools_and_coach_
         argv, cwd = captured[0]
         assert cwd == local_tmp and argv[argv.index('--setting-sources') + 1] == 'project,local'
         assert '--system-prompt' not in argv and argv[argv.index('--append-system-prompt') + 1] == provider.PROJECT_SYSTEM
-        assert argv[argv.index('--allowedTools') + 1] == (
-            'Read,Edit,Write,Bash,Glob,Grep,mcp__pokemind__pokemind_read,mcp__pokemind__pokemind_tool')
+        assert argv[argv.index('--allowedTools') + 1] == ('Read,Edit,Write,Bash,Glob,Grep,WebSearch,WebFetch,'
+            'mcp__pokemind__pokemind_read,mcp__pokemind__pokemind_tool')
+        assert argv[argv.index('--tools') + 1] == 'Read,Edit,Write,Bash,Glob,Grep,WebSearch,WebFetch'
+        assert provider.WEB_GUIDANCE in provider.PROJECT_SYSTEM
         assert '--dangerously-skip-permissions' not in argv
         assert json.loads(argv[argv.index('--settings') + 1])['permissions']['deny'][0] == 'Read(./data/**)'
     finally:
@@ -325,3 +358,11 @@ def test_local_model_runs_the_same_tool_loop(local_tmp, supports_tools):
     else:
         assert calls == [] and 'tools' not in OllamaPeer.requests[1]
         assert OllamaPeer.requests[1]['messages'][0]['content'] == provider.SYSTEM
+
+
+def test_oversized_answer_keeps_the_start_of_its_longest_list():
+    value, ok = tools.run_tool('pokemind_tool', {'operation': 'cards'},
+                               lambda a: {'cards': [{'name': 'x' * 1000, 'n': i} for i in range(60)], 'query': 'q'})
+    assert ok and 0 < len(value['cards']) < 60 and value['cards'][0]['n'] == 0 and value['query'] == 'q'
+    assert value['truncated'] == {'cards': str(len(value['cards'])) + '/60'} and value['hint'] == tools.SHORTENED
+    assert len(json.dumps(value, ensure_ascii=False).encode()) <= tools.MAX_TOOL_BYTES

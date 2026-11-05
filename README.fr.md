@@ -9,7 +9,7 @@ tes cartes sur ton PC, et te permet de les revoir avec un coach IA.
 
 > ## État : préversion
 >
-> PokeMind **0.9.1** est une préversion publique (la première était 0.9.0). L'installateur Windows n'est
+> PokeMind **0.9.2** est une préversion publique (la première était 0.9.0). L'installateur Windows n'est
 > **pas signé**, et avant ces versions PokeMind n'avait été utilisé **que par son auteur**. Attends-toi à des défauts et à
 > des fonctions manquantes, et garde ta propre copie de ce qui compte.
 
@@ -37,8 +37,10 @@ L'installateur n'est pas encore signé : si Windows affiche « Windows a protég
 - **Combats** : colle tes journaux TCG Live dans le chat ou dépose des fichiers `.txt` / `.log`. Chaque
   partie reste sur ton PC; les adversaires sont classés par défaites et chaque partie est montrée en frise.
 - **Coach** : discute avec ton propre **Codex CLI**, **Claude Code** ou un modèle **Ollama** local. La liste
-  à gauche d'**Envoyer** choisit ce que fait le message : **Coach** (mémoire locale, sans Internet),
-  **Recherche web** (une collecte publique bornée) ou **Développement** (depuis le dossier des sources).
+  à gauche d'**Envoyer** choisit ce que fait le message : **Coach** (mémoire locale d'abord; Codex ou
+  Claude cherchent sur le web seulement s'il manque la réponse, puis mémorisent ce qu'ils ont trouvé),
+  **Recherche web** (recherche sur le web tout de suite, plus une collecte publique bornée) ou
+  **Développement** (depuis le dossier des sources).
 - **Deck Lab** : enregistre tes decks, compare-les, exporte des listes de 60 cartes à copier dans TCG Live.
 - **Cartes & méta** : un classeur de cartes hors ligne (textes FR/EN, impressions, légalité datée) tiré du
   catalogue public TCGdex, et les résultats de tournois gardés sur ton PC.
@@ -63,7 +65,7 @@ Ces absences sont des **choix de conception** :
 L'interface suit Windows au premier lancement : un Windows en français donne le français, toute autre
 langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**; ton choix est conservé.
 
-## Limites exactes de la version 0.9.1
+## Limites exactes de la version 0.9.2
 
 | Limite | Détail |
 |---|---|
@@ -80,7 +82,8 @@ langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**
 - Tes données restent dans `%LOCALAPPDATA%\PokeMind`, hors du dossier du programme; la désinstallation les
   conserve.
 - L'usage du réseau est explicite : téléchargement unique du catalogue, illustrations de l'API publique
-  TCGdex (désactivables), messages en **Recherche web**, et les moteurs cloud que tu autorises.
+  TCGdex (désactivables), messages en **Recherche web**, et les moteurs cloud que tu autorises, qui peuvent
+  chercher sur le web quand la mémoire locale n'a pas la réponse.
 - Les journaux bruts, identités de joueurs et chemins de fichiers ne font jamais partie du contexte
   automatique du coach.
 - Toutes les données de ce dépôt sont inventées; les tests ne lisent jamais un vrai dossier utilisateur.

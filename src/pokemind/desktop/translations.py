@@ -700,8 +700,8 @@ Coach|||Coach
 Recherche web|||Web research
 Développement|||Development
 Mode du message|||Message mode
-Coach : ta mémoire locale et le catalogue, sans Internet.|||Coach: your local memory and the catalogue, no Internet.
-Recherche web : collecte publique bornée avant la réponse, pour ce message seulement.|||Web research: a bounded public collection before the answer, for this message only.
+Coach : ta mémoire locale d’abord; Codex ou Claude cherchent sur le web si la réponse manque, puis la mémorisent.|||Coach: your local memory first; Codex or Claude search the web when the answer is missing, then remember it.
+Recherche web : recherche sur le web tout de suite, plus une collecte publique bornée, pour ce message seulement.|||Web research: search the web now, plus a bounded public collection, for this message only.
 Développement : Codex ou Claude travaillent sur le code de PokeMind.|||Development: Codex or Claude work on the PokeMind code.
 Analyse de tes combats en cours…|||Analysing your battles…
 Chargement de tes combats…|||Loading your battles…
@@ -719,6 +719,106 @@ discussion(s) seront effacées.|||discussion(s) will be erased.
 Certaines discussions n’ont pas pu être supprimées; elles sont conservées.|||Some discussions could not be deleted; they are kept.
 Toutes les discussions ont été supprimées.|||All discussions were deleted.
 Discussions supprimées; index des discussions non enregistré.|||Discussions deleted; discussion index not saved.
+Recherche sur Internet|||Searching the web
+Reçu PokeMind · collecte publique bornée — État :|||PokeMind receipt · bounded public collection — Status:
+enregistrement local non confirmé.|||local save not confirmed.
+Validation sur la source : non attestée.|||Validation on the source: not attested.
+Réinitialiser…|||Reset…
+Réinitialiser PokeMind|||Reset PokeMind
+Réinitialiser|||Reset
+Choisir ce qu’il faut effacer, ou tout|||Choose what to erase, or everything
+Effacer tout ou une partie de tes données|||Erase all or part of your data
+Coche ce que tu veux effacer. Ce qui n’est pas coché ne bouge pas.|||Tick what you want to erase. What is not ticked stays as it is.
+Tout : comme à la toute première ouverture|||Everything: as on the very first launch
+Parties et statistiques|||Games and statistics
+Mes decks|||My decks
+Discussions|||Discussions
+Connaissances|||Knowledge
+Catalogue et méta publics|||Public catalogue and meta
+Préférences|||Preferences
+Fichiers techniques|||Technical files
+Journaux de parties importés, nombre de parties, statistiques et apprentissage tiré des parties.|||Imported game logs, game counts, statistics and what was learned from games.
+Decks enregistrés par le coach et listes exportées.|||Decks saved by the coach and exported lists.
+Conversations avec le coach.|||Conversations with the coach.
+Mémoire web, recherches web gardées et ancienne base locale du cerveau (documents, observations).|||Web memory, kept web research and the older local brain database (documents, observations).
+Catalogue de cartes, méta publique et images; ils se retéléchargent.|||Card catalogue, public meta and images; they can be downloaded again.
+Réglages, moteur choisi et consentements; l’assistant de bienvenue reviendra.|||Settings, chosen engine and consents; the welcome assistant comes back.
+Journal de diagnostic et autres fichiers techniques.|||Diagnostic log and other technical files.
+Garder une copie de ce qui est retiré (recommandé)|||Keep a copy of what is removed (recommended)
+PokeMind va se fermer puis se rouvrir.|||PokeMind will close, then open again.
+Sans copie, ceci sera effacé définitivement :|||Without a copy, this will be erased for good:
+Continuer?|||Continue?
+Données retirées :|||Data removed:
+Ne sont pas touchés : tes fichiers ailleurs sur ce PC, le dossier de travail du terminal et les historiques gardés par Codex ou Claude dans leurs propres dossiers.|||Not touched: your files elsewhere on this PC, the terminal's working folder, and the histories Codex or Claude keep in their own folders.
+Réinitialisation : arrêt de l’opération en cours, puis PokeMind se ferme et se rouvre…|||Reset: stopping the current operation, then PokeMind closes and opens again…
+Effacer sans copie?|||Erase without a copy?
+La réinitialisation n’a pas pu être demandée. Rien n’a été effacé.|||The reset could not be requested. Nothing was erased.
+Réinitialisation : PokeMind se ferme puis se rouvre…|||Reset: PokeMind closes, then opens again…
+Élément encore utilisé :|||Item still in use:
+Archiver…|||Archive…
+Choisir où enregistrer le zip de tes données|||Choose where to save the zip of your data
+Restaurer…|||Restore…
+Choisir une archive PokeMind (.zip) à remettre en place|||Choose a PokeMind archive (.zip) to put back
+Archiver mes données|||Archive my data
+Un zip vérifié de tes parties, decks, conversations et réglages, où tu veux|||A verified zip of your games, decks, chats and settings, wherever you want
+Restaurer une archive|||Restore an archive
+Remet un zip en place; tes données actuelles sont archivées avant|||Puts a zip back; your current data is archived first
+Restauration : arrêt de l’opération en cours, puis PokeMind se ferme et se rouvre…|||Restore: stopping the current operation, then PokeMind closes and opens again…
+Restauration : PokeMind se ferme puis se rouvre…|||Restore: PokeMind closes, then opens again…
+Une analyse ou une réponse du coach est en cours. Archive quand elle est finie : ainsi le zip contient des données complètes.|||An analysis or a coach answer is in progress. Archive once it is done, so the zip holds complete data.
+Archiver mes données PokeMind|||Archive my PokeMind data
+Archive zip (*.zip)|||Zip archive (*.zip)
+Archive en cours…|||Archiving…
+Archive non faite; rien n’a été changé.|||Archive not made; nothing was changed.
+L’archive n’a pas pu être faite. Rien n’a été changé.|||The archive could not be made. Nothing was changed.
+Archive vérifiée :|||Verified archive:
+Fichiers :|||Files:
+Afficher dans l’explorateur|||Show in File Explorer
+Restaurer une archive PokeMind|||Restore a PokeMind archive
+Restaurer cette archive?|||Restore this archive?
+PokeMind va se fermer et se rouvrir avec les données de :|||PokeMind will close and open again with the data from:
+Avant, tes données actuelles seront archivées dans :|||First, your current data will be archived in:
+Cette archive ne peut pas être restaurée. Rien n’a été changé.|||This archive cannot be restored. Nothing was changed.
+Archive restaurée :|||Archive restored:
+Fichiers remis en place :|||Files put back:
+Tes données d’avant sont gardées dans :|||Your previous data is kept in:
+La restauration n’a pas pu se faire. Tes données actuelles sont restées en place.|||The restore could not be done. Your current data stayed in place.
+Pas assez d’espace libre pour l’archive.|||Not enough free space for the archive.
+Le dossier PokeMind est introuvable.|||The PokeMind folder cannot be found.
+Un lien ou une jonction est dans le dossier : rien n’a été fait.|||A link or junction is in the folder: nothing was done.
+L’archive doit être hors du dossier des données PokeMind.|||The archive must be outside the PokeMind data folder.
+Un fichier du dossier est encore utilisé (fenêtre, terminal ou explorateur ouvert dedans); tout est resté en place.|||A file in the folder is still in use (a window, terminal or explorer open in it); everything stayed in place.
+Cette archive contient un chemin refusé.|||This archive contains a refused path.
+Cette archive contient un lien refusé.|||This archive contains a refused link.
+Ce fichier n’est pas une archive de données PokeMind.|||This file is not a PokeMind data archive.
+L’archive est abîmée.|||The archive is damaged.
+L’archive choisie est introuvable (fichier déplacé ou clé USB retirée?).|||The chosen archive cannot be found (file moved or USB key removed?).
+Windows refuse l’accès à cet endroit; choisis un autre dossier.|||Windows refuses access to this place; choose another folder.
+L’archive relue ne correspond pas aux fichiers; elle n’a pas été gardée.|||The archive read back does not match the files; it was not kept.
+Saison|||Season
+Nouvelle saison…|||New season…
+Nouvelle saison|||New season
+Commencer une saison aujourd’hui si PokeMind ne connaît pas encore sa date. |||Start a season today when PokeMind does not know its date yet. 
+Les parties d’avant restent dans leur saison et dans le cumul.|||Earlier games stay in their season and in the total.
+Saison affichée|||Season shown
+Une partie compte dans la saison du jour où son journal a été ajouté à PokeMind. |||A game counts in the season of the day its log was added to PokeMind. 
+Les saisons passées restent consultables; le cumul compte toutes les parties.|||Past seasons stay available; the total counts every game.
+Saison actuelle · |||Current season · 
+Cumul · toutes les saisons|||Total · every season
+Saison affichée : |||Season shown: 
+Nom de la saison qui commence aujourd’hui (les parties d’avant restent dans leur saison) :|||Name of the season starting today (earlier games stay in their season):
+Saison du |||Season of 
+Nouvelle saison non enregistrée; rien n’a changé.|||New season not saved; nothing changed.
+<p>Aucune partie dans cette saison pour l’instant. Les saisons passées et le cumul restent dans le choix de saison.</p>|||<p>No game in this season yet. Past seasons and the total stay in the season choice.</p>
+Recommandations et apprentissage : calculés sur toutes les parties, toutes saisons.|||Recommendations and learning: computed on every game, every season.
+Avant le |||Before 
+Toutes les parties|||Every game
+Saison : |||Season: 
+PokeMind a été réinitialisé.|||PokeMind has been reset.
+Une copie de tes anciennes données est gardée ici :|||A copy of your previous data is kept here:
+Les anciennes données ont été effacées.|||The previous data was erased.
+La réinitialisation n’a pas pu se faire : un fichier était encore utilisé. Rien n’a été effacé; recommence depuis Réglages, Données.|||The reset could not be done: a file was still in use. Nothing was erased; try again from Settings, Data.
+Une partie des données est restée ici :|||Part of the data stayed here:
 '''
 
 CATALOG = {}

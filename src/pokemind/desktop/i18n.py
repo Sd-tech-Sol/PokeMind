@@ -223,9 +223,15 @@ class QFileDialog(W.QFileDialog):
             options=W.QFileDialog.Option.DontUseNativeDialog)
 
     @staticmethod
-    def getSaveFileName(parent=None, caption='', directory='', filter='', *args, **kwargs):
+    def getSaveFileName(parent=None, caption='', directory='', filter='', *args, native=False, **kwargs):
+        # native: the Windows explorer dialog (archives: Desktop, USB keys, OneDrive), in the Windows language
         return W.QFileDialog.getSaveFileName(parent,display(caption),directory,display(filter),
-            options=W.QFileDialog.Option.DontUseNativeDialog)
+            options=W.QFileDialog.Option(0) if native else W.QFileDialog.Option.DontUseNativeDialog)
+
+    @staticmethod
+    def getOpenFileName(parent=None, caption='', directory='', filter='', *args, native=False, **kwargs):
+        return W.QFileDialog.getOpenFileName(parent,display(caption),directory,display(filter),
+            options=W.QFileDialog.Option(0) if native else W.QFileDialog.Option.DontUseNativeDialog)
 
     @staticmethod
     def getExistingDirectory(parent=None, caption='', directory='', *args, **kwargs):

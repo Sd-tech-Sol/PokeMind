@@ -26,6 +26,11 @@ PokeMind uses the network only for these explicit actions:
 - a message sent in **Web research** mode: one bounded collection from public sources;
 - the **coach engine** you choose: Codex CLI and Claude Code run with your own account and send your
   question and the allowed context to their provider; Ollama runs locally.
+- **web searches by Codex CLI or Claude Code**: when PokeMind's local memory lacks an answer, or for a
+  **Web research** message, the engine searches the web and reads public pages through its provider's own
+  tools. What it found is kept as a short summary with its links and date in
+  `data/local/web_memory.sqlite3`, so the next similar question is answered locally. Ollama never searches
+  the web.
 
 Nothing is sent to a cloud engine until you allow it in **Settings → AI coach**, where you also choose
 whether your statistics may be shared. Raw logs, player identities and file paths are never part of the
@@ -35,7 +40,10 @@ automatic context.
 
 You choose what to import, which engine to use and what it may receive. Conversations can be deleted from
 the chat. Settings show the data folder; moving your data out of a source folder is done by copy, and the
-original is never deleted by the application.
+original is never deleted by the application. **Settings → Data → Reset PokeMind** erases the kinds of data
+you tick (games and statistics, decks, discussions, knowledge, public catalogue and meta, preferences,
+technical files) or everything, as on a first launch; by default what is removed is kept as a dated copy
+inside the data folder, and it is erased only if you untick that copy and confirm a second time.
 
 ## Limits
 

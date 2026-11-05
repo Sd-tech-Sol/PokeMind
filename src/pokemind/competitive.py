@@ -5,9 +5,12 @@ remain in the ignored PUBLIC workspace, not in fixtures or Git reports.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import os
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -498,7 +501,59 @@ def _family(label: str) -> str:
     return "Dragapult" if label.casefold().startswith("dragapult") else label
 
 
+# One battle analysis asked for the same verified sample about twenty times per counter-deck plan, re-reading
+# and re-parsing every cached list page each time (owner diagnostic, 2026-11-03: about 13 s per plan).
+_SNAPSHOTS: dict = {}
+_SNAPSHOT_LOCK = threading.Lock()
+SNAPSHOT_SECONDS = 900
+
+
+def _snapshot_key(db: Path, as_of: str):
+    """Every file the sample is verified from, by size and modification time; any change recomputes it.
+
+    Only the database, the ledger and the pages the ledger names are looked at: no folder is listed.
+    """
+    try:
+        db = Path(db).absolute()
+        target = db.parent
+        ledger = target / "requests.json"
+        if any(_redirected(path) for path in (db, target, target / "pages", ledger)):
+            return None
+        stamps = [(path.name, path.stat().st_mtime_ns, path.stat().st_size) for path in (db, ledger)]
+        if stamps[1][2] > MAX_RESPONSE:
+            return None
+        for record in json.loads(ledger.read_text(encoding="utf-8"))["requests"]:
+            digest = record.get("sha256", "")
+            page = target / "pages" / (digest + ".body")
+            if re.fullmatch(r"[0-9a-f]{64}", digest) and page.is_file():
+                stamps.append((digest, page.stat().st_mtime_ns, page.stat().st_size))
+            else:
+                stamps.append((str(digest), None, None))
+        return os.path.normcase(str(db)), as_of, tuple(stamps)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
 def _advisor_snapshot(root: Path, db: Path, as_of: str):
+    """The verified public sample; reused while none of its files changed (a private copy on every call)."""
+    _advisor_context(as_of)
+    require_public_database(root, db)  # lexical namespace before any owner fallback
+    key = _snapshot_key(db, as_of)
+    if key is not None:
+        with _SNAPSHOT_LOCK:
+            hit = _SNAPSHOTS.get(key)
+        if hit and time.monotonic() - hit[0] < SNAPSHOT_SECONDS:
+            return copy.deepcopy(hit[1])
+    value = _advisor_snapshot_uncached(root, db, as_of)
+    if key is not None and key == _snapshot_key(db, as_of):  # unchanged while it was read
+        with _SNAPSHOT_LOCK:
+            if len(_SNAPSHOTS) >= 4:
+                _SNAPSHOTS.clear()
+            _SNAPSHOTS[key] = (time.monotonic(), copy.deepcopy(value))
+    return value
+
+
+def _advisor_snapshot_uncached(root: Path, db: Path, as_of: str):
     _advisor_context(as_of)
     require_public_database(root, db)  # lexical namespace before any owner fallback
     if not db.is_file():

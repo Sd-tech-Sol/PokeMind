@@ -71,6 +71,24 @@ def test_journal_rotates_at_its_size_cap(journal, monkeypatch):
     assert all(p.stat().st_size <= 4000 for p in path.parent.iterdir())
 
 
+def test_report_puts_recent_errors_first_with_their_exception(journal):
+    root, path = journal
+    for number in range(7):
+        try:
+            [][number]
+        except IndexError:
+            diagnostics.get('desktop').exception('Échec inventé %d', number)
+    for number in range(300):
+        diagnostics.get().info('ligne synthétique %04d', number)
+    report = diagnostics.report(root)
+    summary, tail = report.split('Fin du journal :', 1)
+    assert 'Erreurs récentes (5) :' in summary and 'Échec inventé 6' in summary and 'Échec inventé 1' not in summary
+    assert 'Échec inventé 2 → IndexError: list index out of range' in summary
+    assert 'ligne synthétique 0299' in tail and 'Échec inventé' not in tail  # the tail alone would have lost them
+    assert tail.rstrip().endswith('ligne synthétique 0299')  # the newest lines are kept, never cut off
+    assert len(report) <= diagnostics.REPORT_CHARS and report.startswith('PokeMind ')
+
+
 def test_report_without_journal_is_explicit(local_tmp):
     diagnostics.reset_for_tests()
     assert 'Journal vide.' in diagnostics.report(local_tmp)
