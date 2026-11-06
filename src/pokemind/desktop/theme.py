@@ -1,24 +1,75 @@
 """Local, code-drawn Pokédex styling; no downloaded artwork or fonts."""
-from PySide6.QtCore import Qt, QPointF, QRectF
-from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPalette
+import os
+import tempfile
+from pathlib import Path
 
+from PySide6.QtCore import QDir, Qt, QPointF, QRectF
+from PySide6.QtGui import QColor, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPalette
+
+
+# BrainBall electric (owner, 2026-11-05): docs/design/pokemind-brainball/palette.json is the source of truth.
+# Its tokens are copied here unchanged; the few derived tokens are marked and checked by the tests.
+BRAND = dict(bleu_nuit='#001261', bleu_royal='#01339F', bleu_electrique='#004CCB', bleu_lumineux='#0793FA',
+             cyan='#68D6F9', gold='#FECF4D', rouge_cerveau='#EE4B50', rouge_profond='#C32039', blanc_nacre='#FEFCFA')
 
 PALETTES = {
-    'dark': dict(background='#141820', surface='#1e2430', input='#191f29',
-                 text='#f3f5fa', muted='#acb7ca', border='#374255',
-                 hover='#303b4d', alternate='#242d3b', accent='#ffd45a',
-                 link='#8ebcff', warning='#fff0b3', warning_bg='#37301e',
-                 red='#ff8493', blue='#9cbdff', yellow='#ffda73'),
-    'light': dict(background='#f1f3f8', surface='#ffffff', input='#ffffff',
-                  text='#202b40', muted='#526078', border='#ccd4e2',
-                  hover='#e8edf7', alternate='#f4f6fb', accent='#324f98',
-                  link='#214fa4', warning='#684b09', warning_bg='#fff4d4',
-                  red='#b62743', blue='#3155a0', yellow='#795400'),
+    'dark': dict(background='#07142F', sidebar='#081E4A', surface='#102652', alternate='#16356D', input='#081C3E',
+                 text='#F7FAFF', muted='#C3D8F4', border='#335A8E', hover='#1B4380', accent='#FFD54F',
+                 primary='#0054C7', primary_hover='#074DB4', on_primary='#FFFFFF', link='#6FD5FF', focus='#FFDD5D',
+                 red='#FF6B74', blue='#68BFFF', yellow='#FFD54F', success='#62D1B3', warning='#FFE493',
+                 warning_bg='#392F24', selection='#0054C7', selection_text='#FFFFFF', hero_start='#00339F',
+                 hero_end='#004CCB', hero_text='#FFFFFF', hero_kicker='#FFD54F', danger='#B72C43', on_danger='#FFFFFF',
+                 neutral_chart='#90A9CF',
+                 # derived
+                 primary_pressed='#003F96', hero_muted='#DCE8FF', hero_border='#0793FA', nav_icon_selected='#FFD54F',
+                 tooltip='#081E4A', tooltip_text='#F7FAFF', tooltip_border='#FFD54F', overlay='rgba(7,20,47,0.94)',
+                 field_border='#4F79B0'),
+    'light': dict(background='#F1F7FF', sidebar='#E0EDFF', surface='#FFFFFF', alternate='#E6F0FF', input='#F8FBFF',
+                  text='#081B3A', muted='#425778', border='#B7CBE7', hover='#D6E9FF', accent='#003EA6',
+                  primary='#003EA6', primary_hover='#003A9E', on_primary='#FFFFFF', link='#004CCB', focus='#004CCB',
+                  red='#B72C43', blue='#004CCB', yellow='#735100', success='#116C4D', warning='#704C00',
+                  warning_bg='#FFF3D0', selection='#C6E2FF', selection_text='#081B3A', hero_start='#01339F',
+                  hero_end='#004CCB', hero_text='#FFFFFF', hero_kicker='#FFD54F', danger='#B72C43', on_danger='#FFFFFF',
+                  neutral_chart='#576A88',
+                  # derived
+                  primary_pressed='#002E7A', hero_muted='#DCE8FF', hero_border='#0793FA', nav_icon_selected='#FFFFFF',
+                  tooltip='#FFFFFF', tooltip_text='#081B3A', tooltip_border='#004CCB', overlay='rgba(255,255,255,0.96)',
+                  field_border='#7088AD'),
 }
+DERIVED = ('primary_pressed', 'hero_muted', 'hero_border', 'nav_icon_selected', 'tooltip', 'tooltip_text',
+           'tooltip_border', 'overlay',
+           'field_border')  # palette.json borders are decorative (under 3:1 around inputs); fields get this one
+# The same in both themes: the binder is a physical object (royal blue cover, navy pages, so the sleeves and the
+# card names keep their contrast), and the terminal stays dark because console programs pick their ANSI colours
+# for a dark background.
+OBJECTS = dict(binder_start='#01339F', binder_end='#001261', binder_border='#0793FA', page_start='#132E63',
+               page_end='#0B1D42', page_border='#06122B', spine_edge='#001261', spine_mid='#004CCB',
+               terminal='#081C3E', terminal_text='#F7FAFF', gold_line='#FECF4D')
 
 
 def colors(theme):
     return PALETTES['light' if theme == 'light' else 'dark']
+
+
+def theme_of(widget_palette):
+    """'light' or 'dark' from a widget's palette, for painters that are not told the theme."""
+    return 'light' if widget_palette.color(QPalette.ColorRole.Window).lightness() > 128 else 'dark'
+
+
+def _channel(value):
+    value /= 255
+    return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def luminance(color):
+    value = QColor(color)
+    return 0.2126 * _channel(value.red()) + 0.7152 * _channel(value.green()) + 0.0722 * _channel(value.blue())
+
+
+def contrast(foreground, background):
+    """WCAG 2 contrast ratio of two opaque colours."""
+    high, low = sorted((luminance(foreground), luminance(background)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
 
 
 def palette(theme):
@@ -32,14 +83,56 @@ def palette(theme):
                         (QPalette.ColorRole.Button, c['surface']),
                         (QPalette.ColorRole.ButtonText, c['text']),
                         (QPalette.ColorRole.PlaceholderText, c['muted']),
-                        (QPalette.ColorRole.Highlight, '#b92b43'),
-                        (QPalette.ColorRole.HighlightedText, '#ffffff')):
+                        (QPalette.ColorRole.Mid, c['border']),
+                        (QPalette.ColorRole.Link, c['link']),
+                        (QPalette.ColorRole.ToolTipBase, c['tooltip']),
+                        (QPalette.ColorRole.ToolTipText, c['tooltip_text']),
+                        (QPalette.ColorRole.Highlight, c['selection']),
+                        (QPalette.ColorRole.HighlightedText, c['selection_text'])):
         value.setColor(role, QColor(color))
     return value
 
 
+ARROWS = 'pokemind-theme'  # Qt search-path prefix of the drawn combo-box chevrons
+
+
+def _chevron(color, up=False):
+    """A chevron PNG in the theme colour, drawn once into a temporary folder that Qt reads as 'pokemind-theme:'.
+    The native drop-down button paints a dark edge on the themed combo boxes; this replaces it."""
+    folder = Path(tempfile.gettempdir()) / ARROWS
+    name = 'chevron-%s-%s.png' % (color.lstrip('#').lower(), 'up' if up else 'down')
+    if not (folder / name).is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        image = QImage(20, 12, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+        p = QPainter(image)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor(color), 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        ends = (9, 3) if up else (3, 9)
+        p.drawPolyline([QPointF(3, ends[0]), QPointF(10, ends[1]), QPointF(17, ends[0])])
+        p.end()
+        temporary = folder / ('%s.%d.tmp.png' % (name, os.getpid()))
+        if not image.save(str(temporary)):
+            raise OSError('chevron not written')
+        os.replace(temporary, folder / name)
+    QDir.addSearchPath(ARROWS, str(folder))
+    return ARROWS + ':' + name
+
+
+def _combo_arrows(c):
+    try:
+        down, up, off = _chevron(c['muted']), _chevron(c['muted'], up=True), _chevron(c['border'])
+    except OSError:
+        return ''  # the native arrow stays
+    return ('QComboBox::drop-down { subcontrol-origin:padding; subcontrol-position:center right; width:26px; '
+            'border:0; background:transparent; }\n'
+            'QComboBox::down-arrow { image:url(' + down + '); width:10px; height:6px; }\n'
+            'QComboBox::down-arrow:on { image:url(' + up + '); }\n'
+            'QComboBox::down-arrow:disabled { image:url(' + off + '); }\n')
+
+
 def stylesheet(theme):
-    c = colors(theme)
+    c = dict(OBJECTS, **colors(theme))
     template = '''
 QWidget { background:@background; color:@text; font-family:"Segoe UI"; font-size:14px; }
 QMainWindow,QStackedWidget { background:@background; }
@@ -47,127 +140,142 @@ QWidget#motionOverlay { background:transparent; border:0; }
 QLabel { background:transparent; }
 QLabel#title { font-size:27px; font-weight:700; }
 QLabel#muted { color:@muted; }
-QFrame#sidebar { background:#1b2335; border-right:1px solid #34415b; }
-QFrame#sidebar QLabel { color:#b9c7e2; }
-QFrame#sidebar QLabel#brand { color:#ffda62; font-size:25px; font-weight:800; }
-QFrame#sidebar QLabel#brandCaption { color:#b9c7e2; font-size:10px; font-weight:700; letter-spacing:1px; }
-QListWidget { background:#1b2335; color:#c5cfe3; border:0; padding:0; outline:0; }
+QFrame#sidebar { background:@sidebar; border-right:1px solid @border; }
+QFrame#sidebar QLabel { color:@muted; }
+QFrame#sidebar QLabel#brand { color:@accent; font-size:25px; font-weight:800; }
+QFrame#sidebar QLabel#brandCaption { color:@muted; font-size:10px; font-weight:700; letter-spacing:1px; }
+QListWidget { background:@sidebar; color:@text; border:0; padding:0; outline:0; }
 QListWidget::item { padding:10px; border-radius:10px; margin:3px 0; border:1px solid transparent; }
-QListWidget::item:hover { background:#2b3852; }
-QListWidget::item:selected { background:#c73148; color:white; border:1px solid #ed5368; }
-QListWidget::item:focus { border:1px solid #ffda62; }
-QFrame#hero { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ba2440,stop:1 #e34450); border:1px solid #ee6672; border-radius:18px; }
-QFrame#hero QLabel { color:white; }
-QFrame#hero QLabel#heroKicker { font-size:11px; font-weight:700; letter-spacing:2px; color:#ffe39a; }
+QListWidget::item:hover { background:@hover; }
+QListWidget::item:selected { background:@primary; color:@on_primary; border:1px solid @primary; }
+QListWidget::item:focus { border:1px solid @focus; }
+QFrame#hero { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 @hero_start,stop:1 @hero_end); border:1px solid @hero_border; border-radius:18px; }
+QFrame#hero QLabel { color:@hero_text; }
+QFrame#hero QLabel#heroKicker { font-size:11px; font-weight:700; letter-spacing:2px; color:@hero_kicker; }
 QLabel#heroTitle { font-size:30px; font-weight:800; }
-QLabel#heroDescription { font-size:13px; color:#fff0f2; }
-QFrame#card { background:@surface; border:1px solid @border; border-top:3px solid #d84559; border-radius:12px; }
-QFrame#card[metricKind="wins"] { border-top-color:#628be0; }
-QFrame#card[metricKind="losses"] { border-top-color:#e9bd4a; }
+QLabel#heroDescription { font-size:13px; color:@hero_muted; }
+QFrame#card { background:@surface; border:1px solid @border; border-top:3px solid @neutral_chart; border-radius:12px; }
+QFrame#card[metricKind="wins"] { border-top-color:@blue; }
+QFrame#card[metricKind="losses"] { border-top-color:@red; }
+QFrame#card[metricKind="rival"] { border-top-color:@yellow; }
 QFrame#card QLabel { background:transparent; }
 QLabel#sectionTitle { font-size:18px; font-weight:700; color:@text; }
 QLabel#smallCaption { color:@muted; font-size:12px; }
-QPushButton#sidebarToggle { background:#26334c; color:#ffda62; border:1px solid #394a69; padding:5px; }
-QPushButton#favoriteButton:checked { color:@yellow; border-color:#e9bd4a; background:@alternate; }
+QPushButton#sidebarToggle { background:@surface; color:@accent; border:1px solid @border; padding:5px; }
+QPushButton#favoriteButton:checked { color:@yellow; border-color:@yellow; background:@alternate; }
 QPushButton#homeLink { text-align:left; padding:10px; font-weight:500; }
 QPushButton#sourceToggle { font-size:12px; padding:5px; }
-QLabel#battleBadge { color:@text; background:@surface; border:1px solid @border; border-left:4px solid #d84559; border-radius:10px; font-size:16px; font-weight:700; padding:10px 14px; }
+QLabel#battleBadge { color:@text; background:@surface; border:1px solid @border; border-left:4px solid @blue; border-radius:10px; font-size:16px; font-weight:700; padding:10px 14px; }
 QLabel#tileValue { font-size:28px; font-weight:800; color:@accent; }
 QFrame#card[metricKind="games"] QLabel#tileValue { color:@text; }
 QFrame#card[metricKind="wins"] QLabel#tileValue { color:@blue; }
 QFrame#card[metricKind="losses"] QLabel#tileValue { color:@red; }
 QLabel#tileName { font-size:16px; font-weight:700; color:@yellow; }
-QFrame#card[metricKind="rival"] { border-top-color:#9b6bff; }
 QLabel#metric { font-size:35px; font-weight:800; color:@accent; }
+QFrame#card[metricKind="games"] QLabel#metric { color:@text; }
+QFrame#card[metricKind="wins"] QLabel#metric { color:@blue; }
+QFrame#card[metricKind="losses"] QLabel#metric { color:@red; }
 QLabel#corpusNote { color:@warning; padding:12px; background:@warning_bg; border:1px solid @border; border-radius:10px; }
-QLabel#permissionBadge { color:@warning; font-weight:700; }
 QLabel[cardType="pokemon"] { color:@red; font-weight:700; }
 QLabel[cardType="trainer"] { color:@blue; font-weight:700; }
 QLabel[cardType="energy"] { color:@yellow; font-weight:700; }
-QTextEdit,QTextBrowser,QLineEdit,QComboBox,QTableWidget { background:@input; color:@text; border:1px solid @border; border-radius:10px; padding:9px; selection-background-color:#b92b43; selection-color:white; }
-QTextEdit:focus,QTextBrowser:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus { border:1px solid #d84559; }
+QTextEdit,QTextBrowser,QLineEdit,QComboBox,QTableWidget { background:@input; color:@text; border:1px solid @border; border-radius:10px; padding:9px; selection-background-color:@selection; selection-color:@selection_text; }
+QTextEdit,QLineEdit,QComboBox { border-color:@field_border; }
+QTextEdit:focus,QTextBrowser:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus { border:1px solid @focus; }
 QLineEdit { min-height:25px; }
 QComboBox { min-height:24px; padding-right:24px; }
-QComboBox QAbstractItemView { background:@surface; color:@text; selection-background-color:#b92b43; selection-color:white; }
+QComboBox QAbstractItemView { background:@surface; color:@text; selection-background-color:@selection; selection-color:@selection_text; }
 QPushButton { background:@surface; color:@text; border:1px solid @border; border-radius:10px; padding:10px 14px; font-weight:600; }
-QPushButton:hover { background:@hover; border-color:#d84559; }
+QPushButton:hover { background:@hover; border-color:@blue; }
 QPushButton:pressed { background:@alternate; }
-QPushButton:focus { border:2px solid #d84559; padding:9px 13px; }
-QPushButton#primary { background:#bd2c43; color:white; border:1px solid #ee6376; font-weight:700; }
-QPushButton#primary:hover { background:#a31f35; border-color:#ffcc55; }
+QPushButton:focus { border:2px solid @focus; padding:9px 13px; }
+QPushButton#primary { background:@primary; color:@on_primary; border:1px solid @primary; font-weight:700; }
+QPushButton#primary:hover { background:@primary_hover; border-color:@focus; }
 QPushButton#compact { padding:6px 8px; font-size:13px; }
 QPushButton#compact:focus { padding:5px 7px; }
-QPushButton#primary:pressed { background:#851b2d; }
+QPushButton#primary:pressed { background:@primary_pressed; }
+QPushButton[destructive="true"] { color:@red; }
+QPushButton[destructive="true"]:hover { background:@danger; color:@on_danger; border-color:@danger; }
 QPushButton:disabled { background:@alternate; color:@muted; border:1px solid @border; }
-QPushButton#primary:disabled { background:@alternate; color:@muted; border:1px solid @border; }
+QPushButton#primary:disabled,QPushButton[destructive="true"]:disabled { background:@alternate; color:@muted; border:1px solid @border; }
 QHeaderView::section { background:@surface; color:@muted; border:0; border-bottom:1px solid @border; padding:9px; font-weight:600; }
 QTableWidget { gridline-color:@border; alternate-background-color:@alternate; }
 QTabWidget::pane { border:0; }
 QTabBar::tab { background:@surface; color:@muted; padding:10px 15px; margin-right:4px; border-bottom:3px solid transparent; }
-QTabBar::tab:selected { color:@text; border-bottom:3px solid #df455b; }
-QDockWidget::title { background:#26334c; color:#ffda62; padding:12px; font-weight:700; }
-QFrame#chatTitleBar { background:#26334c; }
-QFrame#chatTitleBar QLabel { color:#ffda62; font-size:12px; font-weight:700; letter-spacing:1px; }
+QTabBar::tab:hover { color:@text; }
+QTabBar::tab:selected { color:@text; border-bottom:3px solid @blue; }
+QDockWidget::title { background:@sidebar; color:@accent; padding:12px; font-weight:700; }
+QFrame#chatTitleBar { background:@sidebar; border-bottom:1px solid @border; }
+QFrame#chatTitleBar QLabel { color:@accent; font-size:12px; font-weight:700; letter-spacing:1px; }
 QWidget#chatBody { background:@surface; }
 QWidget#chatBody QComboBox { padding:5px 8px; min-height:20px; }
 QWidget#chatBody QPushButton { padding:7px 10px; }
 QCheckBox { spacing:8px; padding:6px; }
 QCheckBox::indicator { width:16px; height:16px; }
 QProgressBar { background:@alternate; border:0; border-radius:4px; }
+QProgressBar::chunk { background:@blue; border-radius:4px; }
 QTextBrowser#chatTranscript { font-family:"Segoe UI Variable Text"; font-size:14px; padding:2px; }
-QFrame#loadingBanner { background:@alternate; border:0; border-bottom:3px solid #d84559; }
+QFrame#loadingBanner { background:@alternate; border:0; border-bottom:3px solid @blue; }
 QFrame#loadingBanner QLabel { background:transparent; }
 QFrame#loadingBanner QProgressBar { background:@surface; }
+QFrame#updateBanner { background:@alternate; border:0; border-bottom:3px solid @success; }
+QFrame#updateBanner QLabel { background:transparent; }
+QFrame#updateBanner QProgressBar { background:@surface; }
 QLabel#loadingTitle { color:@text; font-size:17px; font-weight:800; }
 QLabel#loadingDetail { color:@muted; font-size:12px; }
-QProgressBar::chunk { background:#d84559; border-radius:4px; }
 QFrame#activityCard { background:transparent; border:1px solid transparent; border-radius:12px; }
-QFrame#activityCard[busy="true"] { background:@alternate; border:1px solid #d84559; }
+QFrame#activityCard[busy="true"] { background:@alternate; border:1px solid @blue; }
 QLabel#activityLabel { color:@muted; font-size:12px; }
 QLabel#activityLabel[busy="true"] { color:@text; font-size:14px; font-weight:600; }
 QLabel#activityClock { color:@muted; font-size:12px; }
-QLabel#activityClock[busy="true"] { color:#ffda62; background:#26334c; border-radius:9px; padding:2px 9px; font-weight:700; }
-QLabel#permissionBadge { color:#ffda62; background:#2b2a22; border:1px solid #5a4d22; border-radius:10px; padding:3px 9px; font-size:12px; font-weight:600; }
+QLabel#activityClock[busy="true"] { color:@accent; background:@sidebar; border-radius:9px; padding:2px 9px; font-weight:700; }
+QLabel#permissionBadge { color:@warning; background:@warning_bg; border:1px solid @yellow; border-radius:10px; padding:3px 9px; font-size:12px; font-weight:600; }
 QLabel#chatNotice { color:@warning; background:@warning_bg; border-radius:9px; padding:5px 9px; font-size:12px; }
-QPushButton#chatExpand { background:transparent; color:#ffda62; border:1px solid #4a5a7a; border-radius:8px; padding:3px 10px; font-size:12px; font-weight:600; }
-QPushButton#chatExpand:hover { background:#34466a; }
+QPushButton#chatExpand { background:transparent; color:@accent; border:1px solid @border; border-radius:8px; padding:3px 10px; font-size:12px; font-weight:600; }
+QPushButton#chatExpand:hover { background:@hover; }
 QFrame#settingRow { background:@surface; border:1px solid @border; border-radius:10px; }
 QFrame#settingRow QLabel { background:transparent; }
 QFrame#settingRow QCheckBox { background:transparent; padding:2px 0; font-weight:600; }
 QFrame#binderEmpty { background:transparent; }
-QFrame#binderNotice { background:rgba(14,18,27,0.92); border:1px solid #c8a24a; border-radius:14px; }
-QFrame#binderNotice QLabel { background:transparent; color:#e8ecf4; }
+QFrame#binderNotice { background:@overlay; border:1px solid @yellow; border-radius:14px; }
+QFrame#binderNotice QLabel { background:transparent; color:@text; }
 QFrame#settingRow QRadioButton { background:transparent; padding:2px 0; font-weight:600; spacing:8px; }
-QRadioButton::indicator { width:14px; height:14px; border-radius:9px; border:2px solid @border; background:@input; }
-QRadioButton::indicator:checked { background:#d84559; border:2px solid #ffda62; }
+QRadioButton::indicator { width:14px; height:14px; border-radius:9px; border:2px solid @field_border; background:@input; }
+QRadioButton::indicator:checked { background:@primary; border:2px solid @focus; }
 QLabel#settingTitle { font-weight:600; }
 QLabel#settingHint { color:@muted; font-size:12px; }
 QPushButton#settingsTab { background:@surface; color:@muted; border:1px solid @border; border-radius:9px; padding:8px 10px; text-align:center; }
 QPushButton#settingsTab:hover { background:@hover; color:@text; }
-QPushButton#settingsTab:checked { background:#c73148; color:white; border:1px solid #ed5368; }
+QPushButton#settingsTab:checked { background:@primary; color:@on_primary; border:1px solid @primary; }
 QPushButton#linkButton { background:transparent; border:0; color:@link; padding:2px 0; text-align:left; }
 QPushButton#linkButton:hover { text-decoration:underline; }
-QFrame#binderBook { background:qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #7a1c2c, stop:1 #4a101b); border:1px solid #9b2c40; border-radius:16px; }
-QFrame#binderPage { background:qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #232c3d, stop:1 #1a2130); border:1px solid #11161f; border-radius:10px; }
-QFrame#binderSpine { background:qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3a0d16, stop:0.5 #8a2234, stop:1 #3a0d16); border:0; }
-QTabWidget#terminalTabs::pane { background:#151a24; border:1px solid @border; border-radius:12px; top:-1px; }
+QFrame#binderBook { background:qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @binder_start, stop:1 @binder_end); border:1px solid @binder_border; border-radius:16px; }
+QFrame#binderPage { background:qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @page_start, stop:1 @page_end); border:1px solid @page_border; border-radius:10px; }
+QFrame#binderSpine { background:qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @spine_edge, stop:0.5 @spine_mid, stop:1 @spine_edge); border:0; }
+QTabWidget#terminalTabs::pane { background:@terminal; border:1px solid @border; border-radius:12px; top:-1px; }
 QTabWidget#terminalTabs QTabBar::tab { background:@surface; border-top-left-radius:9px; border-top-right-radius:9px; }
-QTabWidget#terminalTabs QTabBar::tab:selected { background:#151a24; color:@text; }
+QTabWidget#terminalTabs QTabBar::tab:selected { background:@terminal; color:@terminal_text; }
 QPushButton#terminalLaunch { padding:8px 14px; }
 QPushButton#binderTurn { font-size:20px; font-weight:800; padding:2px 14px; border-radius:16px; }
 QScrollArea { border:0; }
 QScrollBar:vertical { background:@background; width:11px; margin:0; }
-QScrollBar::handle:vertical { background:@border; min-height:25px; border-radius:5px; }
+QScrollBar::handle:vertical { background:@field_border; min-height:25px; border-radius:5px; }
+QScrollBar::handle:vertical:hover { background:@blue; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical { background:transparent; }
+QScrollBar:horizontal { background:@background; height:11px; margin:0; }
+QScrollBar::handle:horizontal { background:@field_border; min-width:25px; border-radius:5px; }
+QScrollBar::handle:horizontal:hover { background:@blue; }
+QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal { width:0; }
+QScrollBar::add-page:horizontal,QScrollBar::sub-page:horizontal { background:transparent; }
 QSplitter::handle { background:@border; }
 QStatusBar { background:@surface; color:@muted; border-top:1px solid @border; }
 QStatusBar::item { border:0; }
-QToolTip { background:#26334c; color:white; border:1px solid #ffcc55; padding:6px; }
+QToolTip { background:@tooltip; color:@tooltip_text; border:1px solid @tooltip_border; padding:6px; }
 '''
     for key in sorted(c, key=len, reverse=True):
         template = template.replace('@' + key, c[key])
-    return template
+    return template + _combo_arrows(c)
 
 
 def brain_path():
@@ -237,13 +345,13 @@ def logo_icon_sizes():
     return (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
 
-def expand_icon(collapse=False):
+def expand_icon(collapse=False, theme='dark'):
     """Four corner arrows pointing out (expand) or in (bring back)."""
     picture = QPixmap(32, 32)
     picture.fill(Qt.GlobalColor.transparent)
     p = QPainter(picture)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor('#ffda62'), 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setPen(QPen(QColor(colors(theme)['accent']), 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
         corner_x, corner_y = 16 - sx * 12, 16 - sy * 12
         inner_x, inner_y = 16 - sx * 5, 16 - sy * 5
@@ -262,14 +370,23 @@ def logo_icon():
     return icon
 
 
-def navigation_icon(index):
+def navigation_icon(index, theme='dark'):
+    """Menu glyph in the theme accent; a selected item (primary background) gets its own contrasting colour."""
     if index == 0:
         return logo_icon()
+    c = colors(theme)
+    icon = QIcon()
+    icon.addPixmap(_navigation_glyph(index, c['accent']), QIcon.Mode.Normal)
+    icon.addPixmap(_navigation_glyph(index, c['nav_icon_selected']), QIcon.Mode.Selected)
+    return icon
+
+
+def _navigation_glyph(index, color):
     picture = QPixmap(32, 32)
     picture.fill(Qt.GlobalColor.transparent)
     p = QPainter(picture)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor('#ffda73'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.setPen(QPen(QColor(color), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
     p.setBrush(Qt.BrushStyle.NoBrush)
     if index == 1:
         for a,b,c,d in ((7,6,25,25), (25,6,7,25), (5,20,12,27), (20,27,27,20)):
@@ -304,20 +421,34 @@ def navigation_icon(index):
             p.drawLine(round(16+10*math.cos(angle)), round(16+10*math.sin(angle)),
                        round(16+14*math.cos(angle)), round(16+14*math.sin(angle)))
     p.end()
-    return QIcon(picture)
+    return picture
 
 
-SETTING_TINTS = {'theme': '#b79cff', 'language': '#7cc4ff', 'motion': '#7be0c3', 'images': '#ffb86b',
-                 'cloud': '#8ebcff', 'share': '#7be0c3', 'folder': '#ffda73', 'shield': '#ff8493',
-                 'key': '#ffda73', 'pulse': '#7be0c3', 'refresh': '#7cc4ff', 'reset': '#ff8493', 'eye': '#b79cff',
-                 'database': '#ffb86b', 'copy': '#8ebcff', 'info': '#7cc4ff', 'general': '#ffda73',
-                 'archive': '#7be0c3', 'restore': '#ffda73',
-                 'coach': '#ff8493', 'battles': '#ffb86b', 'data': '#7be0c3', 'about': '#7cc4ff'}
+# Each settings glyph takes a palette role, so it follows the theme: cyan/blue for display and information,
+# gold for files and keys, green for data kept safe, red only for the destructive reset.
+SETTING_ROLES = {'theme': 'link', 'language': 'blue', 'motion': 'success', 'images': 'yellow', 'cloud': 'blue',
+                 'share': 'success', 'folder': 'yellow', 'shield': 'success', 'key': 'yellow', 'pulse': 'success',
+                 'refresh': 'link', 'reset': 'red', 'eye': 'link', 'database': 'yellow', 'copy': 'blue',
+                 'info': 'link', 'general': 'yellow', 'archive': 'success', 'restore': 'yellow', 'updates': 'success',
+                 'coach': 'link', 'battles': 'yellow', 'data': 'success', 'about': 'blue'}
 
 
-def setting_icon(kind, size=32):
+def setting_tint(kind, theme='dark'):
+    return colors(theme)[SETTING_ROLES.get(kind, 'yellow')]
+
+
+def setting_tab_icon(kind, theme='dark'):
+    """A settings tab glyph; the checked tab (primary background) shows it in the selected-item colour."""
+    icon = QIcon()
+    icon.addPixmap(setting_icon(kind, theme=theme).pixmap(32, 32), QIcon.Mode.Normal, QIcon.State.Off)
+    icon.addPixmap(setting_icon(kind, theme=theme, tint=colors(theme)['nav_icon_selected']).pixmap(32, 32),
+                   QIcon.Mode.Normal, QIcon.State.On)
+    return icon
+
+
+def setting_icon(kind, size=32, theme='dark', tint=None):
     """Windows-like settings glyph: a coloured line drawing on a soft rounded tile."""
-    tint = QColor(SETTING_TINTS.get(kind, '#ffda73'))
+    tint = QColor(tint or setting_tint(kind, theme))
     picture = QPixmap(size, size)
     picture.fill(Qt.GlobalColor.transparent)
     p = QPainter(picture)
@@ -397,6 +528,10 @@ def setting_icon(kind, size=32):
         p.drawLine(QPointF(23, 9.5), QPointF(23, 22.5))
         p.drawArc(QRectF(9, 13.5, 14, 5), 180 * 16, 180 * 16)
         p.drawArc(QRectF(9, 20, 14, 5), 180 * 16, 180 * 16)
+    elif kind == 'updates':
+        p.drawArc(QRectF(7, 7, 18, 18), 120 * 16, 300 * 16)
+        p.drawLine(QPointF(16, 11), QPointF(16, 20))
+        p.drawPolyline([QPointF(12.5, 16.5), QPointF(16, 20), QPointF(19.5, 16.5)])
     elif kind in ('archive', 'restore'):
         p.drawRoundedRect(QRectF(7, 8, 18, 5), 1.5, 1.5)
         p.drawPolyline([QPointF(8.5, 13), QPointF(8.5, 24), QPointF(23.5, 24), QPointF(23.5, 13)])

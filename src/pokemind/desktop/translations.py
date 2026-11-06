@@ -755,6 +755,49 @@ Effacer sans copie?|||Erase without a copy?
 La réinitialisation n’a pas pu être demandée. Rien n’a été effacé.|||The reset could not be requested. Nothing was erased.
 Réinitialisation : PokeMind se ferme puis se rouvre…|||Reset: PokeMind closes, then opens again…
 Élément encore utilisé :|||Item still in use:
+Mettre à jour|||Update
+Plus tard|||Later
+Télécharger, vérifier et installer la nouvelle version; PokeMind se rouvre|||Download, check and install the new version; PokeMind opens again
+Pas encore vérifié|||Not checked yet
+Mettre à jour les cartes|||Update cards
+Les nouvelles cartes de TCGdex, vérifiées puis installées|||New cards from TCGdex, checked then installed
+Vérifier au démarrage|||Check at startup
+Vérifier maintenant|||Check now
+Jamais vérifié|||Never checked
+Mises à jour|||Updates
+Au plus deux fois par jour : une demande à GitHub et une à TCGdex. Rien de tes données n’est envoyé.|||At most twice a day: one request to GitHub and one to TCGdex. None of your data is sent.
+Le fichier téléchargé ne correspond pas à son empreinte publiée; il n’a pas été lancé.|||The downloaded file does not match its published fingerprint; it was not started.
+Le téléchargement est incomplet; il n’a pas été lancé.|||The download is incomplete; it was not started.
+L’empreinte publiée est illisible; rien n’a été lancé.|||The published fingerprint cannot be read; nothing was started.
+Le téléchargement a été redirigé hors de GitHub; il a été refusé.|||The download was redirected outside GitHub; it was refused.
+La nouvelle version du catalogue a moins de cartes que l’actuelle; elle a été écartée.|||The new catalogue version has fewer cards than the current one; it was set aside.
+Mise à jour arrêtée; rien n’a été remplacé.|||Update stopped; nothing was replaced.
+Mise à jour impossible pour l’instant (connexion à GitHub ou à TCGdex?); rien n’a été remplacé.|||Update not possible right now (connection to GitHub or TCGdex?); nothing was replaced.
+Vérification…|||Checking…
+Dernière vérification : |||Last check: 
+Nouvelles cartes : |||New cards: 
+Cartes ajoutées : |||Cards added: 
+ · à jour||| · up to date
+ · vérification impossible pour l’instant||| · cannot check right now
+ est disponible||| is available
+Voir la nouvelle version|||See the new version
+Catalogue TCGdex|||TCGdex catalogue
+corrections disponibles|||corrections available
+Pas encore sur ce PC : Réglages → Données → Catalogue de cartes.|||Not on this PC yet: Settings → Data → Card catalogue.
+Mise à jour disponible|||Update available
+ — un clic suffit; tes données restent.||| — one click is enough; your data stays.
+Mise à jour des cartes…|||Updating cards…
+Téléchargement des nouvelles cartes… |||Downloading new cards… 
+Installation des nouvelles cartes (environ une minute)…|||Installing new cards (about one minute)…
+Les nouvelles cartes seront actives à la prochaine ouverture de PokeMind.|||The new cards will be active the next time PokeMind opens.
+Cartes à jour|||Cards up to date
+Les cartes n’ont pas été mises à jour.|||The cards were not updated.
+Téléchargement de PokeMind |||Downloading PokeMind 
+La mise à jour de PokeMind n’a pas été faite.|||PokeMind was not updated.
+Installer PokeMind |||Install PokeMind 
+Le fichier est téléchargé et vérifié. PokeMind va se fermer, installer la mise à jour et se rouvrir tout seul (environ une minute). Tes données restent.|||The file is downloaded and checked. PokeMind will close, install the update and open again by itself (about one minute). Your data stays.
+L’installateur n’a pas pu être lancé. Rien n’a été changé.|||The installer could not be started. Nothing was changed.
+Mise à jour : PokeMind se ferme, s’installe puis se rouvre…|||Update: PokeMind closes, installs, then opens again…
 Archiver…|||Archive…
 Choisir où enregistrer le zip de tes données|||Choose where to save the zip of your data
 Restaurer…|||Restore…

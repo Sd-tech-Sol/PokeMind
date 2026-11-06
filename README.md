@@ -9,7 +9,7 @@ your PC, and lets you review them with an AI coach.
 
 > ## Status: pre-release
 >
-> PokeMind **0.9.2** is a public pre-release (the first one was 0.9.0). The Windows installer is **unsigned**,
+> PokeMind **0.9.3** is a public pre-release (the first one was 0.9.0). The Windows installer is **unsigned**,
 > and before these releases PokeMind had been used by **its author only**. Expect defects and missing features, and keep
 > your own copy of anything important.
 
@@ -63,13 +63,13 @@ These absences are **design choices**:
 The interface follows Windows on first launch: a French Windows gets French, any other language gets
 English. Change it at any time in **Settings → General**; your choice is remembered.
 
-## Exact limits of version 0.9.2
+## Exact limits of version 0.9.3
 
 | Limit | Detail |
 |---|---|
 | Platform | Windows 10 and 11, 64-bit. macOS and Linux are not built. |
 | Distribution | The installer is **unsigned**: Windows SmartScreen shows a warning. |
-| Card catalogue | A pinned public TCGdex snapshot (about 25 MB to download, 175 MB on disk); newer sets come with a later release. |
+| Card catalogue | The newest public TCGdex version (about 25 MB to download, 175 MB on disk); new sets arrive with **Update** once TCGdex publishes their cards. |
 | Coach | Depends on an engine you install yourself (Codex CLI, Claude Code or Ollama) and on its own account and limits. |
 | Battle analysis | Built from what the TCG Live log shows; hidden information (hand, face-down prizes) stays unknown. |
 | Real-world use | Used by one person; tests run on invented data only. |
@@ -78,9 +78,10 @@ English. Change it at any time in **Settings → General**; your choice is remem
 ## Security and privacy
 
 - Your data stays in `%LOCALAPPDATA%\PokeMind`, outside the program folder; uninstalling keeps it.
-- Network use is explicit: the one-time card catalogue download, card images from the public TCGdex API
-  (can be turned off), **Web research** messages, and the cloud coach engines you allow, which may search
-  the web when local memory lacks an answer.
+- Network use is explicit: the card catalogue download and its updates, card images from the public TCGdex
+  API (can be turned off), the update check (at most twice a day, can be turned off), **Web research**
+  messages, and the cloud coach engines you allow, which may search the web when local memory lacks an
+  answer.
 - Raw logs, player identities and file paths are never part of the automatic coach context.
 - All data in this repository is invented; the test suite never reads a real user folder.
 - Release binaries are scanned for build-machine paths before they leave the PC.

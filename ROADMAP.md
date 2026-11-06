@@ -19,11 +19,15 @@ This roadmap states intentions, not promises. The detailed plan and its current 
 - Archive and restore your data from Settings, and a reset that never stays blocked.
 - The coach searches the web when its local memory lacks an answer, and keeps what it found.
 
+## Done — 0.9.3 pre-release
+- One-click updates: new TCGdex cards without restarting, and new PokeMind versions installed from
+  the app with their SHA-256 checked; the first catalogue comes from the newest TCGdex version.
+- BrainBall colours for the dark and light themes, with WCAG AA contrast.
+
 ## Next
 - Code signing if a publisher identity is set up (see `CODE_SIGNING.md`).
 
 ## Later
-- Refresh the card catalogue to a newer TCGdex snapshot, keeping the tested one as fallback.
 - Faster incremental analysis of large battle corpora.
 - Confirmation in the interface before the coach writes a note or saves a deck.
 - Smaller modules for the main window and the command line.

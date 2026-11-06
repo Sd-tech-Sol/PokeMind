@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QLa
     QProgressBar, QFrame, QPushButton, QScrollArea, QGridLayout, QDialog, QSizePolicy,
     QCheckBox, QStyle, QStyleOptionButton, QStylePainter, QStyledItemDelegate, QStyleOptionViewItem,
     QApplication)
-from pokemind.desktop.theme import colors
+from pokemind.desktop.theme import BRAND, colors, theme_of
 from pokemind.desktop.card_art import CardArt, ZoomImage
 from pokemind.desktop.i18n import QWidget, QTextEdit, QLabel, QFrame, QPushButton, QDialog, QCheckBox, Painter as QPainter
 
@@ -158,11 +158,11 @@ class Spinner(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         bounds = QRectF(3, 3, 18, 18)
-        for offset, color in ((0, '#e3364b'), (180, '#ffcb05')):
+        for offset, color in ((0, BRAND['bleu_lumineux']), (180, BRAND['gold'])):
             p.setPen(QPen(QColor(color), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             p.drawArc(bounds, int((offset - self.angle) * 16), 110 * 16)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor('#f4f6fa'))
+        p.setBrush(QColor(BRAND['bleu_electrique']))
         p.drawEllipse(QRectF(9.5, 9.5, 5, 5))
         p.end()
 
@@ -261,7 +261,7 @@ class WrapItemDelegate(QStyledItemDelegate):
 
 class RecordBarDelegate(QStyledItemDelegate):
     """Wins, losses and unknown results of a row as one coloured bar, with n beside it."""
-    COLORS = ('#628be0', '#e3364b', '#e9bd4a')
+    ROLES = ('blue', 'red', 'yellow')  # win, loss, unknown in the active theme
 
     def paint(self, painter, option, index):
         item = QStyleOptionViewItem(option)
@@ -292,7 +292,8 @@ class RecordBarDelegate(QStyledItemDelegate):
         if total and bar.width() > 4:
             left = bar.left()
             painter.setClipRect(bar)
-            for value, color in zip(values, self.COLORS):
+            palette_colors = colors(theme_of(item.palette))
+            for value, color in zip(values, (palette_colors[role] for role in self.ROLES)):
                 share = bar.width() * value / total
                 if share:
                     painter.setBrush(QColor(color))

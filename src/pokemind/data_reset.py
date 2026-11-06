@@ -36,7 +36,7 @@ PUBLIC = 'public-campaigns'
 RESEARCH = re.compile(r'lot-i-battle-intelligence-.*|battle-intelligence-index\.jsonl|research-control\.json'
                       r'|chat-matchups\.json')
 CONVERSATION = re.compile(r'conversation-[0-9a-f]{32}\.json|\.chat-.*\.tmp')
-TECHNICAL = ('logs', 'update-logs', 'desktop-dev', 'demo-runs', 'test-runs', 'knowledge-update.lock')
+TECHNICAL = ('logs', 'update-logs', 'desktop-dev', 'demo-runs', 'test-runs', 'knowledge-update.lock', 'update-check.json')
 
 
 def _writable(function, path, *_):
@@ -127,6 +127,8 @@ def selection(local, categories):
         paths += _children(local, PUBLIC, lambda name: bool(RESEARCH.fullmatch(name)))
     if 'public' in chosen:
         paths += [Path('card-images')] + _children(local, PUBLIC, lambda name: not RESEARCH.fullmatch(name))
+        paths += [Path('catalog-previous')] + [Path(c.name) for c in sorted(local.iterdir())
+                                               if c.name.startswith('catalog-staging-')]  # catalogue updates
     if 'technical' in chosen:
         paths += [Path(name) for name in TECHNICAL]
     return [p for p in paths if (local / p).exists() or (local / p).is_symlink()]

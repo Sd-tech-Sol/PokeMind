@@ -6,8 +6,10 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout
 
 from pokemind.desktop.i18n import QFrame, QLabel, QPushButton, QWidget, T
-from pokemind.desktop.theme import logo_pixmap
+from pokemind.desktop.theme import OBJECTS, logo_pixmap
 
+# A legend for cards without art, echoing the logo's red and blue cards and its gold: the same in both themes,
+# since the binder pages stay navy (theme.OBJECTS).
 CATEGORY_COLORS = {'pokemon': ('#e3364b', '#7a1f2c'), 'trainer': ('#4f7fe0', '#253f7a'),
                    'energy': ('#e9bd4a', '#7a5f1c')}
 SLOTS_PER_PAGE = 9
@@ -62,7 +64,7 @@ class BinderSlot(QWidget):
             fill = QLinearGradient(card.topLeft(), card.bottomRight())
             fill.setColorAt(0, QColor(top))
             fill.setColorAt(1, QColor(bottom))
-            p.setPen(QPen(QColor('#f2d36b'), 2))
+            p.setPen(QPen(QColor(OBJECTS['gold_line']), 2))
             p.setBrush(fill)
             p.drawRoundedRect(card, 6, 6)
             p.setPen(QColor('white'))
@@ -82,7 +84,7 @@ class BinderSlot(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(card, 6, 6)
         if self.hover and self.card:
-            p.setPen(QPen(QColor('#ffda62'), 2.5))
+            p.setPen(QPen(QColor(OBJECTS['gold_line']), 2.5))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(card.adjusted(-1, -1, 1, 1), 7, 7)
         p.end()
@@ -104,18 +106,18 @@ class BinderSlot(QWidget):
 
 
 class BinderCover(QWidget):
-    """The closed binder: red cover, gold border and the logo; it slides open once."""
+    """The closed binder: royal blue cover, gold border and the logo; it slides open once."""
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         bounds = QRectF(self.rect()).adjusted(1, 1, -1, -1)
         fill = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-        fill.setColorAt(0, QColor('#c4283f'))
-        fill.setColorAt(1, QColor('#6d1424'))
+        fill.setColorAt(0, QColor(OBJECTS['binder_start']))
+        fill.setColorAt(1, QColor(OBJECTS['binder_end']))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(fill)
         p.drawRoundedRect(bounds, 14, 14)
-        p.setPen(QPen(QColor('#f2d36b'), 2))
+        p.setPen(QPen(QColor(OBJECTS['gold_line']), 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(bounds.adjusted(10, 10, -10, -10), 10, 10)
         side = int(min(bounds.width(), bounds.height()) * 0.32)

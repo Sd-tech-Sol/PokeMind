@@ -9,7 +9,7 @@ tes cartes sur ton PC, et te permet de les revoir avec un coach IA.
 
 > ## État : préversion
 >
-> PokeMind **0.9.2** est une préversion publique (la première était 0.9.0). L'installateur Windows n'est
+> PokeMind **0.9.3** est une préversion publique (la première était 0.9.0). L'installateur Windows n'est
 > **pas signé**, et avant ces versions PokeMind n'avait été utilisé **que par son auteur**. Attends-toi à des défauts et à
 > des fonctions manquantes, et garde ta propre copie de ce qui compte.
 
@@ -65,13 +65,13 @@ Ces absences sont des **choix de conception** :
 L'interface suit Windows au premier lancement : un Windows en français donne le français, toute autre
 langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**; ton choix est conservé.
 
-## Limites exactes de la version 0.9.2
+## Limites exactes de la version 0.9.3
 
 | Limite | Détail |
 |---|---|
 | Plateforme | Windows 10 et 11, 64 bits. Ni macOS ni Linux ne sont construits. |
 | Distribution | L'installateur n'est **pas signé** : Windows SmartScreen affiche un avertissement. |
-| Catalogue de cartes | Un instantané public TCGdex épinglé (environ 25 Mo à télécharger, 175 Mo sur le disque); les nouvelles extensions arrivent avec une version suivante. |
+| Catalogue de cartes | La version publique la plus récente de TCGdex (environ 25 Mo à télécharger, 175 Mo sur le disque); les nouvelles extensions arrivent par **Mettre à jour** dès que TCGdex publie leurs cartes. |
 | Coach | Dépend d'un moteur que tu installes toi-même (Codex CLI, Claude Code ou Ollama), avec son compte et ses limites. |
 | Analyse des combats | Tirée de ce que montre le journal TCG Live; l'information cachée (main, Récompenses face cachée) reste inconnue. |
 | Usage réel | Utilisé par une seule personne; les tests tournent sur des données inventées seulement. |
@@ -81,9 +81,10 @@ langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**
 
 - Tes données restent dans `%LOCALAPPDATA%\PokeMind`, hors du dossier du programme; la désinstallation les
   conserve.
-- L'usage du réseau est explicite : téléchargement unique du catalogue, illustrations de l'API publique
-  TCGdex (désactivables), messages en **Recherche web**, et les moteurs cloud que tu autorises, qui peuvent
-  chercher sur le web quand la mémoire locale n'a pas la réponse.
+- L'usage du réseau est explicite : téléchargement du catalogue et de ses mises à jour, illustrations de
+  l'API publique TCGdex (désactivables), vérification des mises à jour (au plus deux fois par jour,
+  désactivable), messages en **Recherche web**, et les moteurs cloud que tu autorises, qui peuvent chercher
+  sur le web quand la mémoire locale n'a pas la réponse.
 - Les journaux bruts, identités de joueurs et chemins de fichiers ne font jamais partie du contexte
   automatique du coach.
 - Toutes les données de ce dépôt sont inventées; les tests ne lisent jamais un vrai dossier utilisateur.

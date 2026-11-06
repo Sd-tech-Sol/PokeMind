@@ -36,7 +36,8 @@ TRASH = '.reinitialisation-'
 KEEP = (data_location.POINTER,)
 FOLDERS = ('data/local', 'workspace')
 APP_PARTS = ('data/local', 'workspace')
-APP_EXCLUDED = ('data/local/test-runs',)  # synthetic test output, never owner data
+APP_EXCLUDED = ('data/local/test-runs',  # synthetic test output, never owner data
+                'data/local/catalog-previous')  # the public catalogue kept after an update
 RESTORE_REQUEST = 'restore-request.json'
 STORED = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.zip', '.gz', '.7z', '.exe', '.dll', '.pyd'}
 SPARE = 200 << 20

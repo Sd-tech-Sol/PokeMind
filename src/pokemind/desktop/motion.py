@@ -150,8 +150,8 @@ class ControlHighlight(QWidget):
         path.addRoundedRect(bounds, 10, 10)
         p.setClipPath(path)
         gradient = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
-        gradient.setColorAt(0, QColor(255, 216, 99, round(28 * self._glow)))
-        gradient.setColorAt(1, QColor(239, 88, 111, round(12 * self._glow)))
+        gradient.setColorAt(0, QColor(255, 213, 79, round(28 * self._glow)))  # BrainBall gold to cyan
+        gradient.setColorAt(1, QColor(104, 214, 249, round(14 * self._glow)))
         p.fillPath(path, gradient)
         p.setPen(QPen(QColor(255, 211, 94, round(190 * self._glow)), 1.4))
         p.drawPath(path)

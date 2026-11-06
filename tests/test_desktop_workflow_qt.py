@@ -930,7 +930,7 @@ def test_logo_is_two_cards_with_a_brain_and_the_exe_icon_holds_every_size(app):
 def test_settings_are_short_rows_in_categories_with_details_on_demand(ui,app):
     ui.show();ui.navigation.setCurrentRow(5)
     wait_until(app,lambda:not ui.stack.transition.isVisible())
-    assert list(ui.settings_tabs)==['general','coach','battles','data','about']
+    assert list(ui.settings_tabs)==['general','coach','battles','data','updates','about']
     assert ui.settings_tabs['general'].isChecked() and ui.theme.isVisibleTo(ui) and not ui.cloud_consent.isVisibleTo(ui)
     QTest.mouseClick(ui.settings_tabs['coach'],Qt.MouseButton.LeftButton)
     assert ui.cloud_consent.isVisibleTo(ui) and not ui.theme.isVisibleTo(ui)
@@ -959,8 +959,11 @@ def test_battles_page_shows_summary_tiles_and_a_record_bar_sorted_by_losses(ui,a
     ui.matchups.clearSelection();app.processEvents()
     picture=ui.matchups.viewport().grab().toImage()
     rect=ui.matchups.visualRect(ui.matchups.model().index(0,4))
+    from PySide6.QtGui import QColor
+    from pokemind.desktop.theme import colors
+    loss=QColor(colors(ui.preferences['theme'])['red'])  # losses keep the theme's red
     reds=sum(1 for x in range(rect.left(),rect.right(),3)
-             if (lambda c:c.red()>180 and c.green()<90)(picture.pixelColor(x,rect.center().y())))
+             if (lambda c:sum(abs(a-b) for a,b in zip(c.getRgb()[:3],loss.getRgb()[:3]))<40)(picture.pixelColor(x,rect.center().y())))
     assert reds>5
     ui.matchup_filter.setText('douce')
     assert ui.matchups.rowCount()==1 and ui.battle_tiles['games'].text()=='10'
@@ -1056,7 +1059,8 @@ def test_installed_copy_needs_no_project_folder_and_downloads_the_card_catalogue
     root, workspace = data_location.standalone()
     assert root == local_tmp / 'appdata' and workspace == root / 'workspace' and workspace.is_dir()
     calls = []  # the ui fixture already replaced the battle report, the decks and the engines
-    def download(target, *, progress, cancelled):
+    def download(target, *, progress, cancelled, latest=False):
+        assert latest  # the newest TCGdex cards first, the tested ones as fallback
         calls.append(target)
         progress('download', 5_000_000, 14_700_000)
         progress('import', 0, 6)

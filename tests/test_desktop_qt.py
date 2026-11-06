@@ -8,7 +8,8 @@ import pytest
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 pytest.importorskip('PySide6')
-from PySide6.QtCore import Qt, QUrl, QCoreApplication, QEvent
+from PySide6.QtCore import Qt, QUrl, QCoreApplication, QEvent, QSize
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
@@ -596,3 +597,91 @@ def test_background_failure_is_journaled_and_copyable(ui, app):
         assert diagnostics.LOG_NAME in ui.statusBar().currentMessage()
     finally:
         diagnostics.reset_for_tests()
+
+
+def offers(version='9.9.9'):
+    from pokemind import app_update
+    return {'app': {'status': 'AVAILABLE', 'version': version, 'page': app_update.PAGE + '/tag/v' + version,
+                    'installer': {'name': 'PokeMind-Setup-%s.exe' % version, 'size': 1, 'url': app_update.DOWNLOADS},
+                    'checksum': app_update.DOWNLOADS},
+            'cards': {'status': 'AVAILABLE', 'commit': 'c' * 40, 'installed': {'printings': 100},
+                      'new_sets': [{'id': 'dlt', 'name': 'Delta Reign', 'cards': 33}], 'grown_sets': [], 'notable': True}}
+
+
+def test_qt_update_banner_offers_cards_and_a_new_version_and_one_click_does_both(ui, app, monkeypatch):
+    from pokemind import app_update, catalog_update
+    monkeypatch.setattr(app_update, 'save_check', lambda *a, **k: None)
+    ui.updates_checked(offers())
+    assert ui.update_banner.isVisibleTo(ui) and '9.9.9' in ui.update_detail.text()
+    assert 'Delta Reign' in ui.update_detail.text() and 'Delta Reign' in ui.cards_update_status.text()
+    assert ui.cards_update_button.isEnabled() and ui.app_update_button.isEnabled()
+    assert ui.app_update_button.text() == 'Voir la nouvelle version'  # not the installed copy
+    opened, updated = [], []
+    monkeypatch.setattr(window, 'QDesktopServices', type('Desktop', (), {
+        'openUrl': staticmethod(lambda url: opened.append(url.toString()))}))
+    monkeypatch.setattr(catalog_update, 'update', lambda root, **k: updated.append(root) or {
+        'status': 'UPDATED', 'printings': 133, 'commit': 'c' * 40})
+    QTest.mouseClick(ui.update_now, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: bool(opened), 10000)
+    assert updated == [ui.root] and opened == [app_update.PAGE + '/tag/v9.9.9']  # cards first, then the release
+    assert '133' in ui.cards_update_status.text() and not ui.cards_update_button.isEnabled() and not ui.catalog_busy
+    QTest.mouseClick(ui.update_later, Qt.MouseButton.LeftButton)
+    assert not ui.update_banner.isVisibleTo(ui)
+    ui.updates_checked(offers(), saved=False)
+    assert not ui.update_banner.isVisibleTo(ui)  # « Plus tard » holds until the next launch
+
+
+def test_qt_the_installed_copy_downloads_checks_installs_and_closes(ui, app, monkeypatch, tmp_path):
+    from pokemind import app_update
+    setup = tmp_path / 'PokeMind-Setup-9.9.9.exe'
+    setup.write_bytes(b'invented')
+    started, questions = [], []
+    monkeypatch.setattr(app_update, 'installed_copy', lambda *a, **k: True)
+    monkeypatch.setattr(app_update, 'download', lambda release, **k: setup)
+    monkeypatch.setattr(app_update, 'start_installer', started.append)
+    monkeypatch.setattr(window.QMessageBox, 'question',
+                        lambda *a, **k: questions.append(str(a[2])) or window.QMessageBox.StandardButton.Yes)
+    ui.update_info = {'app': offers()['app'], 'cards': {'status': 'CURRENT'}}
+    ui.show_update_state()
+    assert ui.app_update_button.text() == 'Mettre à jour'
+    QTest.mouseClick(ui.app_update_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.isVisible(), 10000)
+    assert started == [setup] and 'se rouvrir' in questions[0]
+
+
+def test_qt_check_now_asks_once_then_the_automatic_check_reuses_the_answer(ui, app, monkeypatch):
+    from pokemind import app_update, catalog_update
+    monkeypatch.setattr(app_update, 'check', lambda *a, **k: {'status': 'CURRENT', 'version': '0.9.2'})
+    monkeypatch.setattr(catalog_update, 'check', lambda root, **k: {'status': 'MISSING'})
+    QTest.mouseClick(ui.update_check_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: 'Dernière vérification' in ui.update_checked.text(), 10000)
+    assert not ui.update_banner.isVisibleTo(ui) and 'à jour' in ui.app_update_status.text()
+    assert app_update.last_check(ui.root)['app']['status'] == 'CURRENT' and 'Pas encore' in ui.cards_update_status.text()
+    monkeypatch.setattr(app_update, 'check', lambda *a, **k: pytest.fail('no second request within 12 hours'))
+    ui.check_updates()
+    assert not ui.update_busy
+    ui.update_auto.setChecked(False)
+    assert ui.preferences['update_check'] is False
+    monkeypatch.setattr(app_update, 'due', lambda root: pytest.fail('the check is turned off'))
+    ui.check_updates()
+
+
+def test_qt_theme_switch_redraws_the_drawn_icons_and_the_chat(ui, app):
+    from PySide6.QtGui import QIcon
+    from pokemind.desktop.theme import colors
+
+    def shows(icon, color, mode=QIcon.Mode.Normal, state=QIcon.State.Off):
+        image, target = icon.pixmap(QSize(32, 32), mode, state).toImage(), QColor(color)
+        return any(QColor.fromRgba(image.pixel(x, y)).alpha() > 200 and
+                   sum(abs(a - b) for a, b in zip(QColor.fromRgba(image.pixel(x, y)).getRgb()[:3], target.getRgb()[:3])) < 40
+                   for x in range(image.width()) for y in range(image.height()))
+    for index, name in ((1, 'light'), (0, 'dark')):
+        ui.theme.setCurrentIndex(index)
+        app.processEvents()
+        c = colors(name)
+        assert ui.preferences['theme'] == name and ui.styleSheet() == (window.LIGHT if name == 'light' else window.DARK)
+        menu = ui.navigation.item(1).icon()
+        assert shows(menu, c['accent']) and shows(menu, c['nav_icon_selected'], QIcon.Mode.Selected)
+        assert shows(ui.settings_tabs['general'].icon(), c['nav_icon_selected'], state=QIcon.State.On)
+        bubble, _ = ui.chat_bubble({'role': 'user', 'content': 'Question inventée'}, c)
+        assert c['primary'] in bubble and '#a9233c' not in bubble

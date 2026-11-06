@@ -1,59 +1,49 @@
-# PM-V1-LIVE-FR-EN-UI-001 — clôture de session, reprise sur audit indépendant
+# PM-UI-BRAINBALL-THEMES-001 — Refonte couleurs PokeMind (thèmes foncé + clair)
 
-2026-10-28 Québec. Fermeture propre demandée par le propriétaire; **point de reprise enregistré, aucun mandat produit relancé**. État conservé : **AWAITING_AUDIT**, `execute_now=false`, autorisation consommée, réception propriétaire non effectuée. V1 **NOT_RELEASE_READY**, CI **AWAITING_EVIDENCE**.
+**Exécuteur : Claude Code. Autorisation du propriétaire : demande explicite du 2026-11-05.**
+**État : IMPLEMENTED/REPORTED le 2026-11-05 (D-284, voir `RESULT.md`); ne pas réexécuter. Audit ChatGPT à suivre.**
+**Une seule tâche : réharmoniser les couleurs de la GUI existante sans changer le comportement.**
 
-Livraison FR/EN : source testée/compilée `51aa92e8cdd04e7e2c7bca4d4a478b29dcb55517`, rapport publié `3035d9a712787237c4e4afc50940f30a085b07a8`; 160 tests distincts réussis selon Codex, même `dist/PokeMind/PokeMind.exe` mis à jour et ancienne distribution conservée. Ces contrôles ne sont pas rejoués à la clôture. [Preuves de livraison](EVIDENCE_PM-V1-LIVE-FR-EN-UI-001.md).
+## 0. Prévol obligatoire
 
-CI du commit de livraison `3035d9a712787237c4e4afc50940f30a085b07a8` : [Actions 40643154561](https://github.com/Sd-tech-Sol/PokeMind-dev/actions/runs/40643154561), conclusion `failure`; jobs Windows et Ubuntu **non démarrés, zéro étape**, annotation indiquant un blocage par le budget Actions. Aucun échec de test exécuté ni succès CI déduit. Le commit documentaire de clôture aura son propre HEAD/sa propre CI à contrôler; aucun rerun ni changement de budget/workflow autorisé.
+1. Tu es dans le dépôt **privé** `Sd-tech-Sol/PokeMind-dev`. Branche autorisée : `work/pm-v1-lotj-final-readiness-windows`. Ne touche PAS au dépôt public `Sd-tech-Sol/PokeMind` et ne publie aucune nouvelle release, même si une version locale est reconstruite.
+2. Synchronise cette branche : `git fetch` puis `git pull --ff-only`. Si divergence, modifications locales non commitées ou branche non conforme, STOP sans reset, rebase ni force push.
+3. Lis `AGENTS.md`, `CLAUDE.md` s'il existe, `.orchestrator/SESSION_CONTINUITY.md`, `.orchestrator/WORKFLOW_ADOPTION_V2.md`, `.orchestrator/STATE.json`, le **premier bloc** de `.orchestrator/NEXT_ACTION.md`, `.orchestrator/HANDOFF.md`, `.orchestrator/RESULT.md`, les décisions pertinentes et ce mandat au complet.
+4. Lis et applique intégralement **`docs/design/pokemind-brainball/palette.json`** (source HEX foncé/clair), **`docs/design/pokemind-brainball/README.md`** (direction artistique), et utilise **`docs/design/pokemind-brainball/palette-preview.svg`** comme aperçu.
+5. Fais l'état réel de l'interface et des tests avant de modifier les sources. La dernière inspection a confirmé Python **PySide6/Qt** et `src/pokemind/desktop/theme.py` avec `PALETTES`, `colors()`, `palette()`, `stylesheet()`. De nombreux styles QSS contiennent des HEX figés. Vérifie les sources actuelles.
 
-**Reprise :** lire `AGENTS.md`, puis l’ordre V2 (`SESSION_CONTINUITY`, `WORKFLOW_ADOPTION_V2`, `STATE`, premier mandat `NEXT_ACTION`, `HANDOFF`, `RESULT`, `DECISIONS` et preuves), synchroniser la branche autorisée sans reset/force-push. Prochaine action unique : **audit indépendant ChatGPT du HEAD distant exact**, de la source indiquée et de la CI; ensuite réception visuelle propriétaire du choix FR/EN dans son EXE habituel. Codex ne relance ni tests, compilation, installation, ancienne QA ou opération personnelle sans nouvelle demande ciblée. Les archives ne sont pas des permissions.
+## 1. Objectif graphique
 
-Cette clôture modifie uniquement les pièces de passation assainies. Aucun accès aux données personnelles, lancement d’application, import, backup, migration, nettoyage ou suppression; aucune tâche de fond ajoutée.
+Référence principale : **carte PokeMind TCG Coach verticale originale**, avec cerveau-Pokéball, vortex **bleu électrique et royal**, cyan lumineux, or vif, rose/rouge limité au cerveau. Les valeurs de la palette annexée servent de référence exécutable, même sans image d'origine.
 
----
+Le **troisième fond d'écran panoramique** est une référence secondaire d'ambiance. Ne pas recopier son violet dominant ni intégrer un fond d'écran illustré derrière les panneaux.
 
-# PM-V1-LIVE-FR-EN-UI-001 — STOP audit indépendant
+- Thème **foncé** : fond bleu nuit `#07142F`, menu `#081E4A`, cartes `#102652`, texte `#F7FAFF`, action primaire bleue `#0054C7`, accent or `#FFD54F`.
+- Thème **clair** : fond `#F1F7FF`, panneaux blancs `#FFFFFF`, menu `#E0EDFF`, texte `#081B3A`, action primaire bleu royal `#003EA6`.
+- Bandeau « À toi de jouer » : **dégradé bleu royal → bleu électrique**, texte blanc, détails or, pas de rouge omniprésent.
+- **Victoires : bleu**. **Défaites : rouge**. **Inconnu/neutre : or / bleu gris**. Le rouge peut aussi marquer une action destructrice ou une erreur; aucun bouton principal générique rouge.
+- Fidélité au logo existant : ne pas recréer ou remplacer le logo, ni les illustrations de cartes. Pas de polices téléchargées ni de nouvelles dépendances.
 
-2026-10-28 Québec. **AWAITING_AUDIT, execute_now=false, consumed=true. Aucun nouveau mandat d’exécution.**
+## 2. Implémentation (réutiliser avant de développer)
 
-2026-10-28 Québec. Français/anglais interchangeables à chaud dans **Réglages → Langue de l’application**, choix conservé au prochain lancement. Pages, navigation, préférences, graphiques, filtres, infobulles, accessibilité, dialogues Qt et messages applicatifs suivent la langue; pas de reconstruction de fenêtre ni de rechargement des données. Catalogue local de 512 équivalents. Source **`51aa92e8cdd04e7e2c7bca4d4a478b29dcb55517`**. **160 tests distincts verts : 93 Qt et 67 services/reçus**, dont neuf nouveaux tests de bilinguisme; répétitions non additionnées. [Preuves](EVIDENCE_PM-V1-LIVE-FR-EN-UI-001.md).
+1. Auditer `theme.py`, palettes Qt, QSS, icônes `QPainter`, vues, dialogues, widgets, tableaux, graphique(s), Deck Lab/classeur, onglets, Réglages, chat/HTML, dock Coach, terminal et messages de chargement. Ne changer **que** les styles et tests qui les couvrent.
+2. Centraliser les couleurs sémantiques dans le système existant `PALETTES`/`colors()`. Garder les anciennes clés utilisées par l'application et ajouter celles de `palette.json` au besoin. Supprimer les HEX visuels codés en dur seulement quand requis pour les deux thèmes. Ne pas refactoriser la logique métier ni les données.
+3. Harmoniser navigation active/inactive, hover, focus clavier, disabled, boutons primary/danger, liens, dialogues, scrollbars, infobulles, champs, tableaux, statistiques, graphiques, pages, chat, terminal et binder. Assurer que l'ensemble du panneau de droite utilise effectivement le thème actif.
+4. Respecter le choix de thème/langue et les préférences enregistrées. Si le changement de thème se fait déjà à chaud, le maintenir sur toutes les vues. Éviter les styles qui figent le thème foncé lorsqu'on passe en clair.
+5. Contrôler le contraste sur **fond réel** : texte normal WCAG AA ≥4.5:1 et gros texte/éléments non textuels essentiels ≥3:1. Ajuster au besoin **en documentant précisément l'écart** dans RESULT.md. Pour les petits textes blancs, ne pas choisir un cyan ou bleu lumineux trop pâle. Les graphiques doivent comporter des étiquettes, pas uniquement des couleurs.
+6. Valider au moins ces écrans dans **les deux thèmes** : Vue d'ensemble, Coach/dock, Deck Lab/classeur, Réglages, Terminal, graphiques, dialogues et fenêtre redimensionnée. Vérifier 100 % et 125 % DPI si disponibles.
+7. Ajouter des tests ciblés palette/contraste/persistance du thème et ses styles critiques. Utiliser **uniquement** des fixtures synthétiques; ne jamais inspecter la base personnelle, `data/local`, les vrais journaux, ni des secrets.
 
-Compilation Windows et smoke du vrai portable production sur fixture indépendante **exit0**, 12 modules PYZ et l’entrée app conformes aux sources (13), traduction Qt française embarquée, démarrage anglais inspecté. Même **`dist/PokeMind/PokeMind.exe`** mis à jour : **788 nouveaux fichiers**, précédent dossier de 788 binaires intégralement conservé, installé conforme au candidat. Aucun lancement de l’application propriétaire ni accès/inventaire personnel, aucun nouveau comptage de matchs, backup DB, migration, import personnel ou suppression. Les textes sourcés, exports et messages historiques restent dans leur langue d’origine; les nouvelles demandes au coach indiquent la langue choisie, aucun appel réel de fournisseur testé.
+## 3. Vérifications et livraison
 
-**CODEX_LOCAL_REPORTED / REPORTED_COMPLETE_LOCAL / AWAITING_AUDIT; execute_now=false, consumed=true. V1 NOT_RELEASE_READY, CI AWAITING_EVIDENCE.** Prochaine action unique : audit indépendant ChatGPT du HEAD distant et de sa CI exacte, puis réception propriétaire du même EXE. Aucun acte automatique, rebuild, rollback, import, backup ou migration. Aucun succès CI ni réception propriétaire revendiqué.
+- Exécuter la **porte complète existante** `python scripts/local_gate.py` selon `AGENTS.md` (isolation des tests impérative). Les tests ciblés seuls ne suffisent pas.
+- Produire des captures **synthétiques** des thèmes foncé et clair dans la vue d'ensemble et le Coach (si réalisable). Éviter toute image contenant des données personnelles.
+- Si la porte est verte, reconstruire l'EXE **local de développement** avec les scripts déjà prévus, et confirmer qu'il démarre. **Ne pas installer ni publier de nouvelle version publique** et ne pas écraser/supprimer des données utilisateur.
+- Commit/push sur la **branche privée autorisée uniquement**, sans force. Écrire un rapport court mais vérifiable dans `.orchestrator/RESULT.md` : HEAD de code, fichiers changés, tests et nombres précis, captures, limites, EXE reconstruit ou non, données non consultées. Mettre à jour HANDOFF/NEXT_ACTION/STATE selon la méthode du dépôt; préserver la réception de 0.9.2 comme tâche antérieure en attente.
+- **Statut : IMPLEMENTED/REPORTED, jamais VERIFIED** (audit indépendant ChatGPT à suivre). Une fois ce mandat terminé, STOP. Ne pas enchaîner vers une autre grosse fonction.
 
-Audit attendu : lire ces rapports au HEAD final publié, comparer depuis le départ 7f125bf, examiner source `51aa92e8cdd04e7e2c7bca4d4a478b29dcb55517`, neuf tests FR/EN, présentation sans mutation et limites de traduction du contenu. Contrôler la CI au SHA exact et distinguer résultats locaux rapportés de preuves indépendantes. Ensuite seulement réception visuelle propriétaire : ouvrir son EXE habituel puis Réglages → Langue de l’application et passer English / Français (Québec). Le changement lui-même ne demande aucun redémarrage. Ne pas lancer de fixture à la place de son application, ne pas ouvrir de DB personnelle pour cet audit, aucun recompte, import, backup, migration ou rollback automatique.
+## Critères d'acceptation
 
----
+La GUI présente des couleurs cohérentes dans ses deux thèmes, fidèle à la carte PokeMind originalement choisie; les zones importantes gardent leurs contrastes et le changement de thème ne laisse pas de fonds gris/rouges résiduels inappropriés. Aucun changement métier, données privées, fournisseur IA, dépendance visuelle, release publique ou comportement fonctionnel.
 
-## Archives — aucune autorisation courante
-
-# PM-V1-LIVE-FR-EN-UI-001 — mandat consommé (trace)
-
-2026-10-28 Québec. Demande manuelle du propriétaire : choix français/anglais interchangeable sans redémarrage, tous les réglages et affichages suivant la langue. Nouveau mandat remplaçant l'attente de réception, sans relancer les précédents ni qualifier une réception propriétaire.
-
-Périmètre : localisation centralisée de l'interface native, pages, réglages, graphes, navigation, dialogues, infobulles, accessibilité et messages applicatifs dynamiques. Conservation des clés de réglages et de leur valeur, thèmes, sélection/filtres, brouillon, session et conversation. Noms/textes de cartes sourcés, exports, traces, URLs, données et messages historiques demeurent du contenu d'origine; pas de traduction automatique ni d'envoi de données pour traduire. Choix de langue persistant, nouvelles réponses du coach guidées par le choix. Aucun réseau de traduction, dépendance, installation globale ou nouveau moteur de faits.
-
-Tests et captures uniquement sur fixtures inventées dans build, pas de lecture/inventaire de data/local personnel. Compilation en staging neuf, smoke du vrai portable sur fixture indépendante puis remplacement des seuls binaires du même dist/PokeMind/PokeMind.exe fermé; distributions précédentes conservées. Aucun backup DB, migration, import personnel, donnée personnelle ouverte/modifiée, fournisseur réel ou suppression. Corrections/retests ordinaires autorisés; accès privé, redirection, cible ambiguë ou divergence Git = STOP.
-
-Livraison : rapports assainis et commit/push branche autorisée, contrôle HEAD et CI SHA exact puis AWAITING_AUDIT et STOP audit ChatGPT. V1 NOT_RELEASE_READY, CI AWAITING_EVIDENCE.
-
----
-
-## Archives — aucune autorisation courante
-
-# RÉCEPTION PROPRIÉTAIRE — VRAI POKEMIND.EXE, NOUVEAUX GRAPHIQUES ET UX
-
-**2026-10-28 Québec · AUDIT CHATGPT TERMINÉ · execute_now=false · AUCUN MANDAT CODEX ACTIF.**
-
-Le lot `PM-V1-POKEDEX-EXPERIENCE-STATS-001` a livré quatre vues (Bilan, Adversaires, Tours, Actions) et cinq améliorations UX dans l'interface **existante**, au code final `e8f9849c5fad71d1de70e30dadccf78d54d91ef7`, preuves `0cc7033b30fe4f465a261e6834187582c3298a0b`. [Audit indépendant](VERIFICATION_PM_V1_POKEDEX_EXPERIENCE_STATS_001.md). Codex rapporte 84 tests locaux réussis, build/frozen smoke et même binaire réel remplacé avec ancienne distribution préservée. Aucun test CI au HEAD audité. La réception utilisateur n'a pas eu lieu.
-
-**Seule étape proposée si le propriétaire souhaite constater le résultat :** ouvrir son EXE habituel `dist/PokeMind/PokeMind.exe`. Vérifier Vue d'ensemble puis Bilan/Adversaires/Tours/Actions, filtres et clics, favoris, bulles du chat, navigation repliable et frise des combats; regarder si son ancien historique et ses environ 66 matchs sont présents. Ce nouveau chantier n'a **pas recompter** ses parties personnelles : ne pas prétendre autrement. Ne jamais réimporter, effacer ou migrer pour « réparer » un problème d'affichage sans audit ciblé. Ne pas lancer la QA fictive.
-
-**Retour demandé :** ce qui apparaît à l'écran (ou capture sans détails privés); en cas de problème, nouvelle demande ciblée seulement. **Aucun nouveau mandat Codex**, `execute_now=false`. V1 NOT_RELEASE_READY, CI AWAITING_EVIDENCE.
-
----
-
-## Ancien mandat consommé (historique uniquement)
-
-Le mandat PM-V1-POKEDEX-EXPERIENCE-STATS-001 est consommé et ne peut pas être relancé automatiquement.
+**Ce fichier constitue le mandat intégral. Aucun prompt supplémentaire ni discussion de brainstorming requis.**

@@ -1,6 +1,6 @@
-# HANDOFF — 2026-11-02
+# HANDOFF — 2026-11-05
 
-- Branche : `work/pm-v1-lotj-final-readiness-windows`. Code : `a92e92529c66b4c187f6450cf5790f55d79f1ad4`, porte locale VERTE (Qt 81, cœur 1520/0/3); EXE installé depuis ce commit.
+- Branche : `work/pm-v1-lotj-final-readiness-windows`. Dernier code : `cdd2fc6` (D-284, couleurs BrainBall), porte locale VERTE (Qt 114, cœur 1610/0/3); EXE de `dist/PokeMind` construit depuis ce commit. Historique ci-dessous (2026-11-02 et suivants).
 - Mandat actif : `PM-AUDIT-CLAUDE-PLAN` ([NEXT_ACTION](NEXT_ACTION.md)), exécuteur Claude Code, autorisation D-258.
 - Fait aujourd'hui : étape 1 (EXE à jour) puis, sur demande du propriétaire, **coach avec les mêmes outils sous Codex,
   Claude et Ollama** (D-259, [RESULT](RESULT.md)); 2026-10-30 : bouton **Supprimer** une discussion (D-260);
@@ -77,8 +77,42 @@
 - 2026-11-05 : **D-281** à `b3c533c` : « Archiver… » et « Restaurer… » dans Réglages → Données (boîtes
   natives de Windows; archive en arrière-plan relue entière; restauration au relancement, données actuelles
   archivées d'abord à côté du zip). Les scripts restent pour le dépannage.
-- Prochaine étape : réception propriétaire (D-275 à D-281); premières parties de la saison; 0.9.2 publique
-  seulement sur GO; sinon étape 5 ou étape 6.
+- 2026-11-05 : **D-282** : **PokeMind 0.9.2 publié** sur GO du propriétaire : `main` public `afdb0a3` (parent
+  `a6446e1`, arbre du privé `b329028`), préversion `v0.9.2` avec installateur non signé et `.sha256`, empreinte
+  vérifiée sur le fichier téléchargé.
+- 2026-11-05 : **D-283** à `caa3548` : **mises à jour en un clic**.
+  - Bandeau et Réglages → Mises à jour.
+  - Cartes : `pokemind.catalog_update` (dernier commit TCGdex, `catalog-staging-*` puis renommage, ancien
+    catalogue dans `catalog-previous`, `apply_pending` au lancement).
+  - Programme : `pokemind.app_update` (préversions publiques, SHA-256 vérifié, `/RELAUNCH=1`, verrou
+    `PokeMindDesktopRunning` attendu par `packaging/PokeMind.iss`).
+  - Vérification limitée à une fois par 12 h (`data/local/update-check.json`), jamais en tests (`MainWindow(check_updates=…)`
+    seulement depuis `app.launch`, hors QA et fumée).
+  - Version 0.9.3 préparée (EXE déployé, installateur dans `dist/installer/`), **non publiée**.
+  - Porte finale VERTE au HEAD du rapport (Qt 113, cœur 1603/0/3).
+- 2026-11-05 21 h 37 : le propriétaire a poussé le mandat **PM-UI-BRAINBALL-THEMES-001** (premier bloc de
+  NEXT_ACTION, READY_FOR_EXECUTION). D-283 l'a intégré par une fusion, sans l'exécuter, car une modification
+  GitHub n'autorise pas seule une exécution. Pour ce mandat : D-283 ajoute `QFrame#updateBanner` (bordure
+  `#4fb98f`), la teinte et l'icône `updates`, et les onglets des Réglages sur deux rangées (`QGridLayout`).
+- 2026-11-05 : **D-284** à `cdd2fc6` : **couleurs BrainBall** (mandat PM-UI-BRAINBALL-THEMES-001, déclenché
+  par le propriétaire). État **IMPLEMENTED/REPORTED, non VERIFIED** ([RESULT](RESULT.md)).
+  - `theme.py` : `PALETTES` = jetons de `palette.json` tels quels + `DERIVED` déclarés (dont `field_border`);
+    `OBJECTS` (classeur, terminal) communs aux deux thèmes; `contrast()`/`luminance()` WCAG; `theme_of()` pour
+    les peintres; chevron des listes (`_chevron`, PNG dans `%TEMP%\pokemind-theme`).
+  - Feuille de style sans couleur codée en dur (test). Boutons destructeurs : propriété `destructive` (pas le
+    nom d'objet, que `compact` écrase). Icônes redessinées au changement de thème : `MainWindow.themed_icons`.
+  - Tests : `tests/test_desktop_theme.py` (7) et `test_qt_theme_switch_redraws_the_drawn_icons_and_the_chat`.
+    Captures synthétiques : `docs/design/pokemind-brainball/captures/`.
+  - EXE reconstruit et déployé dans `dist/PokeMind` (ancienne copie `dist/PokeMind-before-brainball-<id>`);
+    installateur 0.9.3 remplacé dans `dist/installer/` (le précédent : `-mises-a-jour`). Rien de publié.
+  - Porte finale VERTE sur l'arbre du rapport (Qt 114, cœur 1610/0/3); seule cette ligne a changé depuis.
+- Prochaine étape :
+  - **STOP : audit indépendant ChatGPT** du mandat BrainBall (au SHA du rapport) ;
+  - puis, sur décision du propriétaire : corrections de l'audit, ou GO pour publier 0.9.3 (D-283 + D-284 ;
+    checklist C.0 à C.2 ; passer README et SECURITY à 0.9.3 et dater le CHANGELOG au moment de publier) ;
+  - réception propriétaire (Réglages → Mises à jour, nouvelles couleurs ; Delta Reign arrivera par « Mettre à
+    jour les cartes » quand TCGdex l'aura publié) ;
+  - sinon étape 5 ou étape 6.
 - Pour reprendre : `git fetch && git pull --ff-only`, lire `AGENTS.md` → `SESSION_CONTINUITY.md` → `STATE.json` → `NEXT_ACTION.md`.
 - Recompiler l'EXE : fixture `scripts/qa_unified_desktop.py --prepare-release`, `Build-PokeMindDesktop.ps1 -StagingRoot build/exe-upgrade-<32 hex>`,
   smoke `POKEMIND_DESKTOP_SMOKE=1` avec la fixture comme dossier courant, puis script de permutation local (sous `build/`, ignoré).

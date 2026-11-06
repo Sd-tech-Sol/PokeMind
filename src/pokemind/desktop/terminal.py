@@ -19,11 +19,12 @@ except ImportError:  # pragma: no cover - the desktop extra installs it
     pyte = None
 
 # Windows Terminal « Campbell » palette, with black and the background matched to PokeMind's panels.
-PALETTE = {'black': '#1b2130', 'red': '#c50f1f', 'green': '#13a10e', 'brown': '#c19c00', 'blue': '#0037da',
+PALETTE = {'black': '#0b1d42', 'red': '#c50f1f', 'green': '#13a10e', 'brown': '#c19c00', 'blue': '#0037da',
     'magenta': '#881798', 'cyan': '#3a96dd', 'white': '#cccccc', 'brightblack': '#767676', 'brightred': '#e74856',
     'brightgreen': '#16c60c', 'brightbrown': '#f9f1a5', 'brightblue': '#3b78ff', 'brightmagenta': '#b4009e',
     'brightcyan': '#61d6d6', 'brightwhite': '#f2f2f2'}
-FOREGROUND, BACKGROUND, SELECTION = '#dfe5f0', '#151a24', '#7a2533'
+# Dark in both themes (console programs choose ANSI colours for a dark background), in the BrainBall navy.
+FOREGROUND, BACKGROUND, SELECTION = '#f7faff', '#081c3e', '#0054c7'
 BYPASS = {'codex': '--dangerously-bypass-approvals-and-sandbox', 'claude': '--dangerously-skip-permissions'}
 KEYS = {Qt.Key.Key_Return: '\r', Qt.Key.Key_Enter: '\r', Qt.Key.Key_Backspace: '\x7f', Qt.Key.Key_Tab: '\t',
     Qt.Key.Key_Backtab: '\x1b[Z', Qt.Key.Key_Escape: '\x1b', Qt.Key.Key_PageUp: '\x1b[5~',

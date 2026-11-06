@@ -1,3 +1,56 @@
+# D-284 — Couleurs BrainBall pour les thèmes foncé et clair (PM-UI-BRAINBALL-THEMES-001)
+
+2026-11-05 Québec. Mandat du propriétaire (rédigé par ChatGPT, déclenché par le propriétaire) : visuel seulement.
+
+1. `docs/design/pokemind-brainball/palette.json` est la source unique. `theme.PALETTES` reprend ses jetons
+   **sans modification** (test); les ajouts sont déclarés dans `theme.DERIVED`.
+2. Écart de contraste documenté : la bordure `border` de la palette (2.40:1 foncé, 1.59:1 clair autour d'un
+   champ) reste décorative; champs, boutons radio et poignées de défilement prennent `field_border`
+   (≥3:1 sur fond, panneau et champ).
+3. Victoires bleues, défaites rouges, inconnues or. Le rouge ne marque sinon que les erreurs et les boutons
+   destructeurs (propriété `destructive`); aucun bouton principal rouge.
+4. Objets identiques dans les deux thèmes (`theme.OBJECTS`) : classeur (couverture bleu royal, pages marine)
+   et terminal marine, parce que les programmes console supposent un fond foncé. Légende des cartes sans
+   illustration et logo inchangés. L'assistant de premier lancement reste foncé.
+5. Chevron des listes déroulantes dessiné aux couleurs du thème (PNG écrit une fois dans le dossier
+   temporaire, repli sur la flèche native). Captures synthétiques versionnées dans
+   `docs/design/pokemind-brainball/captures/`.
+6. EXE local reconstruit et déployé dans `dist/` (hors Git); aucune installation chez le propriétaire, aucune
+   publication. 0.9.3 inclut ce changement; sa publication attend toujours le GO du propriétaire, après
+   l'audit ChatGPT.
+
+# D-283 — Mises à jour en un clic : cartes et programme
+
+2026-11-05 Québec. Demande du propriétaire : aller chercher les nouvelles cartes depuis l'interface, et une
+alerte de mise à jour « on clique sur mise à jour, puis ça fait tout le reste »; « carte blanche ».
+
+1. Un seul bandeau et une section Réglages → Mises à jour. Les cartes d'abord (sans redémarrage), puis le
+   programme. Vérification au démarrage au plus toutes les 12 h, activée par défaut, désactivable, déclarée
+   dans PRIVACY et les README ; elle n'envoie rien des données de l'utilisateur.
+2. Cartes : dernier commit TCGdex, importé hors ligne par l'importeur existant. Il remplace le catalogue
+   seulement s'il est complet et au moins aussi gros (95 %) ; l'ancien catalogue est gardé une fois. Premier
+   catalogue : le plus récent, avec repli sur l'instantané épinglé.
+3. Programme : installateur complet de la préversion GitHub, taille et SHA-256 vérifiés avant tout lancement,
+   hôtes GitHub seulement. L'installation silencieuse attend la fermeture de PokeMind (verrou nommé), puis le
+   rouvre. Pas de mise à jour différentielle : la simplicité et la vérification priment sur environ 37 Mo.
+4. Seule la copie installée s'installe elle-même ; les autres copies ouvrent la page de la version. Aucune
+   vérification réseau dans les tests, les fumées ou la QA.
+5. Version 0.9.3 préparée, non publiée : la publication exige un GO.
+
+---
+
+# D-282 — PokeMind 0.9.2 publié (préversion `v0.9.2`)
+
+2026-11-05 Québec. Ordre du propriétaire : « go » à la proposition d'une 0.9.2 publique.
+
+1. Version 0.9.2 (`b329028`), porte complète VERTE, EXE et installateur reconstruits et vérifiés.
+2. Dépôt public récupéré d'abord (C.0) : aucun commit du propriétaire depuis 0.9.1; le commit « PokeMind 0.9.2 »
+   est créé par-dessus `a6446e1` avec l'arbre exact de l'export.
+3. Porte complète VERTE dans l'export; push de `main` seulement; préversion `v0.9.2` avec installateur non signé
+   et `.sha256`; empreinte vérifiée sur le fichier téléchargé. L'historique privé n'est jamais poussé.
+
+---
+
 # D-281 — Archiver et restaurer depuis l'application
 
 2026-11-05 Québec. Demande du propriétaire : l'archive doit être dans l'interface, avec l'explorateur Windows.

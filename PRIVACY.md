@@ -21,7 +21,13 @@ running from source). Uninstalling removes the program only; your data stays unt
 
 PokeMind uses the network only for these explicit actions:
 
-- the **card catalogue** download, offered once (public TCGdex data from GitHub, about 25 MB);
+- the **card catalogue** download, offered once (public TCGdex data from GitHub, about 25 MB), and its
+  **updates** when you click **Update cards** (the same download, about 25 MB);
+- the **update check**, at launch at most twice a day: one request to the GitHub API for the PokeMind
+  releases and one for the newest TCGdex version, then, when it changed, one request to the public TCGdex
+  API for the list of sets. Nothing about you is sent; GitHub and TCGdex see the request like any visit to
+  a web page. Turn it off in **Settings → Updates**. Updating PokeMind downloads the installer and its
+  SHA-256 from the GitHub release, checks them, and runs the installer only when you confirm;
 - **card images** from the public TCGdex API, cached locally; you can turn them off in Settings;
 - a message sent in **Web research** mode: one bounded collection from public sources;
 - the **coach engine** you choose: Codex CLI and Claude Code run with your own account and send your

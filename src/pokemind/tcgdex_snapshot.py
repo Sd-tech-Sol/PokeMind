@@ -34,7 +34,7 @@ class Snapshot:
                 or not re.fullmatch(r"[0-9a-f]{64}", str(marker.get("tree_sha256", "")))):
             raise CatalogError("SNAPSHOT_ORIGIN_REVIEW_REQUIRED")
         self.commit, self.tree_sha256 = marker["commit"], marker["tree_sha256"]
-        tree_body = _source_file(source / "tree.json", 16 * 1024 * 1024).read_bytes()
+        tree_body = _source_file(source / "tree.json", 48 * 1024 * 1024).read_bytes()  # TCGdex grows
         if hashlib.sha256(tree_body).hexdigest() != self.tree_sha256:
             raise CatalogError("SNAPSHOT_TREE_HASH_MISMATCH")
         tree = json.loads(tree_body)
@@ -57,7 +57,7 @@ class Snapshot:
         self.modules, self.blobs, self.references = {}, {}, {}
         self.translations, self.license = None, None
         seen = set()
-        dataset = _source_file(source / "literal-source.jsonl", 192 * 1024 * 1024)
+        dataset = _source_file(source / "literal-source.jsonl", 512 * 1024 * 1024)
         with dataset.open(encoding="utf-8") as stream:
             while True:
                 line = stream.readline(400_001)

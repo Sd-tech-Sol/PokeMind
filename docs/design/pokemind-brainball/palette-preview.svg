@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760">
+<rect width="1120" height="760" rx="24" fill="#E9EEF8"/>
+<text x="34" y="50" font-size="27" font-weight="bold" font-family="Segoe UI,Arial,sans-serif" fill="#081B3A">PokeMind — BrainBall électrique</text>
+<rect x="30" y="76" width="520" height="648" rx="18" fill="#07142F" stroke="#335A8E" stroke-width="2"/>
+<text x="54" y="117" font-size="24" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#FFD54F">THÈME FONCÉ</text>
+<rect x="50" y="134" width="480" height="64" rx="10" fill="#00339F"/>
+<text x="68" y="174" font-size="22" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#FFFFFF">À toi de jouer.</text>
+<rect x="50" y="222" width="84" height="36" rx="7" fill="#07142F" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="244" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Fond</text>
+<text x="506" y="244" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#07142F</text>
+<rect x="50" y="274" width="84" height="36" rx="7" fill="#081E4A" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="296" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Menu</text>
+<text x="506" y="296" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#081E4A</text>
+<rect x="50" y="326" width="84" height="36" rx="7" fill="#102652" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="348" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Panneau</text>
+<text x="506" y="348" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#102652</text>
+<rect x="50" y="378" width="84" height="36" rx="7" fill="#081C3E" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="400" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Entrée</text>
+<text x="506" y="400" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#081C3E</text>
+<rect x="50" y="430" width="84" height="36" rx="7" fill="#F7FAFF" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="452" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Texte</text>
+<text x="506" y="452" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#F7FAFF</text>
+<rect x="50" y="482" width="84" height="36" rx="7" fill="#0054C7" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="504" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Action</text>
+<text x="506" y="504" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#0054C7</text>
+<rect x="50" y="534" width="84" height="36" rx="7" fill="#FFD54F" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="556" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Or / Accent</text>
+<text x="506" y="556" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#FFD54F</text>
+<rect x="50" y="586" width="84" height="36" rx="7" fill="#68BFFF" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="608" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Victoire</text>
+<text x="506" y="608" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#68BFFF</text>
+<rect x="50" y="638" width="84" height="36" rx="7" fill="#FF6B74" stroke="#335A8E" stroke-width="1"/>
+<text x="147" y="660" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Défaite</text>
+<text x="506" y="660" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#FF6B74</text>
+<rect x="570" y="76" width="520" height="648" rx="18" fill="#F1F7FF" stroke="#B7CBE7" stroke-width="2"/>
+<text x="594" y="117" font-size="24" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#003EA6">THÈME CLAIR</text>
+<rect x="590" y="134" width="480" height="64" rx="10" fill="#01339F"/>
+<text x="608" y="174" font-size="22" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#FFFFFF">À toi de jouer.</text>
+<rect x="590" y="222" width="84" height="36" rx="7" fill="#F1F7FF" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="244" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Fond</text>
+<text x="1046" y="244" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#F1F7FF</text>
+<rect x="590" y="274" width="84" height="36" rx="7" fill="#E0EDFF" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="296" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Menu</text>
+<text x="1046" y="296" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#E0EDFF</text>
+<rect x="590" y="326" width="84" height="36" rx="7" fill="#FFFFFF" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="348" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Panneau</text>
+<text x="1046" y="348" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#FFFFFF</text>
+<rect x="590" y="378" width="84" height="36" rx="7" fill="#F8FBFF" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="400" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Entrée</text>
+<text x="1046" y="400" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#F8FBFF</text>
+<rect x="590" y="430" width="84" height="36" rx="7" fill="#081B3A" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="452" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Texte</text>
+<text x="1046" y="452" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#081B3A</text>
+<rect x="590" y="482" width="84" height="36" rx="7" fill="#003EA6" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="504" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Action</text>
+<text x="1046" y="504" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#003EA6</text>
+<rect x="590" y="534" width="84" height="36" rx="7" fill="#003EA6" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="556" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Or / Accent</text>
+<text x="1046" y="556" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#003EA6</text>
+<rect x="590" y="586" width="84" height="36" rx="7" fill="#004CCB" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="608" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Victoire</text>
+<text x="1046" y="608" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#004CCB</text>
+<rect x="590" y="638" width="84" height="36" rx="7" fill="#B72C43" stroke="#B7CBE7" stroke-width="1"/>
+<text x="687" y="660" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#081B3A">Défaite</text>
+<text x="1046" y="660" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#081B3A">#B72C43</text>
+</svg>

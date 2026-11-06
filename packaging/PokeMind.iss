@@ -55,3 +55,30 @@ Name: "{autodesktop}\PokeMind"; Filename: "{app}\PokeMind.exe"; WorkingDir: "{ap
 
 [Run]
 Filename: "{app}\PokeMind.exe"; Description: "{cm:LaunchProgram,PokeMind}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+; An update started from PokeMind (/SILENT /RELAUNCH=1) opens PokeMind again; other silent installs never do.
+Filename: "{app}\PokeMind.exe"; WorkingDir: "{app}"; Flags: nowait; Check: UpdateFromPokeMind
+
+[Code]
+function UpdateFromPokeMind: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;
+
+{ PokeMind holds this mutex while a window is open (pokemind.app_update.MUTEX). An update it started waits
+  up to 90 seconds for the window to close before replacing any file (as a restore does). }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Waited: Integer;
+begin
+  Result := '';
+  if not UpdateFromPokeMind then
+    exit;
+  Waited := 0;
+  while CheckForMutexes('PokeMindDesktopRunning') and (Waited < 180) do
+  begin
+    Sleep(500);
+    Waited := Waited + 1;
+  end;
+  if CheckForMutexes('PokeMindDesktopRunning') then
+    Result := 'PokeMind is still open. Close it, then start the update again.';
+end;

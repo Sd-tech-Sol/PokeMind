@@ -3,47 +3,51 @@
   "project": "PokeMind",
   "repository": "Sd-tech-Sol/PokeMind-dev",
   "branch": "work/pm-v1-lotj-final-readiness-windows",
-  "updated": "2026-11-02",
+  "updated": "2026-11-05",
   "current_task": {
-    "id": "PM-AUDIT-CLAUDE-PLAN",
-    "status": "IN_PROGRESS",
+    "id": "PM-UI-BRAINBALL-THEMES-001",
+    "status": "IMPLEMENTED_REPORTED_AWAITING_AUDIT",
     "executor": "claude-code",
-    "authorization": "D-258",
-    "plan": "docs/audits/AUDIT_CLAUDE_2026-10-29.md#10",
-    "next_step": "owner reception of D-275 to D-281 (fresh first launch after the scripted reset; Archive and Restore in Settings > Data; first games of the 2026-11-05 season); public 0.9.2 only on explicit owner GO (fetch the public repository first); otherwise step 5 or step 6"
+    "authorization": "owner-explicit-2026-11-05",
+    "prompt": ".orchestrator/NEXT_PROMPT.md",
+    "source": "docs/design/pokemind-brainball/palette.json",
+    "decision": "D-284",
+    "code_sha": "cdd2fc6",
+    "captures": "docs/design/pokemind-brainball/captures/",
+    "verified": false,
+    "next_step": "STOP: independent ChatGPT audit of the theme refresh; then owner decision (audit fixes, GO to publish 0.9.3, or resume PM-AUDIT-CLAUDE-PLAN)"
   },
   "evidence": {
-    "code_sha": "b3c533c",
+    "code_sha": "cdd2fc6",
     "local_gate": {
       "status": "GREEN",
-      "passed": 1589,
+      "passed": 1610,
       "failed": 0,
       "skipped": 3,
-      "command": "python scripts/local_gate.py (full suite, content of b3c533c)"
+      "qt_passed": 114,
+      "command": "python scripts/local_gate.py (full suite, code tree of cdd2fc6; report HEAD gate in HANDOFF)"
     },
+    "theme_tests": "tests/test_desktop_theme.py (7) + test_qt_theme_switch_redraws_the_drawn_icons_and_the_chat",
+    "contrast": "WCAG AA on real backgrounds; one documented deviation: palette border stays decorative, inputs use derived field_border",
     "github_actions": "REMOVED_2026-11-01_OWNER_NO_COST; local gate is the proof"
   },
   "installed_exe_current": true,
-  "installed_exe_source_sha": "b3c533c",
+  "installed_exe_source_sha": "cdd2fc6",
   "owner_reception": "PENDING",
   "release_status": "NOT_RELEASE_READY",
   "private_data_rules": "never in Git; personal data copied only by the owner in the EXE (D-264), never moved or deleted",
   "archive": ".orchestrator/archive/2026-10/",
-  "latest_decision": "D-281",
+  "latest_decision": "D-284",
   "installer": {
-    "file": "dist/installer/PokeMind-Setup-0.9.1.exe",
-    "source_sha": "4e6a595",
-    "sha256": "C3FD796CD19D1BC61F5AA2158C3C50C5A577125EA3B54F3941042DC74471DE4C",
+    "file": "dist/installer/PokeMind-Setup-0.9.3.exe",
+    "source_sha": "cdd2fc6",
+    "sha256": "4768ED25DF88EC91F8C62363D2CCBC2333ADBC62C21A6E6211F0AF761240AD3C",
     "signed": false,
     "signing_supported": true,
-    "published": true,
-    "current_with_code": false,
-    "sha256_file": "written by Build-PokeMindInstaller.ps1 next to the installer",
-    "unpublished_build": {
-      "file": "dist/installer/PokeMind-Setup-0.9.1-archive.exe",
-      "source_sha": "b3c533c",
-      "sha256": "52BA7EFB61423CAED44EFC9218C4125AD911C91B26D600B8D98658439525969E"
-    }
+    "published": false,
+    "current_with_code": true,
+    "silent_update_relaunch_tested": "at caa3548 (D-283); the theme change does not touch the update path",
+    "sha256_file": "written by Build-PokeMindInstaller.ps1 next to the installer"
   },
   "licence": "MIT",
   "history_audit": {
@@ -76,24 +80,39 @@
     "repository": "Sd-tech-Sol/PokeMind",
     "visibility": "PUBLIC",
     "branch": "main",
-    "commits": 4,
-    "tree_of_private_commit": "bc90012",
-    "tag": "v0.9.1",
+    "commits": 5,
+    "tree_of_private_commit": "b329028",
+    "tag": "v0.9.2",
     "prerelease": true,
     "assets": [
-      "PokeMind-Setup-0.9.1.exe",
-      "PokeMind-Setup-0.9.1.exe.sha256"
+      "PokeMind-Setup-0.9.2.exe",
+      "PokeMind-Setup-0.9.2.exe.sha256"
     ],
     "private_vulnerability_reporting": true,
     "wiki": false,
     "ci": "none (D-271)",
-    "published": "2026-11-03",
-    "head": "a6446e1",
+    "published": "2026-11-05",
+    "head": "afdb0a3",
     "tags": [
       "v0.9.0",
-      "v0.9.1"
+      "v0.9.1",
+      "v0.9.2"
     ],
     "owner_web_edits": "ccf2909 and 8415c14 (README intro), ported to private bc90012",
-    "behind_private": "D-275 to D-281 not published (public is 0.9.1)"
+    "behind_private": "D-283 (one-click updates, version 0.9.3 prepared, not published)"
+  },
+  "paused_task": {
+    "id": "PM-AUDIT-CLAUDE-PLAN",
+    "status": "IN_PROGRESS",
+    "executor": "claude-code",
+    "authorization": "D-258",
+    "plan": "docs/audits/AUDIT_CLAUDE_2026-10-29.md#10",
+    "next_step": "after the theme audit: owner GO to publish 0.9.3 (one-click updates D-283 + BrainBall colours D-284, code cdd2fc6; fetch the public repository first, then set README/SECURITY to 0.9.3 and date the CHANGELOG); owner reception of Settings > Updates and of the new colours; otherwise step 5 or step 6"
+  },
+  "note_current_evidence": "The evidence below is from D-284 (BrainBall themes, cdd2fc6), status IMPLEMENTED/REPORTED, not VERIFIED: an independent ChatGPT audit follows. Local EXE rebuilt and deployed to dist/ (798 files); nothing installed for the owner, nothing published.",
+  "updates": {
+    "cards": "pokemind.catalog_update (newest TCGdex commit, staged then renamed, one previous kept)",
+    "app": "pokemind.app_update (public prereleases, SHA-256 checked, silent install waits for the mutex then relaunches)",
+    "check": "at launch at most every 12 hours, opt-out (preference update_check), never in tests, smoke or QA"
   }
 }

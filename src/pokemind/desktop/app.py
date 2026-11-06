@@ -204,6 +204,7 @@ def launch(root=None):
         project = selected
         selected, data_state = data_location.resolve(project)
     reset = restored = None
+    diagnostics_lines = []
     if not release_qa:  # a reset asked from the window, before anything opens a file in data/local
         from pokemind import data_reset
         try:
@@ -217,6 +218,14 @@ def launch(root=None):
             restored = {'status': 'FAILED', 'error': type(error).__name__, 'zip': ''}
         if (reset or restored) and not standalone:
             selected, data_state = data_location.resolve(project)
+        from pokemind import app_update, catalog_update
+        app_update.mark_running()  # an update started from PokeMind waits for this window to close
+        try:  # new cards downloaded while the catalogue was in use
+            cards = catalog_update.apply_pending(selected)
+        except (ValueError, OSError):
+            cards = None
+        if cards:
+            diagnostics_lines.append('Catalogue mis à jour au lancement · ' + cards['status'])
     if data_state == 'offer' and not release_qa:
         selected, data_state, outcome = offer_move(project)
     diagnostics.setup(selected)
@@ -225,6 +234,8 @@ def launch(root=None):
     if reset:
         diagnostics.get('desktop').info('Réinitialisation · %s · %s éléments%s', reset['status'], reset.get('items', 0),
                                         ' · bloqué : ' + reset['blocked'] if reset.get('blocked') else '')
+    for line in diagnostics_lines:
+        diagnostics.get('desktop').info(line)
     if restored:
         diagnostics.get('desktop').info('Restauration · %s · %s fichiers%s', restored['status'], restored.get('files', 0),
                                         ' · ' + restored['error'] if restored.get('error') else '')
@@ -243,7 +254,8 @@ def launch(root=None):
         welcome, catalog = first_run(selected)
         diagnostics.get('desktop').info('Premier lancement · %s', welcome)
     try:
-        window = MainWindow(selected, project_root=project, data_state=data_state, download_catalog=catalog)
+        window = MainWindow(selected, project_root=project, data_state=data_state, download_catalog=catalog,
+                            check_updates=not release_qa and os.environ.get('POKEMIND_DESKTOP_SMOKE') != '1')
     except (ValueError, OSError):
         diagnostics.get('desktop').exception('Ouverture de la fenêtre impossible')
         QMessageBox.warning(None, 'PokeMind', T('Préférences ou données locales indisponibles. Aucun historique remplacé. Vérifier les fichiers de l’application dans data/local/chat.'))

@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, QUrl, QSize
 from PySide6.QtGui import QDesktopServices, QFont, QTextCursor, QColor
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget, QFileDialog,
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
     QProgressBar, QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem,
     QTabWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QLayout)
 
@@ -34,7 +34,7 @@ from pokemind.desktop.widgets import ChatInput, Activity, CorpusChart, DeckGalle
 LOG_QUESTION = ('Quel deck m’a affronté dans cette partie? Identifie l’archétype adverse, reconstruis sa liste de '
                 '60 cartes (cartes vues d’abord, le reste d’après les listes publiques), donne-lui un nom et '
                 'enregistre-le dans mes decks.')
-from pokemind.desktop.theme import logo_icon, logo_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon, setting_icon
+from pokemind.desktop.theme import logo_icon, logo_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon, setting_icon, setting_tab_icon
 from pokemind import __version__
 from PySide6 import QtWidgets as W
 from pokemind.desktop.motion import AnimatedStack, MotionEffects, EmblemWidget
@@ -95,7 +95,7 @@ def browser():
     value = QTextBrowser()
     value.setOpenLinks(False)
     value.setOpenExternalLinks(False)
-    value.document().setDefaultStyleSheet('a {color:#8ebcff;} h2 {font-size:21px;} h3 {font-size:16px;}')
+    value.document().setDefaultStyleSheet('a {color:' + colors('dark')['link'] + ';} h2 {font-size:21px;} h3 {font-size:16px;}')
     return value
 
 
@@ -171,6 +171,9 @@ NATIVE_TOOL_LABELS = {'Bash': ('commande', 'command'), 'PowerShell': ('commande'
 CODE_STYLE = 'background-color:rgba(127,127,127,0.14); font-family:Consolas,monospace; font-size:12px;'
 
 
+TOOL_COLOR = 'color:#8a94a6;'  # placeholder, replaced by the theme's muted colour when a bubble is drawn
+
+
 def tool_chip(specs):
     """One discreet line for a run of tool calls: PokeMind lookups are counted, real commands stay visible."""
     counted, details = {}, []
@@ -186,7 +189,7 @@ def tool_chip(specs):
             continue
         counted[label] = counted.get(label, 0) + 1
     parts = [rich(T(fr, en=en)) + (' ×' + str(n) if n > 1 else '') for (fr, en), n in counted.items()] + details
-    return ('<p style="color:#8a94a6; font-size:12px; margin-top:4px; margin-bottom:4px;">⚙ ' + rich(T('Outils', en='Tools'))
+    return ('<p style="' + TOOL_COLOR + ' font-size:12px; margin-top:4px; margin-bottom:4px;">⚙ ' + rich(T('Outils', en='Tools'))
             + ' · ' + J(' · ', parts) + '</p>')
 
 
@@ -291,7 +294,7 @@ class MainWindow(QMainWindow):
     report_loaded = Signal()
     chat_finished = Signal()
 
-    def __init__(self, root, project_root=None, data_state='project', download_catalog=False):
+    def __init__(self, root, project_root=None, data_state='project', download_catalog=False, check_updates=False):
         super().__init__()
         # root holds the owner's data (data/local); project_root is the code folder used by
         # development mode and the Terminal page. They differ once data is copied out (P0-1).
@@ -300,6 +303,7 @@ class MainWindow(QMainWindow):
         # An installed copy (no project folder): the chat never runs in a folder by default.
         self.standalone = data_state == 'standalone'
         self.catalog_busy, self.catalog_cancel = False, threading.Event()
+        self.themed_icons = []  # drawn glyphs (menu, settings, terminal) redrawn in the active theme
         self.preferences = self.store.preferences()
         self.services.season_key = self.preferences['season_view']
         self.season_pickers = []
@@ -315,6 +319,7 @@ class MainWindow(QMainWindow):
         self.chat_busy, self.closing, self.data_busy = False, False, False
         self.closing_terminals = False
         self.resetting = self.relaunched = self.restoring = self.archiving = False
+        self.update_info, self.update_busy, self.update_dismissed = {}, False, False
         self.ingest_busy, self.chat_local_only, self.chat_failed = False, False, False
         self.last_import = None
         self.pending_question = ''
@@ -388,6 +393,7 @@ class MainWindow(QMainWindow):
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(0)
         column.addWidget(self._loading_banner())
+        column.addWidget(self._update_banner())
         column.addWidget(self.stack, 1)
         outer.addWidget(content, 1)
         self.setCentralWidget(central)
@@ -415,6 +421,8 @@ class MainWindow(QMainWindow):
         self.show_catalog_state()
         if download_catalog:
             QTimer.singleShot(1500, self.download_catalog)
+        if check_updates:  # the installed app only; tests and release checks never reach the network
+            QTimer.singleShot(6000, self.check_updates)
         QTimer.singleShot(0, self.reload)
         self.watch_timer = QTimer(self)
         self.watch_timer.setInterval(5000)
@@ -871,6 +879,7 @@ class MainWindow(QMainWindow):
                             ('powershell', 'PowerShell')):
             button = QPushButton(label)
             button.setIcon(navigation_icon(6))
+            self.themed_icons.append(lambda theme, b=button: b.setIcon(navigation_icon(6, theme)))
             button.setObjectName('terminalLaunch')
             button.setToolTip(access)
             button.clicked.connect(lambda checked=False, k=kind: self.open_terminal(k))
@@ -936,6 +945,7 @@ class MainWindow(QMainWindow):
         line.setSpacing(14)
         icon = QLabel()
         icon.setPixmap(setting_icon(kind).pixmap(QSize(32, 32)))
+        self.themed_icons.append(lambda theme, l=icon, k=kind: l.setPixmap(setting_icon(k, theme=theme).pixmap(QSize(32, 32))))
         icon.setFixedSize(32, 32)
         line.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
         words = QVBoxLayout()
@@ -962,6 +972,7 @@ class MainWindow(QMainWindow):
         if tip is not None:
             info = QLabel()
             info.setPixmap(setting_icon('info').pixmap(QSize(18, 18)))
+            self.themed_icons.append(lambda theme, l=info: l.setPixmap(setting_icon('info', theme=theme).pixmap(QSize(18, 18))))
             info.setToolTip(tip)
             row.setToolTip(tip)
             line.addWidget(info, 0, Qt.AlignmentFlag.AlignTop)
@@ -1055,6 +1066,7 @@ class MainWindow(QMainWindow):
         self.copy_diagnostic.setToolTip(T('Copier le diagnostic (journal local masqué)'))
         self.copy_diagnostic.clicked.connect(self.copy_diagnostic_report)
         self.reset_button = WrapPushButton(T('Réinitialiser…'))
+        self.reset_button.setProperty('destructive', True)  # red only marks what erases
         self.reset_button.setToolTip(T('Choisir ce qu’il faut effacer, ou tout'))
         self.reset_button.clicked.connect(self.reset_application)
         self.archive_button = WrapPushButton(T('Archiver…'))
@@ -1063,6 +1075,22 @@ class MainWindow(QMainWindow):
         self.restore_button = WrapPushButton(T('Restaurer…'))
         self.restore_button.setToolTip(T('Choisir une archive PokeMind (.zip) à remettre en place'))
         self.restore_button.clicked.connect(self.restore_data)
+        self.app_update_status = QLabel(T('Version ', en='Version ') + __version__)
+        self.app_update_button = WrapPushButton(T('Mettre à jour'))
+        self.app_update_button.setToolTip(T('Télécharger, vérifier et installer la nouvelle version; PokeMind se rouvre'))
+        self.app_update_button.clicked.connect(self.update_app)
+        self.app_update_button.setEnabled(False)
+        self.cards_update_status = QLabel(T('Pas encore vérifié'))
+        self.cards_update_button = WrapPushButton(T('Mettre à jour les cartes'))
+        self.cards_update_button.setToolTip(T('Les nouvelles cartes de TCGdex, vérifiées puis installées'))
+        self.cards_update_button.clicked.connect(lambda: self.update_cards())
+        self.cards_update_button.setEnabled(False)
+        self.update_auto = WrapCheckBox(T('Vérifier au démarrage'))
+        self.update_auto.setChecked(self.preferences['update_check'])
+        self.update_auto.toggled.connect(self.save_preferences)
+        self.update_check_button = WrapPushButton(T('Vérifier maintenant'))
+        self.update_check_button.clicked.connect(lambda: self.check_updates(manual=True))
+        self.update_checked = QLabel(T('Jamais vérifié'))
         about_logo = QLabel()
         about_logo.setPixmap(logo_pixmap(72))
         about_name = QLabel('PokeMind ' + __version__)
@@ -1107,25 +1135,34 @@ class MainWindow(QMainWindow):
                 self.setting_row('reset', self.reset_button, T('Réinitialiser PokeMind'),
                                  T('Effacer tout ou une partie de tes données')),
             ]),
+            ('updates', T('Mises à jour'), [
+                self.setting_row('about', self.app_update_button, T('PokeMind'), self.app_update_status),
+                self.setting_row('images', self.cards_update_button, T('Cartes', en='Cards'), self.cards_update_status),
+                self.setting_row('eye', self.update_auto, hint=T('Au plus deux fois par jour : une demande à GitHub et une '
+                                                                'à TCGdex. Rien de tes données n’est envoyé.')),
+                self.setting_row('refresh', self.update_check_button, T('Vérifier maintenant'), self.update_checked),
+            ]),
             ('about', T('À propos'), [
                 self.setting_row('about', about_logo, None, None, extra=(about_name, QLabel(T('Ton compagnon TCG')),
                     QLabel(T('Mémoire locale · conseils sourcés')), QLabel(T('V1 · audit requis')),
                     QLabel(T('Code sous licence MIT · cartes : TCGdex (MIT) · projet de fans non officiel')))),
             ]),
         ]
-        bar = QHBoxLayout()
-        bar.setSpacing(6)
+        bar = QGridLayout()  # two rows of three: every name stays readable beside the coach panel
+        bar.setHorizontalSpacing(6)
+        bar.setVerticalSpacing(6)
         self.settings_tabs, self.settings_sections = {}, {}
-        for key, label, rows in sections:
+        for index, (key, label, rows) in enumerate(sections):
             tab = QPushButton(label)
             tab.setObjectName('settingsTab')
-            tab.setIcon(setting_icon(key))
+            tab.setIcon(setting_tab_icon(key))
+            self.themed_icons.append(lambda theme, b=tab, k=key: b.setIcon(setting_tab_icon(k, theme)))
             tab.setIconSize(QSize(20, 20))
             tab.setCheckable(True)
             tab.setAutoExclusive(True)
             tab.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             tab.clicked.connect(lambda checked=False, k=key: self.show_settings_section(k))
-            bar.addWidget(tab)
+            bar.addWidget(tab, index // 3, index % 3)
             section = QWidget()
             column = QVBoxLayout(section)
             column.setContentsMargins(0, 4, 0, 0)
@@ -1289,9 +1326,11 @@ class MainWindow(QMainWindow):
         copy.setToolTip(T('Copier la dernière réponse'))
         copy.clicked.connect(lambda: QApplication.clipboard().setText(next((m['content'] for m in reversed(self.conversation['messages']) if m['role'] == 'assistant'), '')))
         self.delete_button = QPushButton(T('Supprimer'))
+        self.delete_button.setProperty('destructive', True)
         self.delete_button.setToolTip(T('Supprimer cette discussion'))
         self.delete_button.clicked.connect(self.delete_conversation)
         self.delete_all_button = QPushButton(T('Tout supprimer'))
+        self.delete_all_button.setProperty('destructive', True)
         self.delete_all_button.setToolTip(T('Supprimer toutes les discussions de l’historique'))
         self.delete_all_button.clicked.connect(self.delete_all_conversations)
         history_row.addWidget(self.new_button)
@@ -1328,6 +1367,40 @@ class MainWindow(QMainWindow):
         self.loading_bar.setFixedSize(220, 10)
         row.addWidget(self.loading_bar)
         self.loading_banner = banner
+        banner.hide()
+        return banner
+
+    def _update_banner(self):
+        """« Mise à jour disponible » above every page (owner, 2026-11-05): one click updates the cards and
+        PokeMind itself; « Plus tard » hides it until the next launch."""
+        banner = QFrame()
+        banner.setObjectName('updateBanner')
+        row = QHBoxLayout(banner)
+        row.setContentsMargins(22, 10, 18, 10)
+        row.setSpacing(12)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        self.update_title = QLabel()
+        self.update_title.setObjectName('loadingTitle')
+        self.update_detail = QLabel()
+        self.update_detail.setObjectName('loadingDetail')
+        self.update_detail.setWordWrap(True)
+        text.addWidget(self.update_title)
+        text.addWidget(self.update_detail)
+        row.addLayout(text, 1)
+        self.update_bar = QProgressBar()
+        self.update_bar.setTextVisible(False)
+        self.update_bar.setFixedSize(180, 10)
+        self.update_bar.hide()
+        row.addWidget(self.update_bar)
+        self.update_now = QPushButton(T('Mettre à jour'))
+        self.update_now.setObjectName('primary')
+        self.update_now.clicked.connect(self.run_updates)
+        self.update_later = QPushButton(T('Plus tard'))
+        self.update_later.clicked.connect(self.dismiss_update)
+        row.addWidget(self.update_now)
+        row.addWidget(self.update_later)
+        self.update_banner = banner
         banner.hide()
         return banner
 
@@ -1712,7 +1785,8 @@ class MainWindow(QMainWindow):
                                         T('Pas encore sur ce PC : environ 25 Mo depuis GitHub (TCGdex), 175 Mo sur le disque.'))
 
     def download_catalog(self):
-        """Fetch the pinned public catalogue once (two HTTPS requests), then import it offline."""
+        """Fetch the public catalogue once (two HTTPS requests), then import it offline: the newest TCGdex
+        cards, or the pinned tested ones if the newest cannot be imported."""
         from pokemind import catalog_download
         if self.catalog_busy or catalog_download.ready(self.root):
             self.show_catalog_state()
@@ -1722,7 +1796,7 @@ class MainWindow(QMainWindow):
         self.catalog_phase(('download', 0, catalog_download.ARCHIVE_SIZE))
         self.show_catalog_state()
         root, cancelled = self.root, self.catalog_cancel.is_set
-        self.submit(lambda events: catalog_download.download(root, cancelled=cancelled,
+        self.submit(lambda events: catalog_download.download(root, latest=True, cancelled=cancelled,
                         progress=lambda phase, done, total: events.phase.emit((phase, done, total))),
                     self.catalog_done, error=self.catalog_failed, phase=self.catalog_phase, detached=True)
 
@@ -1854,6 +1928,12 @@ class MainWindow(QMainWindow):
         theme = self.preferences['theme']
         self.setPalette(palette(theme))
         self.setStyleSheet(DARK if self.preferences['theme'] == 'dark' else LIGHT)
+        for index in range(1, self.navigation.count()):
+            self.navigation.item(index).setIcon(navigation_icon(index, theme))
+        for redraw in self.themed_icons:
+            redraw(theme)
+        if hasattr(self, 'chat_expand'):
+            self.chat_expand.setIcon(expand_icon(self.chat_dock.isFloating() if hasattr(self, 'chat_dock') else False, theme))
         color = colors(theme)['link']
         self.corpus_chart.set_theme(theme)
         self.statistics.set_theme(theme)
@@ -1899,7 +1979,8 @@ class MainWindow(QMainWindow):
             sharing=self.sharing.currentData(), provider=self.provider.currentData(), ollama_model=self.model.currentText())
         self.preferences.update(startup_refresh=self.startup_refresh.isChecked(),
             watch_logs=self.watch_logs.isChecked(), card_images=self.card_images.isChecked(),
-            reduced_motion=self.reduced_motion.isChecked(), chat_project=self.chat_project.isChecked())
+            reduced_motion=self.reduced_motion.isChecked(), chat_project=self.chat_project.isChecked(),
+            update_check=self.update_auto.isChecked() if hasattr(self, 'update_auto') else self.preferences['update_check'])
         self.preferences.update(permission_mode=self.permission_mode.currentData(),
             project_relative=self.project_relative.text().strip() or '.', language=self.language.currentData())
         if previous_images != self.preferences['card_images']:
@@ -2095,7 +2176,7 @@ class MainWindow(QMainWindow):
 
     def chat_window_changed(self, floating):
         self.chat_expand.setText(T('Ramener') if floating else T('Agrandir'))
-        self.chat_expand.setIcon(expand_icon(floating))
+        self.chat_expand.setIcon(expand_icon(floating, self.preferences['theme']))
         tip = T('Remettre la discussion à droite') if floating else T('Agrandir la discussion dans une grande fenêtre')
         self.chat_expand.setToolTip(tip)
         self.chat_expand.setAccessibleName(tip)
@@ -2357,6 +2438,268 @@ class MainWindow(QMainWindow):
                                      if busy else T('Restauration : PokeMind se ferme puis se rouvre…'))
         self.close()
 
+    # Updates (owner, 2026-11-05): new TCGdex cards and new PokeMind versions, each in one click.
+
+    UPDATE_MESSAGES = {
+        'UPDATE_CHECKSUM_MISMATCH': 'Le fichier téléchargé ne correspond pas à son empreinte publiée; il n’a pas été lancé.',
+        'UPDATE_SIZE_MISMATCH': 'Le téléchargement est incomplet; il n’a pas été lancé.',
+        'UPDATE_CHECKSUM_UNREADABLE': 'L’empreinte publiée est illisible; rien n’a été lancé.',
+        'UPDATE_REDIRECT_REFUSED': 'Le téléchargement a été redirigé hors de GitHub; il a été refusé.',
+        'CATALOG_UPDATE_SMALLER': 'La nouvelle version du catalogue a moins de cartes que l’actuelle; elle a été écartée.',
+    }
+
+    def update_message(self, code):
+        code = str(code or '')
+        known = self.UPDATE_MESSAGES.get(code)
+        if known:
+            return T(known)
+        if 'CANCELLED' in code:
+            return T('Mise à jour arrêtée; rien n’a été remplacé.')
+        return T('Mise à jour impossible pour l’instant (connexion à GitHub ou à TCGdex?); rien n’a été remplacé.')
+
+    def check_updates(self, manual=False):
+        """Automatic at launch (at most every 12 hours, when allowed), or « Vérifier maintenant »."""
+        from pokemind import app_update
+        if self.update_busy or self.resetting:
+            return
+        if not manual:
+            if not self.preferences['update_check']:
+                return
+            if not app_update.due(self.root, catalogue=self.catalogue_commit()):  # recent answer, still true
+                cached = app_update.last_check(self.root)
+                if cached:
+                    self.updates_checked(cached, saved=False)
+                return
+        self.update_busy = True
+        self.update_check_button.setEnabled(False)
+        self.update_checked.setText(T('Vérification…'))
+        root = self.root
+
+        def work(events):
+            from pokemind import catalog_update
+            from pokemind.cards import CatalogError
+            from pokemind.security import neutral_exception_code
+            result = {}
+            try:
+                result['app'] = app_update.check()
+            except (app_update.UpdateError, OSError, ValueError) as error:
+                result['app'] = {'status': 'UNKNOWN', 'error': neutral_exception_code(error, 'UPDATE')}
+            try:
+                result['cards'] = catalog_update.check(root)
+            except (CatalogError, OSError, ValueError) as error:
+                result['cards'] = {'status': 'UNKNOWN', 'error': neutral_exception_code(error, 'CATALOG_UPDATE')}
+            return result
+        self.submit(work, self.updates_checked, self.update_check_failed, detached=True)
+
+    def update_check_failed(self, code):
+        self.update_busy = False
+        self.update_check_button.setEnabled(True)
+        self.update_checked.setText(self.update_message(code))
+
+    def updates_checked(self, result, saved=True):
+        from pokemind import app_update
+        self.update_busy = False
+        self.update_check_button.setEnabled(True)
+        parts = [result.get('app') or {}, result.get('cards') or {}]
+        if saved and all(part.get('status') not in (None, 'UNKNOWN') for part in parts):  # failures retry next launch
+            try:
+                app_update.save_check(self.root, result, catalogue=((parts[1].get('installed') or {}).get('commit')))
+            except OSError:
+                pass
+        self.update_info = {'app': result.get('app') or {}, 'cards': result.get('cards') or {}}
+        from datetime import datetime
+        stamp = str(result.get('checked_at') or datetime.now().isoformat(timespec='minutes'))
+        self.update_checked.setText(T('Dernière vérification : ') + stamp.replace('T', ' ')[:16])
+        self.show_update_state()
+
+    def catalogue_commit(self):
+        from pokemind import catalog_download
+        try:
+            return (catalog_download.installed(self.root) or {}).get('commit')
+        except (OSError, ValueError):
+            return None
+
+    def cards_news(self):
+        """Short text for new cards, or '' when the newer catalogue holds only corrections."""
+        cards = self.update_info.get('cards') or {}
+        if cards.get('status') != 'AVAILABLE':
+            return ''
+        new = [s['name'] for s in cards.get('new_sets') or []]
+        grown = [s['name'] + ' (+' + str(s['added']) + ')' for s in cards.get('grown_sets') or []]
+        parts = []
+        if new:
+            parts.append(T('Nouvelles cartes : ') + ', '.join(new[:3]) + ('…' if len(new) > 3 else ''))
+        if grown:
+            parts.append(T('Cartes ajoutées : ') + ', '.join(grown[:3]) + ('…' if len(grown) > 3 else ''))
+        return J(' · ', parts)
+
+    def show_update_state(self):
+        from pokemind import app_update
+        program = self.update_info.get('app') or {}
+        cards = self.update_info.get('cards') or {}
+        available = program.get('status') == 'AVAILABLE'
+        status = {'CURRENT': T(' · à jour'), 'UNKNOWN': T(' · vérification impossible pour l’instant')}
+        self.app_update_status.setText(T('Version ', en='Version ') + __version__ + (
+            T(' · PokeMind ') + program['version'] + T(' est disponible') if available else status.get(program.get('status'), '')))
+        self.app_update_button.setEnabled(available and not self.update_busy)
+        self.app_update_button.setText(T('Mettre à jour') if app_update.installed_copy() else T('Voir la nouvelle version'))
+        installed = cards.get('installed') or {}
+        count = installed.get('printings')
+        head = T('Catalogue TCGdex') + (' · ' + str(count) + T(' cartes', en=' cards') if count else '')
+        news = self.cards_news()
+        if cards.get('status') == 'AVAILABLE':
+            text = head + ' · ' + (news if news else T('corrections disponibles'))
+        elif cards.get('status') == 'MISSING':
+            text = T('Pas encore sur ce PC : Réglages → Données → Catalogue de cartes.')
+        else:
+            text = head + status.get(cards.get('status'), '')
+        self.cards_update_status.setText(text)
+        self.cards_update_button.setEnabled(cards.get('status') == 'AVAILABLE' and not self.catalog_busy)
+        if (available or news) and not self.update_dismissed:
+            self.update_title.setText(T('Mise à jour disponible'))
+            self.update_detail.setText(J(' · ', ([T('PokeMind ') + program['version']] if available else [])
+                                         + ([news] if news else []))
+                                       + T(' — un clic suffit; tes données restent.'))
+            self.update_bar.hide()
+            self.update_now.show()
+            self.update_later.show()
+            self.update_banner.show()
+        elif not self.update_bar.isVisible():
+            self.update_banner.hide()
+
+    def dismiss_update(self):
+        self.update_dismissed = True
+        self.update_banner.hide()
+
+    def update_progress(self, title, done=None, total=None):
+        self.update_title.setText(title)
+        self.update_detail.setText(T('Tu peux continuer à utiliser PokeMind.'))
+        self.update_now.hide()
+        self.update_later.hide()
+        if total:
+            self.update_bar.setRange(0, total)
+            self.update_bar.setValue(min(done or 0, total))
+        else:
+            self.update_bar.setRange(0, 0)
+        self.update_bar.show()
+        self.update_banner.show()
+
+    def run_updates(self):
+        """The banner's button: the cards first (no restart), then PokeMind itself."""
+        program = self.update_info.get('app') or {}
+        if self.cards_news():
+            self.update_cards(then_app=program.get('status') == 'AVAILABLE')
+        elif program.get('status') == 'AVAILABLE':
+            self.update_app()
+
+    def update_cards(self, then_app=False):
+        from pokemind import catalog_update
+        if self.catalog_busy or self.resetting or self.archiving:
+            return
+        self.catalog_busy = True
+        self.catalog_cancel.clear()
+        self.cards_update_button.setEnabled(False)
+        self.update_progress(T('Mise à jour des cartes…'))
+        root, cancelled = self.root, self.catalog_cancel.is_set
+
+        def work(events):
+            return catalog_update.update(root, cancelled=cancelled,
+                                         progress=lambda phase, done, total: events.phase.emit((phase, done, total)))
+        self.submit(work, lambda receipt: self.cards_updated(receipt, then_app),
+                    error=lambda code: self.cards_updated({'status': 'STOPPED', 'error': code}, False),
+                    phase=self.cards_phase, detached=True)
+
+    def cards_phase(self, value):
+        phase, done, total = value
+        if phase == 'download':
+            self.update_progress(T('Téléchargement des nouvelles cartes… ') + '%.1f Mo' % (done / 1e6), done, total)
+        else:
+            self.update_progress(T('Installation des nouvelles cartes (environ une minute)…'))
+
+    def cards_updated(self, receipt, then_app):
+        self.catalog_busy = False
+        status = receipt.get('status')
+        self.update_bar.hide()
+        if status in ('UPDATED', 'READY_NEXT_LAUNCH', 'CURRENT'):
+            news = self.cards_news()
+            cards = dict(self.update_info.get('cards') or {}, status='CURRENT')
+            if receipt.get('printings'):
+                cards['installed'] = {'printings': receipt['printings'], 'commit': receipt.get('commit')}
+            self.update_info['cards'] = cards
+            text = (T('Les nouvelles cartes seront actives à la prochaine ouverture de PokeMind.') if status == 'READY_NEXT_LAUNCH'
+                    else T('Cartes à jour') + (' : ' + news if news else '.'))
+            self.statusBar().showMessage(text)
+            self.binder_loaded_once = False
+            if self.stack.currentIndex() == 3 and status == 'UPDATED':
+                self.browse_binder(0)
+            self.show_update_state()
+            if then_app:
+                self.update_app()
+            elif not self.update_banner.isHidden():
+                self.update_title.setText(text)
+                self.update_detail.setText('')
+                self.update_now.hide()
+                self.update_later.setText(T('Fermer'))
+                self.update_later.show()
+            return
+        message = self.update_message(receipt.get('error'))
+        self.statusBar().showMessage(message)
+        self.show_update_state()
+        QMessageBox.warning(self, 'PokeMind', T('Les cartes n’ont pas été mises à jour.') + '\n\n' + message)
+
+    def update_app(self):
+        """Installed copy: download, check and install, then PokeMind reopens. Other copies: the release page."""
+        from pokemind import app_update
+        program = self.update_info.get('app') or {}
+        if program.get('status') != 'AVAILABLE' or self.update_busy:
+            return
+        if not app_update.installed_copy():
+            QDesktopServices.openUrl(QUrl(program['page']))
+            return
+        self.update_busy = True
+        self.app_update_button.setEnabled(False)
+        self.update_progress(T('Téléchargement de PokeMind ') + program['version'] + '…', 0, 100)
+
+        def work(events):
+            return app_update.download(program, progress=lambda done, total: events.progress.emit(
+                int(100 * done / total) if total else 0, 100))
+        self.submit(work, self.app_downloaded, self.app_download_failed, detached=True,
+                    progress=lambda done, total: self.update_progress(
+                        T('Téléchargement de PokeMind ') + program['version'] + '… ' + str(done) + ' %', done, total))
+
+    def app_download_failed(self, code):
+        self.update_busy = False
+        self.update_bar.hide()
+        self.show_update_state()
+        QMessageBox.warning(self, 'PokeMind', T('La mise à jour de PokeMind n’a pas été faite.') + '\n\n'
+                            + self.update_message(code))
+
+    def app_downloaded(self, path):
+        from pokemind import app_update
+        self.update_busy = False
+        self.update_bar.hide()
+        version = (self.update_info.get('app') or {}).get('version', '')
+        if QMessageBox.question(self, T('Installer PokeMind ') + version + '?',
+                T('Le fichier est téléchargé et vérifié. PokeMind va se fermer, installer la mise à jour et se rouvrir '
+                  'tout seul (environ une minute). Tes données restent.'),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes) != QMessageBox.StandardButton.Yes:
+            self.show_update_state()
+            return
+        try:
+            app_update.start_installer(path)
+        except OSError:
+            diagnostics.get('desktop').exception('Installateur de mise à jour impossible à lancer')
+            QMessageBox.warning(self, 'PokeMind', T('L’installateur n’a pas pu être lancé. Rien n’a été changé.'))
+            self.show_update_state()
+            return
+        diagnostics.get('desktop').info('Mise à jour lancée · %s', version)
+        self.closing_terminals = True
+        self.data_cancel.set()
+        self.chat_cancel.set()
+        self.statusBar().showMessage(T('Mise à jour : PokeMind se ferme, s’installe puis se rouvre…'))
+        self.close()
+
     def relaunch(self):
         """Start PokeMind again once this window is closed; the new launch applies the reset first."""
         from pokemind.desktop.app import relaunch
@@ -2435,9 +2778,10 @@ class MainWindow(QMainWindow):
         title = T('TOI') if user else 'POKEMIND'
         content = message_html(str(message['content'])) if message['role'] == 'assistant' else rich(str(message['content'])).replace('\n','<br>')
         urls = () if user else tuple(html.unescape(url) for url in re.findall(r'<a href="(https://[^"]+)"', content))
-        background = '#a9233c' if user else c['surface']
-        foreground = '#ffffff' if user else c['text']
-        heading = '#ffffff' if user else c['accent']
+        background = c['primary'] if user else c['surface']
+        foreground = c['on_primary'] if user else c['text']
+        heading = c['on_primary'] if user else c['accent']
+        content = content.replace(TOOL_COLOR, 'color:' + c['muted'] + ';')  # tool lines follow the theme
         body = ('<p style="color:' + foreground + '; margin-top:2px;">' + content + '</p>' if user
                 else '<div style="color:' + foreground + ';">' + content + '</div>')
         bubble = ('<td width="88%" bgcolor="' + background + '" style="border:1px solid ' + c['border'] + '; color:'

@@ -7,6 +7,26 @@ All notable public changes to PokeMind are recorded here. The format follows
 This file is for people who use or read the project. The far more detailed internal log of the work lives
 in `.orchestrator/DECISIONS.md`, in French.
 
+## [0.9.3] — 2026-11-05
+
+### Added
+
+- **Updates**: when a newer PokeMind is published, or TCGdex has new cards (a new set such as Delta Reign,
+  or more cards in a recent set), a banner says so; **Update** installs the new cards without restarting,
+  then downloads the new installer, checks its SHA-256 and installs it; PokeMind closes and opens again,
+  your data stays. **Settings → Updates** shows the versions, checks now, and turns the check off. The
+  check runs at launch at most twice a day and sends nothing about you.
+- The first card catalogue now comes from the newest TCGdex version, and falls back to the tested one if
+  the newest cannot be imported. A card update keeps the previous catalogue once.
+
+### Changed
+
+- **New colours, BrainBall electric**: both themes now follow the PokeMind card — night and royal blue, electric
+  blue for actions and selection, gold for emphasis. Wins are blue, losses red, unknown results gold; red otherwise
+  only marks what erases. The light theme has a light menu and dock, every drawn icon follows the theme, and text
+  keeps WCAG AA contrast on its real background. The terminal stays dark in both themes.
+- The Settings tabs sit on two rows, so every name stays readable beside the coach.
+
 ## [0.9.2] — 2026-11-05
 
 ### Added

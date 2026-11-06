@@ -41,7 +41,7 @@ def test_conpty_output_is_drawn_without_the_keyboard_modes_pyte_misreads(app):
     green = next(x for x in range(40) if first[x].data == 'v')
     assert first[0].fg == 'red' and not any(first[x].underscore for x in range(20))
     assert first[green].fg == 'green' and view.title == 'Titre inventé'
-    assert sent == [ESC + ']11;rgb:1515/1a1a/2424' + ESC + '\\']  # PokeMind's dark panel, still read as dark
+    assert sent == [ESC + ']11;rgb:0808/1c1c/3e3e' + ESC + '\\']  # PokeMind's navy panel, still read as dark
     assert not view.grab().isNull()
 
 
