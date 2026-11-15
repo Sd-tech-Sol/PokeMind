@@ -2,6 +2,29 @@
 import re
 
 _PAIRS = r'''
+Avec « + mes statistiques anonymes » : statistiques de combats anonymisées, cartes vues et suivi des défaites, la partie collée ou choisie, et la liste de ton deck principal quand ta question parle de deck (tes autres decks aussi). Jamais de journal brut, de nom de joueur ni de chemin.|||With “+ my anonymous statistics”: anonymised battle statistics, cards seen and the loss follow-up, the pasted or chosen game, and the list of your main deck when your question is about a deck (your other decks too). Never a raw log, a player name or a path.
+Modifiable dans Réglages › Coach IA.|||Can be changed in Settings › AI coach.
+Ce que le coach reçoit : |||What the coach receives: 
+Liste illisible ou incomplète : {reason}. Colle l’export complet de TCG Live (60 cartes).|||Unreadable or incomplete list: {reason}. Paste the full TCG Live export (60 cards).
+☆ Deck principal|||☆ Main deck
+♛ Deck principal|||♛ Main deck
+Faire de ce deck mon deck principal|||Make this deck my main deck
+Le deck que tu joues le plus : en tête de la vue d’ensemble et connu du coach|||The deck you play most: first on the overview and known to the coach
+＋ Ajouter mon deck…|||＋ Add my deck…
+Coller la liste exportée de TCG Live|||Paste the list exported from TCG Live
+Deck principal : |||Main deck: 
+Ajouter mon deck|||Add my deck
+Nom du deck|||Deck name
+Ex. : Dragapult ex · ma version|||E.g. Dragapult ex · my version
+Dans TCG Live : Decks › ton deck › Exporter (la liste est copiée), puis colle-la ici.|||In TCG Live: Decks › your deck › Export (the list is copied), then paste it here.
+C’est mon deck principal|||This is my main deck
+Enregistrer|||Save
+Donne un nom à ton deck.|||Give your deck a name.
+La liste doit compter exactement 60 cartes (trouvé : {total}).|||The list must have exactly 60 cards (found: {total}).
+La liste enfreint une règle de construction : {problems}.|||The list breaks a deck-building rule: {problems}.
+Liste refusée ({code}).|||List refused ({code}).
+Mon deck · référence personnelle entrée par moi|||My deck · personal reference I entered
+Mon deck · référence personnelle|||My deck · personal reference
 TON COMPAGNON TCG|||YOUR TCG COMPANION
 TON COACH POKEMIND|||YOUR POKEMIND COACH
 TON AVENTURE, EN MÉMOIRE|||YOUR JOURNEY, REMEMBERED
@@ -232,9 +255,14 @@ défaites. Taux global inconnu.|||losses. Overall rate unknown.
 validation locale en cours. Aucun envoi au moteur IA.|||local validation in progress. Nothing sent to the AI engine.
 Analyse locale en cours; ton message partira tout seul dès qu’elle sera finie.|||Local analysis in progress; your message will be sent as soon as it ends.
 Outils PokeMind · consultation|||PokeMind tools · lookup
-Quel deck m’a affronté dans cette partie? Identifie l’archétype adverse, reconstruis sa liste de 60 cartes (cartes vues d’abord, le reste d’après les listes publiques), donne-lui un nom et enregistre-le dans mes decks.|||Which deck did I face in this game? Identify the opponent's archetype, rebuild its 60-card list (seen cards first, the rest from public lists), give it a name and save it in my decks.
-Le coach identifie maintenant le deck adverse et l’ajoute à Mes decks…|||The coach is now identifying the opponent's deck and adding it to My decks…
-Pour que le coach trouve le deck adverse, coche l’envoi cloud et « Ajouter statistiques… » dans Réglages.|||For the coach to find the opponent's deck, tick cloud sending and “Add statistics…” in Settings.
+J’ai perdu cette partie. Identifie la famille adverse d’après les cartes vues, situe-la dans mon suivi des défaites (bilan, n, incertitude), puis dis-moi ce qui a pu jouer contre moi et comment préparer ce matchup.|||I lost this game. Identify the opponent's family from the cards seen, place it in my loss follow-up (record, n, uncertainty), then tell me what may have worked against me and how to prepare for this matchup.
+J’ai gagné cette partie. Fais un bref bilan de ce qui a fonctionné; elle compte dans mes statistiques.|||I won this game. Give a short review of what worked; it counts in my statistics.
+Défaite ajoutée au suivi des matchups difficiles; aucun deck enregistré.|||Loss added to the difficult matchups follow-up; no deck saved.
+Le coach analyse maintenant la famille adverse…|||The coach is now analysing the opponent's family…
+Victoire comptée dans tes statistiques; aucun deck adverse enregistré.|||Win counted in your statistics; no opponent deck saved.
+Résultat inconnu : partie comptée, aucun suivi créé ni deck enregistré.|||Unknown result: game counted, no follow-up created and no deck saved.
+Pour que le coach analyse cette partie : Réglages › Coach IA, coche l’envoi cloud et choisis « + mes statistiques anonymes ».|||For the coach to analyse this game: Settings › AI coach, tick cloud sending and choose “+ my anonymous statistics”.
+Deck adverse reconstruit · référence personnelle, ancien enregistrement du coach|||Rebuilt opponent deck · personal reference, older coach save
 Deck ajouté à Mes decks :|||Deck added to My decks:
 Codex et Claude Code tels quels, comme dans une fenêtre PowerShell, dans le dossier du projet. Plusieurs onglets possibles.|||Codex and Claude Code as they are, like in a PowerShell window, in the project folder. Several tabs allowed.
 Accès complet : Codex (yolo) et Claude (toutes permissions) lisent et modifient tous les fichiers du projet, y compris data/local, sans demander d’approbation. Ctrl+V colle · Ctrl+C copie la sélection (sinon interrompt) · clic droit copie ou colle · Maj+Pg↑ remonte.|||Full access: Codex (yolo) and Claude (all permissions) read and modify every project file, including data/local, without asking for approval. Ctrl+V pastes · Ctrl+C copies the selection (otherwise interrupts) · right-click copies or pastes · Shift+PgUp scrolls back.

@@ -261,10 +261,15 @@ def ingest(root, text, *, report=None, cancelled=None, notify=lambda value: None
             current = result.get('report') or {}
             identities = match_index(root)
             found = next((m for m in current.get('matches', []) if m.get('match') == identities.get(identity)), None)
+            opponent_deck = None
+            if not duplicate and found is not None and not (cancelled and cancelled()):
+                from pokemind.desktop.services import Services
+                opponent_deck = Services(root).save_public_opponent(found, cancelled=cancelled)
             return {'status': 'DUPLICATE' if duplicate else 'SAVED', 'new_unique': int(not duplicate and found is not None),
                 'stats_updated': bool(current), 'outcome': parsed.outcome, 'opponent': parsed.opponent_name,
                 'match': found, 'result': result if current else None, 'semantic_identity': identity,
                 'local_match_index': identities,
+                'opponent_deck': opponent_deck,
                 'reasons': [] if current else ['Partie historique reconnue; aucun rapport analytique disponible pour cette entrée.']}
 
 

@@ -81,6 +81,17 @@ def test_the_stylesheet_takes_every_colour_from_the_theme(name):
     assert (Path(theme.tempfile.gettempdir()) / theme.ARROWS / chevron.split(':', 1)[1]).is_file()
 
 
+@pytest.mark.parametrize('name', THEMES)
+def test_drop_down_choices_are_drawn_by_the_theme_in_every_state(name):
+    """0.9.5 reception: the native Windows 11 style drew the highlighted choice white on pale blue (light theme)."""
+    css, c = stylesheet(name), colors(name)
+    for state, fg, bg in (('', 'text', 'surface'), (':hover', 'text', 'hover'), (':selected', 'selection_text', 'selection')):
+        rule = re.search(r'QComboBox QAbstractItemView::item' + re.escape(state) + r' \{([^}]*)\}', css).group(1)
+        assert 'color:' + c[fg] in rule and 'background:' + c[bg] in rule
+        assert contrast(c[fg], c[bg]) >= TEXT, state
+    assert re.search(r'QLabel#settingHint \{[^}]*font-size:13px', css)
+
+
 def test_both_themes_share_the_result_meaning():
     for name in THEMES:  # wins blue, losses red, unknown gold; charts also label them in words
         c = colors(name)

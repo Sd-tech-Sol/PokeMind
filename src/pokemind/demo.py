@@ -105,9 +105,28 @@ def run_demo(root: Path):
               "real_ocr_executed": False, "scheduler_contacted": False, "steps": [], "checkpoints": []}
     with tempfile.TemporaryDirectory(prefix="i-demo-", dir=base) as directory:
         workspace = Path(directory)
-        db = workspace / "synthetic.sqlite3"
+
+        def confined(*parts):
+            path = workspace.joinpath(*parts)
+            _require(path.absolute().is_relative_to(workspace.absolute()), "DEMO_OUTPUT_OUTSIDE_WORKSPACE")
+            if any(_redirected(p) for p in (path, *path.parents)):
+                raise ValueError("DEMO_DIRECTORY_UNSAFE")
+            _require(path.resolve().is_relative_to(workspace.resolve()), "DEMO_OUTPUT_OUTSIDE_WORKSPACE")
+            return path
+
+        db = confined("synthetic.sqlite3")
+        local = confined("data/local")
+        local.mkdir(parents=True, exist_ok=True)
+        # --db alone does not select the CLI's export directories. Override the
+        # inherited active root before ANY child can consult its profile pointer.
+        environment.update(POKEMIND_DATA_ROOT=str(workspace), POKEMIND_TEST_OFFLINE="1")
 
         def run(*args):
+            # Refuse redirected DB/output directories before a CLI operation,
+            # including the candidate dry-run. Never rely on a post-write check.
+            confined("synthetic.sqlite3")
+            for folder in ("decks", "decks/import_ready", "decks/drafts"):
+                confined("data/local", folder)
             database_args = [] if args[:2] in {
                 ("knowledge", "scheduler"), ("knowledge", "cadence"),
             } else ["--db", str(db)]
@@ -153,7 +172,7 @@ def run_demo(root: Path):
                                   for lang, row in shown.items()}
         report["catalogue_scope"] = "SYNTHETIC_FIXTURE_ONLY; Live/reprints/legality unknown"
         report["checkpoints"].append("bilingual_search_and_show")
-        deck_file = workspace / "deck.txt"
+        deck_file = confined("data/local/deck.txt")
         for second in (False, True):
             deck_file.write_text(_deck(second), encoding="utf-8")
             deck = run("deck", "import", str(deck_file), "--deck", "synthetic")
@@ -176,7 +195,7 @@ def run_demo(root: Path):
                     f"SyntheticA played Synthetic Creature {index} to the Active Spot.\n"
                     "Turn # 1 - SyntheticA's Turn\nSyntheticA drew Synthetic Support.\n"
                     "Turn # 1 - SyntheticB's Turn\nSyntheticB played Synthetic Rival.\n" + ending)
-            log = workspace / "battle.txt"
+            log = confined("data/local/battle.txt")
             log.write_text(text, encoding="utf-8")
             first = run("log", "import", str(log), "--deck", "synthetic")
             again = run("log", "import", str(log), "--deck", "synthetic")
@@ -224,7 +243,7 @@ def run_demo(root: Path):
         report["battle_links"] = {"automatic": 0, "confirmed": 1, "repeat_active_count": 1,
                                   "revoked": 1, "active_after_revocation": 0, "previews_read_only": True}
         report["checkpoints"].append("explicit_link_repeat_revoke")
-        changes = workspace / "changes.json"
+        changes = confined("data/local/changes.json")
         changes.write_text(json.dumps({"schema_version": 1, "name": "Synthetic alternative",
             "base_deck": {"deck_id": "synthetic", "version": 2},
             "context": {"format": "standard", "platform": "live", "as_of": today},
@@ -253,7 +272,7 @@ def run_demo(root: Path):
         # verdicts. Even the URLs and verified flags below are test data only.
         deck_file.write_text("Pokémon: 1\n4 Twin Name SYN 1\nTrainer: 1\n4 Coach Unit SYN 2\nEnergy: 1\n52 Test Energy SYN 3\nTotal Cards: 60\n", encoding="utf-8")
         run("deck", "import", str(deck_file), "--deck", "tri-state")
-        registry = workspace / "synthetic-rules.json"
+        registry = confined("data/local/synthetic-rules.json")
         verdicts = []
         for restricted, verified, expected in ((False, True, "legal"), (True, True, "not_legal"), (True, False, "unknown")):
             registry.write_text(json.dumps(_rules_fixture(restricted=restricted, verified=verified)), encoding="utf-8")
@@ -267,10 +286,10 @@ def run_demo(root: Path):
                                       "unverified_source": "unknown", "expired_source": "unknown"}
         report["checkpoints"].append("synthetic_tristate_expiration")
         session = run("match", "start", "--as-of", today, "--apply", "--confirm-owner")["session_id"]
-        image = workspace / "turn.png"
+        image = confined("data/local/turn.png")
         image.write_bytes(raster_text("SYNTHETIC BOARD"))
         for turn in (1, 2, 3):
-            annotation = workspace / "annotation.json"
+            annotation = confined("data/local/annotation.json")
             annotation.write_text(json.dumps({"turn": turn, "phase": "main", "turn_owner": "self",
                 "unknown_fields": ["Synthetic board; active and hidden prizes unknown"],
                 "available_actions": [{"description": "Confirmer les informations visibles avant de choisir", "contradicted": False}]}), encoding="utf-8")

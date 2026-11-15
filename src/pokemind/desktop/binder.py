@@ -1,14 +1,14 @@
 """A card binder drawn in code: a cover that opens onto sleeved pages, one or two at a time."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QRect, QRectF, QPropertyAnimation, QEasingCurve, QSize
+from PySide6.QtCore import Qt, Signal, QPointF, QRect, QRectF, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout
 
 from pokemind.desktop.i18n import QFrame, QLabel, QPushButton, QWidget, T
-from pokemind.desktop.theme import OBJECTS, logo_pixmap
+from pokemind.desktop.theme import OBJECTS, card_pixmap
 
-# A legend for cards without art, echoing the logo's red and blue cards and its gold: the same in both themes,
+# A legend for cards without art, in the brand red, blue and gold: the same in both themes,
 # since the binder pages stay navy (theme.OBJECTS).
 CATEGORY_COLORS = {'pokemon': ('#e3364b', '#7a1f2c'), 'trainer': ('#4f7fe0', '#253f7a'),
                    'energy': ('#e9bd4a', '#7a5f1c')}
@@ -106,7 +106,7 @@ class BinderSlot(QWidget):
 
 
 class BinderCover(QWidget):
-    """The closed binder: royal blue cover, gold border and the logo; it slides open once."""
+    """The closed binder: royal blue cover, gold border and the PokeMind card; it slides open once."""
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -120,16 +120,11 @@ class BinderCover(QWidget):
         p.setPen(QPen(QColor(OBJECTS['gold_line']), 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(bounds.adjusted(10, 10, -10, -10), 10, 10)
-        side = int(min(bounds.width(), bounds.height()) * 0.32)
-        if side > 24:
-            p.drawPixmap(int(bounds.center().x() - side / 2), int(bounds.center().y() - side * 0.75), logo_pixmap(side))
-        p.setPen(QColor('#ffe9a8'))
-        font = p.font()
-        font.setPointSize(16)
-        font.setBold(True)
-        p.setFont(font)
-        p.drawText(QRect(0, int(bounds.center().y() + side * 0.35), self.width(), 40),
-                   int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop), 'PokeMind')
+        height = int(min(bounds.height() * 0.62, bounds.width() * 0.5 * 742 / 530))  # the card already says PokeMind
+        if height > 32:
+            picture = card_pixmap(height, self.devicePixelRatioF())
+            width = picture.width() / picture.devicePixelRatio()
+            p.drawPixmap(QPointF(bounds.center().x() - width / 2, bounds.center().y() - height / 2), picture)
         p.end()
 
 

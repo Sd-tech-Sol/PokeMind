@@ -112,3 +112,24 @@ def test_services_show_the_chosen_season_and_tell_the_coach_both(local_tmp, monk
     assert context['seasons']['all_seasons']['games'] == 6 and 'key' not in context['season_shown']
     assert 'Saison : Delta Reign' in services.local_answer('mes statistiques')
     json.dumps(context, ensure_ascii=False)
+
+
+def test_pasted_logs_count_in_the_current_season_of_the_overview(local_tmp, monkeypatch):
+    # Owner, 2026-11-06 (D-288): logs pasted during Delta Reign showed 0 games. The displayed report hides file
+    # names, so each game carries the day its log was added (`added_on`) and the season view counts it.
+    from datetime import date
+    from pokemind.desktop import ingestion
+    from test_desktop_ingestion import text
+    monkeypatch.setattr(seasons, 'OFFICIAL', ({'start': '2026-01-01', 'name': 'Saison inventée'},))
+    ingestion.ingest(local_tmp, text())
+    pasted = ingestion.ingest(local_tmp, text('InventedSelf'))
+    today = date.today().isoformat()
+    report = pasted['result']['report']
+    assert [m['added_on'] for m in report['matches']] == [today, today]
+    assert all('source_relative' not in m for m in report['matches'])        # file names stay hidden
+    services = Services(local_tmp)
+    services.load()
+    assert services.report['coverage']['valid'] == 2 and services.report['outcomes'] == {'wins': 1, 'losses': 1, 'unknown': 0}
+    assert services.report['season']['name'] == 'Saison inventée' and services.report['season']['games'] == 2
+    assert services.set_season(seasons.BEFORE)['coverage']['valid'] == 0     # not in the period before it
+    assert services.season_summary()['all_seasons']['games'] == 2

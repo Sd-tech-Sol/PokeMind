@@ -2,16 +2,16 @@
 from __future__ import annotations
 from pokemind.desktop.i18n import T, J, display
 
-from PySide6.QtCore import (Qt, Signal, QTimer, QElapsedTimer, QSize, QRectF, QRect,
+from PySide6.QtCore import (Qt, Signal, QTimer, QElapsedTimer, QSize, QRectF, QRect, QEvent,
                            Property, QPropertyAnimation, QEasingCurve)
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QIcon, QPalette
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QIcon, QPalette, QAbstractTextDocumentLayout, QTextTable
 from PySide6.QtWidgets import (QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QLabel,
     QProgressBar, QFrame, QPushButton, QScrollArea, QGridLayout, QDialog, QSizePolicy,
     QCheckBox, QStyle, QStyleOptionButton, QStylePainter, QStyledItemDelegate, QStyleOptionViewItem,
     QApplication)
 from pokemind.desktop.theme import BRAND, colors, theme_of
 from pokemind.desktop.card_art import CardArt, ZoomImage
-from pokemind.desktop.i18n import QWidget, QTextEdit, QLabel, QFrame, QPushButton, QDialog, QCheckBox, Painter as QPainter
+from pokemind.desktop.i18n import QWidget, QTextEdit, QTextBrowser, QLabel, QFrame, QPushButton, QDialog, QCheckBox, Painter as QPainter
 
 
 class WrapCheckBox(QCheckBox):
@@ -165,6 +165,59 @@ class Spinner(QWidget):
         p.setBrush(QColor(BRAND['bleu_electrique']))
         p.drawEllipse(QRectF(9.5, 9.5, 5, 5))
         p.end()
+
+
+class RoundedTranscript(QTextBrowser):
+    """Native rounded backgrounds behind the existing selectable rich-text document.
+
+    QTextBrowser keeps keyboard/copy, hit testing, safe links, translation and scrolling. Only
+    painting changes: transparent message tables lay out text; QPainter supplies real 12px curves.
+    https://doc.qt.io/qt-6/qabstracttextdocumentlayout.html (draw / PaintContext / frameBoundingRect)
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.bubble_roles = []
+        self.chat_theme = 'dark'
+        self.setOpenLinks(False)
+        self.setOpenExternalLinks(False)
+
+    def bubble_rects(self):
+        layout = self.document().documentLayout()
+        frames = [f for f in self.document().rootFrame().childFrames() if isinstance(f, QTextTable)]
+        result = []
+        for frame, role in zip(frames, self.bubble_roles):
+            rect = layout.frameBoundingRect(frame)
+            if role == 'user':
+                rect.setLeft(rect.left() + rect.width() * .12)
+            else:
+                rect.setRight(rect.left() + rect.width() * .88)
+            result.append((role, rect.adjusted(.5, .5, -.5, -.5)))
+        return result
+
+    def paintEvent(self, event):
+        # Read-only, so the document has selections but no blinking insertion caret.
+        c = colors(self.chat_theme)
+        painter = QPainter(self.viewport())
+        painter.setClipRect(event.rect())
+        painter.fillRect(event.rect(), QColor(c['input']))
+        painter.translate(-self.horizontalScrollBar().value(), -self.verticalScrollBar().value())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for role, rect in self.bubble_rects():
+            painter.setPen(QPen(QColor(c['border']), 1))
+            painter.setBrush(QColor(c['alternate'] if role == 'user' else c['surface']))
+            painter.drawRoundedRect(rect, 12, 12)
+        context = QAbstractTextDocumentLayout.PaintContext()
+        context.palette = self.palette()
+        context.clip = QRectF(event.rect()).translated(self.horizontalScrollBar().value(), self.verticalScrollBar().value())
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            selection = QAbstractTextDocumentLayout.Selection()
+            selection.cursor = cursor
+            selection.format.setBackground(self.palette().brush(QPalette.ColorRole.Highlight))
+            selection.format.setForeground(self.palette().brush(QPalette.ColorRole.HighlightedText))
+            context.selections = [selection]
+        self.document().documentLayout().draw(painter, context)
+        painter.end()
 
 
 class Activity(QFrame):
@@ -411,19 +464,31 @@ class CorpusChart(QWidget):
 
 class CardTile(QFrame):
     activated = Signal(object)
+    selected = Signal(object)
 
-    def __init__(self, card):
+    def __init__(self, card, *, gallery=False):
         super().__init__()
         self.card, self.picture, self.provenance = card, QPixmap(), ''
+        self.gallery = gallery
         self.setObjectName('card')
-        self.setMinimumWidth(160)
-        self.setMaximumWidth(220)
+        self.setProperty('galleryTile', gallery)
+        self.setProperty('selected', False)
+        self.setMinimumWidth(0 if gallery else 160)
+        self.setMaximumWidth(320 if gallery else 220)
         layout = QVBoxLayout(self)
+        if gallery:
+            layout.setContentsMargins(10, 12, 10, 12)
+            layout.setSpacing(8)
         category = {'pokemon': 'POKÉMON', 'trainer': T('DRESSEUR'), 'energy': T('ÉNERGIE')}.get(card['category'], '')
         label = QLabel(str(card['quantity']) + ' ×  ' + category)
         label.setProperty('cardType', card['category'])
         layout.addWidget(label)
         self.art = CardArt('◇\n' + card['name'] + T('\nImage indisponible'))
+        self.art.setProperty('galleryArt', gallery)
+        if gallery:
+            self.art.animation.setDuration(220)
+            self.art.animation.valueChanged.connect(lambda _: self.update())
+            self.art.installEventFilter(self)
         self.art.setMinimumHeight(230)
         self.art.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.art.setAccessibleName(T('Agrandir ') + card['name'])
@@ -431,10 +496,62 @@ class CardTile(QFrame):
         layout.addWidget(self.art)
         self.name_label = QLabel(card['name'])
         self.name_label.setWordWrap(True)
+        if gallery:
+            self.name_label.setObjectName('galleryCardName')
         layout.addWidget(self.name_label)
         self.stamp_label = QLabel(card.get('printing', T('Impression inconnue')))
         self.stamp_label.setObjectName('muted')
+        self.stamp_label.setWordWrap(gallery)
         layout.addWidget(self.stamp_label)
+
+    def set_selected(self, selected):
+        self.setProperty('selected', selected)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def eventFilter(self, watched, event):
+        if watched is self.art and event.type() == QEvent.Type.FocusIn:
+            self.selected.emit(self)
+        return super().eventFilter(watched, event)
+
+    def fit_height(self):
+        if self.gallery:
+            margins = self.layout().contentsMargins()
+            width = self.contentsRect().width() - margins.left() - margins.right() - 14
+            # Reserve a normal card's aspect ratio, including CardArt's safe inset.
+            # The painter still fits each actual image with KeepAspectRatio.
+            height = round(max(1, width) * 1.4) + 16
+            if self.art.height() != height:
+                self.art.setFixedHeight(height)
+            # Nested grid layouts can compress a word-wrapped label against the
+            # fixed-height artwork. Reserve its actual height at this width/font.
+            height = max(0, self.layout().totalHeightForWidth(self.width()))
+            if self.minimumHeight() != height:
+                self.setMinimumHeight(height)
+
+    def event(self, event):
+        if event.type() == QEvent.Type.LayoutRequest:
+            self.fit_height()
+        return super().event(event)
+
+    def resizeEvent(self, event):
+        self.fit_height()
+        super().resizeEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        # The existing artwork animation drives the tile's outline too: no second
+        # animation, graphics effect, snapshot or geometry change per card.
+        if self.gallery and self.art.hover and not self.property('selected'):
+            p = QPainter(self)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            tint = QColor(colors(theme_of(self.palette()))['blue'])
+            tint.setAlpha(round(210 * self.art.hover))
+            p.setPen(QPen(tint, 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 12, 12)
+            p.end()
 
     def reset(self, card):
         self.card, self.picture, self.provenance = card, QPixmap(), ''
@@ -478,9 +595,13 @@ class CardTile(QFrame):
 class DeckGallery(QScrollArea):
     def __init__(self):
         super().__init__()
+        self.setObjectName('deckGallery')
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setWidgetResizable(True)
         self.tiles, self.grids, self.generation = [], [], 0
         self.motion_enabled = True
+        self._columns, self.selected_tile = 0, None
+        self._tile_width = 0
 
     def set_motion_enabled(self, enabled):
         self.motion_enabled = enabled
@@ -489,16 +610,26 @@ class DeckGallery(QScrollArea):
 
     def populate(self, cards):
         self.generation += 1
+        self.selected_tile, self._columns = None, 0
         self.tiles, self.grids = [], []
         body = QWidget()
         layout = QVBoxLayout(body)
+        layout.setContentsMargins(16, 20, 16, 20)
+        layout.setSpacing(16)
         for category, title in (('pokemon','Pokémon'), ('trainer',T('Dresseurs')), ('energy',T('Énergies'))):
             group = [c for c in cards if c['category'] == category]
-            layout.addWidget(QLabel(title + ' · ' + str(sum(c['quantity'] for c in group)) + T(' cartes')))
+            heading = QLabel(title + ' · ' + str(sum(c['quantity'] for c in group)) + T(' cartes'))
+            heading.setObjectName('gallerySection')
+            heading.setWordWrap(True)
+            layout.addWidget(heading)
             grid = QGridLayout()
-            tiles = [CardTile(c) for c in group]
+            grid.setSpacing(16)
+            grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            tiles = [CardTile(c, gallery=True) for c in group]
             for tile in tiles:
                 tile.art.set_motion_enabled(self.motion_enabled)
+                tile.selected.connect(self.select_tile)
+                tile.activated.connect(self.select_tile)
                 tile.activated.connect(lambda value: value.enlarge())
             self.grids.append((grid, tiles))
             self.tiles.extend(tiles)
@@ -507,13 +638,34 @@ class DeckGallery(QScrollArea):
         self.setWidget(body)
         self.reflow()
 
+    def select_tile(self, tile):
+        if self.selected_tile is tile:
+            return
+        if self.selected_tile is not None:
+            self.selected_tile.set_selected(False)
+        self.selected_tile = tile
+        tile.set_selected(True)
+
     def reflow(self):
-        columns = max(1, self.viewport().width() // 210)
+        available = max(1, self.viewport().width() - 32)
+        # MainWindow's menu and Coach leave less room than the reference study.
+        # Three columns require 250 px per sleeve; two can fall back to 190 px.
+        columns = 3 if available >= 3 * 250 + 32 else 2 if available >= 2 * 190 + 16 else 1
+        tile_width = min(320, max(1, (available - (columns - 1) * 16) // columns))
+        if (columns, tile_width) == (self._columns, self._tile_width):
+            return
         for grid, tiles in self.grids:
             while grid.count():
                 grid.takeAt(0)
+            # Clear obsolete columns when narrowing, so a short group starts at
+            # the same left edge as a full row rather than floating in its centre.
+            for column in range(max(self._columns, columns)):
+                grid.setColumnStretch(column, 0)
+                grid.setColumnMinimumWidth(column, tile_width if column < columns else 0)
             for index, tile in enumerate(tiles):
+                tile.setFixedWidth(tile_width)
                 grid.addWidget(tile, index//columns, index%columns)
+        self._columns, self._tile_width = columns, tile_width
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

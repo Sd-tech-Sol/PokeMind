@@ -1,23 +1,43 @@
 # Identité PokeMind — BrainBall électrique
 
-Demande propriétaire du 2026-11-05 : refondre **les deux thèmes** de l'application PySide6/Qt en conservant toutes les fonctionnalités. La **carte verticale originale PokeMind / TCG Coach** est l'inspiration prioritaire : cerveau-Pokéball rose/rouge, vortex **bleu royal/électrique**, rayons cyan, blanc nacré, or. Le **troisième fond d'écran panoramique** est préféré comme fond d'écran seulement : il ne doit pas rendre l'interface violette ou transformer les panneaux en fonds illustrés.
+## Sources approuvées par le propriétaire
 
-## Fichiers
+**Référence graphique de marque (PRIORITAIRE, 2026-11-06)** :
+[`assets/branding/pokemind-tcg-coach-original.png`](../../../assets/branding/pokemind-tcg-coach-original.png).
 
-- [`palette.json`](palette.json) : **source de vérité** des valeurs HEX foncé/clair et des couleurs de marque.
-- [`palette-preview.svg`](palette-preview.svg) : vue compacte des deux thèmes, basée sur les tokens ci-dessus. Illustration de palette, pas capture d'EXE.
-- [`.orchestrator/NEXT_PROMPT.md`](../../../.orchestrator/NEXT_PROMPT.md) : mandat exécutable par Claude Code. `.orchestrator/NEXT_ACTION.md` lui donne priorité.
+- Fichier **PNG d'origine identique à celui fourni**, non redessiné, non recompressé : **1060 × 1484 px**, **3 086 685 octets**, format RGBA.
+- SHA-256 des octets : `30824d84f594be0e1fe33b3e9531f487e497252e17d7a16ff57763b787d7f0f5`
+- Git blob SHA : `18abf6bccaecba8553556fbdbeeb8d980ff4eb45`
+- Dessin : carte verticale bordée d'or et de bleu nuit, **« PokeMind »** en haut, **Pokéball-cerveau** au centre, **« TCG Coach »** en bas, tourbillons bleu électrique et cyan.
+- Ne pas recréer ce dessin avec QPainter, SVG redessiné, IA générative, illustration approximative ou autre image. L'original est la source permanente. Des versions **dérivées par redimensionnement/encadrement uniquement** sont permises pour les icônes multi-résolutions. Respecter les proportions et éviter de couper les textes/bordures pour la version complète.
+- L'ancien logo dessiné (deux petites cartes, cerveau sur la carte rouge) est **obsolète** et doit être remplacé aux endroits de marque. Il ne faut **pas** remplacer les cartes officielles du jeu/du classeur par cette image de marque.
 
-## Direction graphique
+**Référence de couleurs** : `palette.json` (thèmes foncé et clair); `palette-preview.svg` (aperçu). Le troisième fond d'écran panoramique est une référence d'ambiance **secondaire seulement**, pas un asset à mettre derrière les panneaux de PokeMind.
 
-- **Foncé** : fond bleu nuit, panneaux bleu profond, champs bleu marine, texte blanc bleuté. Actions et sélection **bleu électrique**, emphase **or**, reflets cyan, défaite/erreur en rouge seulement.
-- **Clair** : fond blanc bleuté, cartes blanches, menu bleu pâle, actions bleu royal foncé, accents vifs réservés aux zones décoratives. Ne pas utiliser du cyan clair comme petit texte sur blanc.
-- **Bandeau `À toi de jouer`** : dégradé bleu royal → bleu électrique, lettres blanches, détails or. Pas de bandeau rouge générique.
-- **Graphiques** : victoire=bleu, défaite=rouge, inconnu=or, neutre=bleu gris; ne pas coder l'information par couleur seulement.
-- **Couverture** : menu, pages d'accueil, KPI, statistiques, Deck Lab, bibliothèque/classeur, recherche, chat/dock, historique, Réglages, terminal, boîtes, boutons, onglets, chargements, infobulles, scrollbars et états disabled/focus/hover.
-- **Lisibilité** : contraste WCAG AA pour texte normal ≥4.5:1 et grand texte/éléments essentiels ≥3:1 sur fonds réels. Documenter tout ajustement d'une couleur.
-- **Architecture** : réutiliser `src/pokemind/desktop/theme.py` : `PALETTES`, `colors()`, `palette()`, `stylesheet()`. Éliminer les valeurs visuelles codées en dur là où elles contredisent le thème; ne pas toucher à la logique, aux données, au logo, aux dépendances ni à la publication publique.
+## Usage prévu
 
-Les images originales du propriétaire ont été fournies dans la conversation ChatGPT, mais **les fichiers binaires de la carte et du fond d'écran ne sont pas nécessaires pour appliquer les couleurs** : la spécification HEX est autonome. Ne pas remplacer le logo déjà intégré à PokeMind.
+- Icône de fenêtre et barre des tâches, EXE Windows, raccourci bureau/menu Démarrer, iconographie installateur, écran d'accueil, bandeau « À toi de jouer », sections « À propos » et toute autre occurrence du **logo de marque**.
+- Pour les petites résolutions (16–32 px), la carte entière ne rend pas le texte lisible : conserver le lien visuel à **la même image originale** en gardant les proportions et une silhouette reconnaissable. Si une déclinaison recadrée est nécessaire pour la lisibilité, elle doit être extraite exclusivement des pixels de l'original et l'original complet doit rester disponible et utilisé là où l'espace le permet.
+- Les fichiers dérivés doivent être reproductibles depuis le PNG source, embarqués dans la compilation Windows sans dépendre du dépôt ou du réseau pour fonctionner.
+- Ne pas changer l'architecture des deux thèmes : foncé bleu nuit et clair bleu pâle, actions bleues, or pour l'accent, rouge pour les erreurs/défaites/destructif.
 
-**Dépôt de développement privé** : `Sd-tech-Sol/PokeMind-dev`, branche `work/pm-v1-lotj-final-readiness-windows`. **Dépôt public** `Sd-tech-Sol/PokeMind` : aucune écriture et aucune release sans nouveau GO.
+## Dérivés générés (PM-UI-BRAINBALL-BRANDING-002)
+
+`python scripts/make_icon.py --card` vérifie le SHA-256 de l'original, rend transparent **uniquement** le blanc de
+page à l'extérieur des quatre coins arrondis (remplissage depuis chaque coin, limité à un carré de 96 px), puis
+réduit l'image de moitié exactement (1060×1484 → 530×742, mêmes proportions) :
+`src/pokemind/desktop/branding/pokemind-card.png`, embarqué dans l'EXE et l'installateur. Tout le reste en est
+mis à l'échelle sans étirement : `theme.card_pixmap` (carte entière), `theme.logo_pixmap` (carte entière centrée
+dans un carré transparent), `.ico` de 16 à 256 px, images de l'installateur et `docs/assets/pokemind-logo.png`.
+L'original n'est jamais modifié. Aucune recoupe : même à 16 px, c'est la silhouette de la carte entière.
+
+## Fichiers et mandat
+
+- [`palette.json`](palette.json) : couleurs validées pour les deux thèmes.
+- [`palette-preview.svg`](palette-preview.svg) : aperçu des couleurs seulement.
+- [`.orchestrator/NEXT_PROMPT.md`](../../../.orchestrator/NEXT_PROMPT.md) : mandat courant de remplacement des assets, qui remplace l'ancien mandat de couleurs déjà terminé.
+- [`.orchestrator/NEXT_ACTION.md`](../../../.orchestrator/NEXT_ACTION.md) : désigne le mandat actif.
+
+## Sécurité et diffusion
+
+Dépôt **privé** `Sd-tech-Sol/PokeMind-dev`, branche `work/pm-v1-lotj-final-readiness-windows`. Aucun changement ni aucune publication du dépôt **public** `Sd-tech-Sol/PokeMind` sans GO distinct du propriétaire. Tests avec fixtures synthétiques; aucune inspection ni mutation des données privées.

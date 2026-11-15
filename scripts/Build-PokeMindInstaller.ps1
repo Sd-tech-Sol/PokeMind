@@ -37,9 +37,22 @@ $version = (& $interpreter -c "import sys; sys.path.insert(0, 'src'); import pok
 $work = Join-Path $projectRoot 'build/installer'
 New-Item -ItemType Directory -Force -Path $work, $output | Out-Null
 $icon = Join-Path $work 'pokemind.ico'
-$small = Join-Path $work 'wizard-small.bmp'
 & $interpreter scripts/make_icon.py $icon | Out-Null
-& $interpreter scripts/make_icon.py $small --size 110 | Out-Null
+if ($LASTEXITCODE) { throw 'Icône PokeMind impossible.' }
+# The PokeMind card in the wizard: one bitmap per display scale (100 to 250 %), each the exact size of its area,
+# so Inno Setup never distorts it. Small: header corner, on white. Large: welcome/finish pages, on the dark theme.
+$small, $large = @(), @()
+foreach ($scale in @(100, 125, 150, 175, 200, 250)) {
+    $side = [int][math]::Round(58 * $scale / 100)
+    $width, $height = [int][math]::Round(164 * $scale / 100), [int][math]::Round(314 * $scale / 100)
+    $small += Join-Path $work "wizard-small-$scale.bmp"
+    $large += Join-Path $work "wizard-large-$scale.bmp"
+    & $interpreter scripts/make_icon.py $small[-1] --size $side | Out-Null
+    if ($LASTEXITCODE) { throw 'Image de l''installateur impossible.' }
+    & $interpreter scripts/make_icon.py $large[-1] --size $width --height $height --background '#07142F' | Out-Null
+    if ($LASTEXITCODE) { throw 'Image de l''installateur impossible.' }
+}
+$small, $large = ($small -join ','), ($large -join ',')
 $signing = @()
 if ($SignArguments.Count) {
     $signtool = Get-ChildItem -LiteralPath (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin') -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
@@ -53,7 +66,7 @@ if ($SignArguments.Count) {
     $command = (@('$q' + $signtool + '$q') + ($options | ForEach-Object { if ($_ -match '\s') { '$q' + $_ + '$q' } else { $_ } }) + '$f') -join ' '
     $signing = @("/Spokemindsign=$command", '/DSignToolName=pokemindsign')
 }
-& $compiler /Q "/DAppVersion=$version" "/DDistDir=$dist" "/DIconFile=$icon" "/DSmallImage=$small" "/DOutputDir=$output" @signing (Join-Path $projectRoot 'packaging/PokeMind.iss')
+& $compiler /Q "/DAppVersion=$version" "/DDistDir=$dist" "/DIconFile=$icon" "/DSmallImage=$small" "/DLargeImage=$large" "/DOutputDir=$output" @signing (Join-Path $projectRoot 'packaging/PokeMind.iss')
 if ($LASTEXITCODE) { throw "Inno Setup en échec ($LASTEXITCODE)." }
 $installer = Join-Path $output "PokeMind-Setup-$version.exe"
 if ($SignArguments.Count) {

@@ -6,11 +6,14 @@ import json
 import re
 import sqlite3
 import hashlib
+import os
+import threading
+import uuid
 from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from pokemind import battle_batch, battle_coach, cards, coach_cards, competitive, decks, diagnostics, legacy_bridge, rules, seasons
+from pokemind import battle_batch, battle_coach, cards, coach_cards, competitive, decks, diagnostics, legacy_bridge, loss_watch, rules, seasons
 from pokemind.database import connect_readonly
 from pokemind.public_deck_preflight import SCOPED_PUBLIC_CACHES
 
@@ -26,8 +29,15 @@ PERSONAL = re.compile(r"\b(?:stats?|statistiques|statistics|combats?|défaites?|
                       r"|parties?|battles?|losses|matches|matchs?|matchups?|historique)\b"
                       r"|\b(?:mes|mon|ma|my)\s+(?:decks?|listes?|lists?|cartes?|cards?|collection)\b", re.I)
 MY_DECKS = battle_coach.REPORT_DIR + '/my-decks'
+_DECK_LOCK = threading.RLock()
+# What « + mes statistiques anonymes » really sends (settings and first-run wizard, 0.9.4 audit).
+SHARING_HINT = ('Avec « + mes statistiques anonymes » : statistiques de combats anonymisées, cartes vues et suivi des '
+                'défaites, la partie collée ou choisie, et la liste de ton deck principal quand ta question parle de deck '
+                '(tes autres decks aussi). Jamais de journal brut, de nom de joueur ni de chemin.')
 SAVE_REQUEST = re.compile(r'\b(?:enregistr\w*|sauvegard\w*|conserv\w*|save|ajout\w*|cré\w*|cree\w*|construi\w*'
-                          r'|reconstrui\w*)\b.*\b(?:deck|liste|candidat)', re.I)
+                          r'|reconstrui\w*|reconstruct\w*|create)\b.*\b(?:deck|liste|candidat)', re.I)
+# Legacy coach saves named like an opponent's rebuilt deck (D-263 saved those in « Mes decks »): shown apart, never deleted.
+OPPONENT_NAME = re.compile(r'\b(?:adversaire|adverse|opponent|reconstrui\w*|reconstruct\w*)\b', re.I)
 BUILD = re.compile(r"\b(?:fais|faire|fait|crée\w*|cree\w*|créer|construi\w*|bâti\w*|bati\w*|propos\w*|sugg[eéè]r\w*"
                    r"|recommand\w*|donne|amélior\w*|amelior\w*|build|make|create|suggest|improve)\b", re.I)
 
@@ -94,6 +104,7 @@ class Services:
         self.report = None  # the season shown (owner, 2026-11-05); full_report holds every game
         self.full_report = None
         self.season_key = seasons.CURRENT
+        self.main_deck = ''  # Deck Lab « deck principal » (preference main_deck)
         self.season_rows = []
         self.season_dates = {}
         self.learning = None
@@ -102,6 +113,7 @@ class Services:
         self.selected_match = None
         self.research_allowed = False
         self.candidate_allowed = False
+        self.deck_save_allowed = True
         self.cancelled = None
         self.private_decks_allowed = False
         self.annotation_allowed = False
@@ -117,6 +129,17 @@ class Services:
     def build_request(question):
         """« Fais-moi un deck… »: the coach builds it, even when stats stay local."""
         return bool(BUILD.search(question) and re.search(r'\b(?:decks?|listes?|lists?)\b', question, re.I))
+
+    @staticmethod
+    def opponent_save_request(question):
+        """An explicit reconstruction of the selected opponent, not « create a deck to beat it »."""
+        if re.search(r"\b(?:ne|n['’]).*\b(?:pas|jamais)\b|\b(?:don['’]t|do not|never|sans)\b"
+                     r"|^\s*(?:pourquoi|why|comment|how|explique|explain)\b", question, re.I):
+            return False
+        return bool(SAVE_REQUEST.search(question) and re.search(
+            r'reconstr\w*.*\b(?:deck|liste)|\b(?:deck|liste)\s+(?:de\s+l[\'’])?(?:advers\w*|opponent)'
+            r'|\b(?:deck|liste)\s+(?:de\s+)?(?:cette partie|ce combat|selected match)|opponent\s+(?:deck|list)',
+            question, re.I))
 
     def local_answer(self, question):
         """A privacy-preserving real answer when cloud sharing is public-only."""
@@ -281,8 +304,18 @@ class Services:
                 continue
         return sorted(result, key=lambda d: str(d.get('saved_at', '')), reverse=True)
 
-    def save_deck(self, name, export):
-        """Create-only: one file per distinct 60-card list, never an overwrite."""
+    def save_deck(self, name, export, source='coach'):
+        """Create-only: one file per distinct 60-card list, never an overwrite. source: 'coach' or 'owner'
+        (a list the owner entered in Deck Lab, D-288)."""
+        if source not in {'coach', 'owner'}:
+            return {'error': 'DECK_SOURCE_INVALID'}
+        from pokemind.desktop.ingestion import exclusive
+        folder, _ = battle_coach._directory(self.root, MY_DECKS)
+        with _DECK_LOCK, exclusive(self.root, folder):
+            return self._save_deck(name, export, source)
+
+    def _save_deck(self, name, export, source, metadata=None, cancelled=None):
+        """Called with the shared deck lock. Complete file published atomically, create-only."""
         name = ' '.join(str(name).split())[:80]
         if not name or any(not c.isprintable() for c in name):
             return {'error': 'DECK_NAME_REQUIRED'}
@@ -300,22 +333,129 @@ class Services:
             existing = next((d for d in self.my_decks() if d['export'] == export), None)
             return {'status': 'ALREADY_SAVED', 'name': existing['name'] if existing else name, 'total_cards': 60}
         from datetime import datetime
-        record = {'schema_version': 1, 'name': name, 'export': export, 'source': 'coach',
+        record = {'schema_version': 1, 'name': name, 'export': export, 'source': source,
                   'saved_at': datetime.now().isoformat(timespec='seconds'), 'played_version_attested': False}
-        battle_batch._new_file(path, (json.dumps(record, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
-        self.saved_deck = name
+        if metadata:
+            record['reconstruction'] = metadata
+        pending = battle_batch.safe_path(self.root, folder / '.pending', exists=False)
+        pending.mkdir(exist_ok=True)
+        staged = battle_batch.safe_path(self.root, pending / (uuid.uuid4().hex + '.tmp'), exists=False)
+        owned = None
+        try:
+            with staged.open('xb') as stream:
+                owned = os.fstat(stream.fileno())
+                stream.write((json.dumps(record, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+                stream.flush()
+                os.fsync(stream.fileno())
+            if cancelled and cancelled():
+                return {'status': 'SKIPPED', 'reason': 'CANCELLED'}
+            battle_batch.safe_path(self.root, path, exists=False)
+            os.link(staged, path)  # A concurrent existing file is never replaced.
+        finally:
+            if owned is not None:
+                battle_batch.safe_path(self.root, staged, exists=False)
+                try:
+                    current = staged.lstat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    if os.path.samestat(owned, current):
+                        staged.unlink()  # Only our own alias, on success, cancellation or publication failure.
+        if source != 'opponent_auto':  # the deterministic path has its own receipt, independent of a later LLM turn
+            self.saved_deck = name
         return {'status': 'SAVED_DECK', 'name': name, 'total_cards': 60, 'validation': validation,
                 'shown_in': 'Deck Lab · Mes decks', 'legality': 'unknown', 'collection': 'unknown'}
 
+    def save_public_opponent(self, match=None, *, cancelled=None, as_of=None):
+        """013 local conditional action. Only ingestion or an explicit selected-match UI action calls it.
+        Never called by prepare_question/tool_call; no raw log, match id or player in saved metadata/receipt.
+        """
+        from pokemind.opponent_observer import conditional_public_deck, composition_key, public_family
+        from pokemind.desktop.ingestion import exclusive
+        def stopped():
+            return bool(cancelled and cancelled())
+        if stopped():
+            return {'status': 'SKIPPED', 'reason': 'CANCELLED'}
+        if match is None:
+            return {'status': 'SKIPPED', 'reason': 'NO_SELECTED_MATCH'}
+        try:
+            as_of = as_of or date.today().isoformat()
+            index, _, _ = battle_batch.public_context(self.root, as_of)
+            decision = conditional_public_deck(match, index, as_of=as_of)
+            if decision['status'] != 'ELIGIBLE':
+                return decision
+            candidate = decision['candidate']
+            key = composition_key(candidate['export'])
+            folder, _ = battle_coach._directory(self.root, MY_DECKS)
+            with _DECK_LOCK, exclusive(self.root, folder):
+                if stopped():
+                    return {'status': 'SKIPPED', 'reason': 'CANCELLED'}
+                # A truncated JSON inventory cannot prove there is no previously saved family.
+                if sum(1 for _ in folder.glob('deck-*.json')) > 500:
+                    return {'status': 'SKIPPED', 'reason': 'EXISTING_DECKS_UNAVAILABLE'}
+                existing = self.my_decks()
+                db = self.root / battle_coach.DB
+                if db.exists():
+                    preflight = battle_batch.database_preflight(self.root, db)
+                    if preflight.get('integrity') != 'ok':
+                        return {'status': 'SKIPPED', 'reason': 'EXISTING_DECKS_UNAVAILABLE'}
+                    registered = battle_batch.registered_decks(self.root, db, preflight, as_of, all_versions=True)
+                    if len(registered) >= 100:  # existing legacy reader is bounded to 100 versions
+                        return {'status': 'SKIPPED', 'reason': 'EXISTING_DECKS_UNAVAILABLE'}
+                    existing += registered
+                for deck in existing:
+                    if stopped():
+                        return {'status': 'SKIPPED', 'reason': 'CANCELLED'}
+                    if (composition_key(deck['export']) == key or
+                            (deck.get('reconstruction') or {}).get('family_key') == candidate['family_key'] or
+                            public_family(deck['export'], index) == candidate['family_key']):
+                        return {'status': 'ALREADY_SAVED', 'hypothesis': True}
+                metadata = {'origin': 'automatic_local_public', 'hypothesis': True, 'exact_opponent_deck': False,
+                    'family_key': candidate['family_key'], 'archetype': candidate['archetype'],
+                    'public_source': candidate['source'], 'as_of': as_of, 'evidence': decision['evidence'],
+                    'observed_cards': candidate['observed'], 'printing_caveats': candidate['unknowns'],
+                    'unmatched_observed': candidate['contradictions'], 'assumed_cards': 60}
+                saved = self._save_deck('Adversaire · ' + candidate['archetype'], candidate['export'],
+                                        'opponent_auto', metadata, cancelled=cancelled)
+                if saved.get('status') != 'SAVED_DECK':
+                    return saved if saved.get('status') else {'status': 'SKIPPED', 'reason': 'PUBLIC_REFERENCE_INVALID'}
+                return {'status': 'SAVED_DECK', 'name': candidate['archetype'], 'hypothesis': True,
+                        'source': candidate['source'], 'observed_names': decision['evidence']['distinct_observed'],
+                        'assumed_cards': 60}
+        except (ValueError, OSError, sqlite3.Error, KeyError, TypeError):
+            return {'status': 'SKIPPED', 'reason': 'PUBLIC_REFERENCE_UNAVAILABLE'}
+
+    def main_deck_row(self):
+        """The deck the owner marked as main in Deck Lab (sha256 of its list), if still available."""
+        if not self.main_deck:
+            return None
+        from pokemind.desktop.insights import favorite_key
+        try:  # usually one of « Mes decks » (cheap); a public reference can be the main deck too
+            mine = [{'label': d['name'], 'export': d['export'], 'kind': T('Mon deck · référence personnelle')}
+                    for d in self.my_decks()]
+            return (next((row for row in mine if favorite_key(row) == self.main_deck), None)
+                    or next((row for row in self.deck_options() if favorite_key(row) == self.main_deck), None))
+        except (OSError, ValueError, sqlite3.Error):
+            return None
+
     def deck_options(self):
-        result, seen, mine = [], set(), []
+        result, seen, mine, rebuilt = [], set(), [], []
         for deck in self.my_decks():
             if deck['export'] not in seen:
                 seen.add(deck['export'])
                 # « personnelle » keeps these out of a public-only cloud context, like registered decks.
-                mine.append({'label': deck['name'], 'selector': 'mon deck · ' + str(deck.get('saved_at', ''))[:10],
-                    'export': deck['export'], 'source': {}, 'kind': T('Mon deck · référence personnelle enregistrée par le coach'),
+                entered = deck.get('source') == 'owner'
+                opponent = deck.get('source') == 'opponent_auto' or not entered and bool(OPPONENT_NAME.search(deck['name']))
+                (rebuilt if opponent else mine).append({'label': deck['name'],
+                    'selector': ('deck adverse · ' if opponent else 'mon deck · ') + str(deck.get('saved_at', ''))[:10],
+                    'export': deck['export'], 'source': (deck.get('reconstruction') or {}).get('public_source', {}),
+                    'owner_entered': entered, 'opponent_rebuild': opponent,
+                    'kind': T('Mon deck · référence personnelle entrée par moi') if entered
+                    else T('Deck adverse reconstruit · hypothèse PUBLIC, référence personnelle') if deck.get('source') == 'opponent_auto'
+                    else T('Deck adverse reconstruit · référence personnelle, ancien enregistrement du coach') if opponent
+                    else T('Mon deck · référence personnelle enregistrée par le coach'),
                     'legality': T('Standard / Live inconnus'), 'collection': T('Inconnue'), 'credits': T('Inconnus')})
+        mine += rebuilt  # the owner's own decks first; old opponent rebuilds kept, after them
         folder = battle_batch.safe_path(self.root, self.root / battle_coach.REPORT_DIR, exists=False)
         if folder.exists():
             pointer, _ = battle_coach._control(self.root, folder / 'latest-candidate.json')
@@ -367,8 +507,36 @@ class Services:
                         'legality': T('Standard / Live inconnus'), 'collection': T('Inconnue'), 'credits': T('Inconnus')})
         except (ValueError, OSError, sqlite3.Error):
             pass
-        return [r | {'total': decks.parse_deck_export(r['export']).total_cards} for r in mine + result
+        rows = [r | {'total': decks.parse_deck_export(r['export']).total_cards} for r in mine + result
                 if decks.parse_deck_export(r['export']).total_cards == 60]
+        return self.rank_decks(rows)
+
+    def rank_decks(self, rows, *, as_of=None):
+        """Worker-only offline selector projection; one sample and SQL result per archetype, BO1 only."""
+        from pokemind import deck_public_stats
+        as_of = as_of or date.today().isoformat()
+        sample = deck_public_stats.public_sample(self.root, as_of=as_of)
+        ranked, view_cache = [], {}
+        for row in rows:
+            key = tuple(sorted((c.name, c.quantity, c.set_code, c.collector_number)
+                               for c in decks.parse_deck_export(row['export']).cards if c.card_type == 'pokemon'))
+            if key not in view_cache:
+                view_cache[key] = deck_public_stats.public_view(self.root, as_of=as_of,
+                    pokemon=self.deck_pokemon(row['export']), sample=sample)
+            view = view_cache[key]
+            mode = (view.get('archetype') or {}).get('modes', {}).get('BO1') or {}
+            fraction = mode.get('win_fraction')
+            verified = (view['identity']['status'] == 'IDENTIFIED' and fraction is not None
+                        and mode.get('n', 0) >= deck_public_stats.MIN_MATCHES_WINRATE)
+            ranking = {'fraction': fraction if verified else None, 'n': mode.get('n', 0) if verified else 0,
+                       'mode': 'BO1', 'source': view['source'], 'source_url': view['source_url'],
+                       'window': view['window'], 'date_range': view['date_range'],
+                       'last_success_at': view['last_success_at'], 'identity': view['identity'],
+                       'refresh': view['refresh']}
+            ranked.append(row | {'public_ranking': ranking})
+        # Python's stable sort keeps the existing deterministic owner/legacy order for ties/unknowns.
+        return sorted(ranked, key=lambda r: (r['public_ranking']['fraction'] is None,
+                                             -(r['public_ranking']['fraction'] or 0)))
 
     def deck_listing(self, sharing, query='', reference=''):
         """Every deck name with its reference, whole lists while they fit, one deck's list on request.
@@ -446,6 +614,42 @@ class Services:
                 connection.close()
         return result
 
+    def deck_pokemon(self, export):
+        """The deck's Pokémon, with the English name of each exact printing the PUBLIC catalog resolves.
+        Local only: it matches a deck to a public archetype (Deck Lab › Statistiques); nothing is sent."""
+        parsed = decks.parse_deck_export(export)
+        result = [{'name': c.name, 'quantity': c.quantity, 'english': None} for c in parsed.cards if c.card_type == 'pokemon']
+        try:
+            resolved = [c for c in self.gallery_cards(export) if c['category'] == 'pokemon']
+            connection = connect_readonly(self._public_db())
+        except (OSError, ValueError, sqlite3.Error):
+            return result
+        with closing(connection):
+            for item, card in zip(result, resolved):
+                if card.get('identity'):
+                    row = connection.execute("SELECT name FROM catalog_translations WHERE printing_id=? AND language='en' "
+                                             "AND status='present'", (card['identity'],)).fetchone()
+                    item['english'] = row[0] if row else None
+        return result
+
+    def deck_public_stats(self, row, refresh='none', cancelled=None, as_of=None):
+        """Deck Lab › Statistiques: public ARCHETYPE figures for the selected deck (PM-DECKLAB-PUBLIC-STATS-001).
+        refresh: 'none' (offline read), 'auto' (the one attempt of the day, shared by every deck) or 'manual'
+        (« Actualiser », bounded). The collector receives no deck, no name and no list."""
+        from pokemind import deck_public_stats
+        from pokemind.desktop.insights import favorite_key
+        as_of = as_of or date.today().isoformat()
+        outcome = None
+        if refresh in {'auto', 'manual'}:
+            outcome = deck_public_stats.refresh(self.root, as_of=as_of, manual=refresh == 'manual', cancelled=cancelled)
+        labels = []
+        if 'PUBLIC' in getattr(row['kind'], 'fr', row['kind']) and not personal_kind(row):
+            label = str(getattr(row['label'], 'fr', row['label'])).replace(' · variante', '')
+            labels = [part.strip() for part in label.split(' / ') if part.strip()]
+        view = deck_public_stats.public_view(self.root, as_of=as_of, pokemon=self.deck_pokemon(row['export']),
+                                             public_labels=labels)
+        return view | {'deck_key': favorite_key(row), 'refresh_outcome': outcome}
+
     def health(self):
         result = {}
         for name, catalog in (('catalogue', True), ('méta', False)):
@@ -485,6 +689,9 @@ class Services:
             if len(groups) > len(selected_groups):
                 result['matchups_not_shown'] = len(groups) - len(selected_groups)
                 result['matchups_more'] = 'Autres familles : pokemind_tool operation=context, query = nom de la famille.'
+            # Loss-first follow-up over every recorded game (all seasons): the families that beat the owner.
+            result['loss_watch'] = loss_watch.problem_matchups(self.full_report or report, dates=self.season_dates,
+                                                               focus=query_words)
             result['observed_own_decks'] = report.get('own_decks', {})
             result['own_deck_scope'] = 'Familles inférées des cartes observées, version jouée non attestée; ne pas inventer une liste exacte.'
             result['matchup_groups_total'] = len(groups)
@@ -556,12 +763,19 @@ class Services:
         if len(json.dumps(clean, ensure_ascii=False).encode()) > 24000:
             for group in clean.get('matchups', []):
                 group['signals'] = []
+            for family in clean.get('loss_watch', {}).get('families', []):
+                family['signals'], family['cards_seen_in_losses'] = [], family['cards_seen_in_losses'][:5]
         if len(json.dumps(clean, ensure_ascii=False).encode()) > 24000:
             clean['matchups'] = clean.get('matchups', [])[:5]
         if len(json.dumps(clean, ensure_ascii=False).encode()) > 24000:
+            if 'loss_watch' in clean:
+                clean['loss_watch']['families'] = [{k: f[k] for k in ('family', 'wins', 'losses', 'n', 'status', 'uncertainty')}
+                                                   for f in clean['loss_watch']['families'][:5]]
             clean = {k: clean[k] for k in ('source', 'personal_report_available', 'as_of', 'valid_games',
-                'outcomes', 'corpus_scope', 'personal_source', 'source_priority', 'limits') if k in clean}
+                'outcomes', 'corpus_scope', 'personal_source', 'source_priority', 'limits', 'loss_watch') if k in clean}
             clean['context_size_cap'] = True
+            if len(json.dumps(clean, ensure_ascii=False).encode()) > 24000:
+                clean.pop('loss_watch', None)
         return clean
 
     def read_tool(self, arguments, sharing):
@@ -624,8 +838,9 @@ class Services:
                          research=False):
         """Deterministic preparation shared by every provider, before inference.
 
-        log_followup: the owner just pasted a combat log; the coach gets that game
-        and may save the opponent's rebuilt deck in « Mes decks ».
+        log_followup: the owner just pasted a combat log; the coach gets that game and the loss
+        follow-up. The importer separately runs the conditional PUBLIC save; preparation is read-only
+        for opponent decks. LLM save tools still require the owner's own explicit words on this turn.
         research: the owner chose « Recherche web » for this message (never inferred
         from its words); only then is a bounded public collection made.
         """
@@ -636,7 +851,10 @@ class Services:
         self.research_allowed = research
         self.private_decks_allowed = bool(re.search(r'deck|liste', question, re.I))
         self.annotation_allowed = bool(re.search(r'\b(annot\w*|not\w*|confirm\w*|corrig\w*|révoqu\w*|retir\w*)\b', question, re.I))
-        self.candidate_allowed = bool(SAVE_REQUEST.search(question)) or log_followup
+        explicit_save = bool(SAVE_REQUEST.search(question))
+        self.candidate_allowed = explicit_save
+        # Normal turns keep save_deck without a keyword gate (owner, 2026-11-02); a pasted log's turn does not.
+        self.deck_save_allowed = explicit_save or not log_followup
         result = self.context(question, sharing)
         progress(T('Consultation de la mémoire publique locale'))
         from pokemind import web_memory
@@ -673,11 +891,27 @@ class Services:
                         self.root, as_of=date.today().isoformat())
         else:
             result['public_memory'] = batch_public_research.knowledge_view(self.root, as_of=date.today().isoformat(), topic=topic)
+        main = self.main_deck_row() if sharing == 'aggregates' else None
+        if main:  # the owner's main deck (Deck Lab, D-288): what « mon deck » means unless the question says otherwise
+            # Its whole list follows the rule of « Mes decks » (decks tool): only when the question is about a deck
+            # or a list, as the settings and the first-run wizard say (0.9.4 audit). The name always goes.
+            result['owner_main_deck'] = {'name': main['label'], 'kind': main['kind'], 'played_version_attested': False}
+            if self.private_decks_allowed:
+                result['owner_main_deck']['export'] = main['export']
+            else:
+                result['owner_main_deck']['export_withheld'] = ('Liste complète transmise seulement quand la question '
+                                                                'parle de deck ou de liste.')
         if sharing == 'aggregates' and (self.personal_question(question) or log_followup) and self.match():
             value = self.match()
             result['selected_match'] = self.match_projection(value)
             result['owner_annotations'] = self.annotations(value['match'])
-            if log_followup or re.search(r'deck|adversaire|opponent|reconstr', question, re.I):
+            follow = None
+            if log_followup:
+                follow = loss_watch.followup(self.full_report or self.report, value, dates=self.season_dates)
+                result['log_followup'] = follow
+            # A loss gets the deterministic comparison (observed cards vs public lists); a win or an unknown
+            # result only when the owner asks about the deck. Nothing here writes a deck.
+            if (follow or {}).get('outcome') == 'loss' or re.search(r'deck|adversaire|opponent|reconstr', question, re.I):
                 progress(T('Comparaison des observations aux variantes publiques60'))
                 result['opponent_reconstruction'] = self.reconstruct(value)
             if 'deck' in question.casefold():
@@ -743,8 +977,13 @@ class Services:
                 from pokemind import web_memory
                 return web_memory.remember(self.root, query, arguments.get('summary', ''), arguments.get('sources', ''))
             if op == 'save_deck':
-                # Create-only in the owner's own « Mes decks » (never an overwrite): no keyword gate,
-                # a misspelt « crée-le » must not block it (owner, 2026-11-02). The chat shows the result.
+                # Create-only in the owner's own « Mes decks » (never an overwrite): no keyword gate in a normal
+                # turn, a misspelt « crée-le » must not block it (owner, 2026-11-02). A pasted log's turn never
+                # saves the opponent's deck by itself (PM-COACH-LOSS-PRIORITY-001).
+                if not self.deck_save_allowed:
+                    return {'error': 'DECK_SAVE_REQUIRES_OWNER_REQUEST', 'saved': False,
+                            'hint': 'Outil LLM refusé sur import sans demande explicite. '
+                                    'La reconstruction conditionnelle locale a son propre reçu.'}
                 return self.save_deck(query, arguments.get('export_text', ''))
             if op == 'legality':
                 if not arguments.get('identity'):

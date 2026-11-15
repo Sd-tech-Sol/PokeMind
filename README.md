@@ -9,7 +9,7 @@ your PC, and lets you review them with an AI coach.
 
 > ## Status: pre-release
 >
-> PokeMind **0.9.3** is a public pre-release (the first one was 0.9.0). The Windows installer is **unsigned**,
+> PokeMind **0.9.5** is a public pre-release (the first one was 0.9.0; 0.9.4 was never published). The Windows installer is **unsigned**,
 > and before these releases PokeMind had been used by **its author only**. Expect defects and missing features, and keep
 > your own copy of anything important.
 
@@ -40,7 +40,9 @@ The installer is not code-signed yet: if Windows shows « Windows protected your
   **Send** chooses what a message does: **Coach** (local memory first; Codex or Claude search the web only
   when it lacks the answer, then remember what they found), **Web research** (search the web now, plus one
   bounded public collection) or **Development** (when run from the source folder).
-- **Deck Lab**: save decks, compare them, export 60-card lists to copy into TCG Live.
+- **Deck Lab**: save decks, compare them, export 60-card lists to copy into TCG Live. Rank and public BO1
+  win rate appear before the deck name, and **Ranking** lists every deck, including those with insufficient data.
+  **Statistics** shows the archetype's public figures, sample size and dates, with expandable **Sources and details**.
 - **Cards & meta**: an offline card binder (French and English texts, printings, dated legality) built
   from the public TCGdex catalogue, and the tournament results saved on your PC.
 - **Learning**: observations are kept with sample sizes and hypotheses are revised; no model is retrained.
@@ -53,8 +55,9 @@ These absences are **design choices**:
 - it does **not** play for you: no overlay, no bot, no click automation, and it never talks to the game
   client;
 - it is **not** meant for official tournaments or anywhere the rules forbid assistance;
-- it sends **nothing** to a cloud engine until you allow it in **Settings → AI coach**, and a pasted battle
-  log never reaches an engine that can run commands;
+- cloud sending to Codex or Claude (with your anonymised statistics) is **pre-ticked** in the first-run wizard;
+  untick it there or in **Settings → AI coach** at any time, and a pasted battle log never reaches an engine that
+  can run commands;
 - it has **no account, no telemetry and no advertising**;
 - it does **not** guess win rates, credit costs or your collection when they are not known.
 
@@ -63,7 +66,7 @@ These absences are **design choices**:
 The interface follows Windows on first launch: a French Windows gets French, any other language gets
 English. Change it at any time in **Settings → General**; your choice is remembered.
 
-## Exact limits of version 0.9.3
+## Exact limits of version 0.9.5
 
 | Limit | Detail |
 |---|---|
@@ -72,6 +75,7 @@ English. Change it at any time in **Settings → General**; your choice is remem
 | Card catalogue | The newest public TCGdex version (about 25 MB to download, 175 MB on disk); new sets arrive with **Update** once TCGdex publishes their cards. |
 | Coach | Depends on an engine you install yourself (Codex CLI, Claude Code or Ollama) and on its own account and limits. |
 | Battle analysis | Built from what the TCG Live log shows; hidden information (hand, face-down prizes) stays unknown. |
+| Deck Lab statistics | Public figures by **archetype**, not for your exact 60 cards. At most one collection a day of one recent online tournament (Limitless), so samples are small and not worldwide figures; below the thresholds no percentage is shown. |
 | Real-world use | Used by one person; tests run on invented data only. |
 | Name | **PokeMind** is an unofficial fan project name; no trademark search was made. |
 
@@ -80,8 +84,9 @@ English. Change it at any time in **Settings → General**; your choice is remem
 - Your data stays in `%LOCALAPPDATA%\PokeMind`, outside the program folder; uninstalling keeps it.
 - Network use is explicit: the card catalogue download and its updates, card images from the public TCGdex
   API (can be turned off), the update check (at most twice a day, can be turned off), **Web research**
-  messages, and the cloud coach engines you allow, which may search the web when local memory lacks an
-  answer.
+  messages, **Deck Lab → Statistics** (at most one automatic public Limitless collection a day plus a bounded
+  **Refresh**; your decks are not sent), and the cloud coach engines you allow, which may search the web when
+  local memory lacks an answer.
 - Raw logs, player identities and file paths are never part of the automatic coach context.
 - All data in this repository is invented; the test suite never reads a real user folder.
 - Release binaries are scanned for build-machine paths before they leave the PC.

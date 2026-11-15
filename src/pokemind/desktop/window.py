@@ -13,32 +13,40 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, QUrl, QSize
-from PySide6.QtGui import QDesktopServices, QFont, QTextCursor, QColor
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, QUrl, QSize, QRect
+from PySide6.QtGui import QDesktopServices, QFont, QTextCursor, QTextCharFormat, QColor, QPalette
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget, QFileDialog,
     QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
     QProgressBar, QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem,
-    QTabWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QLayout)
+    QTabWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QLayout,
+    QStyle, QStyleOptionComboBox, QStylePainter)
 
 from pokemind import diagnostics, seasons
 from pokemind.assistant.codex_app_server import CodexAppServer
 from pokemind.assistant.provider import ClaudeCode, LocalOllama, ProviderError, SYSTEM
 from pokemind.assistant.sessions import Store
 from pokemind.assistant.tools import RESEARCH_STARTERS, STARTERS, slash
-from pokemind.desktop.services import Services, context_delta
+from pokemind.desktop.services import SHARING_HINT, Services, context_delta
 from pokemind.desktop import ingestion, terminal
 from pokemind.desktop.images import ImageCache
-from pokemind.desktop.widgets import ChatInput, Activity, CorpusChart, DeckGallery, CardTile, WrapCheckBox, WrapPushButton, wrap_popup, RecordBarDelegate
+from pokemind.desktop.widgets import ChatInput, Activity, RoundedTranscript, CorpusChart, DeckGallery, CardTile, WrapCheckBox, WrapPushButton, wrap_popup, RecordBarDelegate
 
 # Sent for the owner after a pasted log without a question of their own.
-LOG_QUESTION = ('Quel deck m’a affronté dans cette partie? Identifie l’archétype adverse, reconstruis sa liste de '
-                '60 cartes (cartes vues d’abord, le reste d’après les listes publiques), donne-lui un nom et '
-                'enregistre-le dans mes decks.')
-from pokemind.desktop.theme import logo_icon, logo_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon, setting_icon, setting_tab_icon
+# The coach's automatic question after a pasted log, by result from the owner's side (PM-COACH-LOSS-PRIORITY-001).
+# These ask only for analysis. Conditional PUBLIC saves are performed by the local importer, never the LLM.
+LOG_QUESTIONS = {
+    'loss': ('J’ai perdu cette partie. Identifie la famille adverse d’après les cartes vues, situe-la dans mon '
+             'suivi des défaites (bilan, n, incertitude), puis dis-moi ce qui a pu jouer contre moi et comment '
+             'préparer ce matchup.'),
+    'win': 'J’ai gagné cette partie. Fais un bref bilan de ce qui a fonctionné; elle compte dans mes statistiques.'}
+LOG_NOTES = {'loss': 'Défaite ajoutée au suivi des matchups difficiles.',
+             'win': 'Victoire comptée dans tes statistiques.',
+             'unknown': 'Résultat inconnu : partie comptée, aucun suivi créé ni deck enregistré.'}
+from pokemind.desktop.theme import logo_icon, logo_pixmap, card_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon, setting_icon, setting_tab_icon
 from pokemind import __version__
 from PySide6 import QtWidgets as W
 from pokemind.desktop.motion import AnimatedStack, MotionEffects, EmblemWidget
-from pokemind.desktop.charts import StatisticsPanel
+from pokemind.desktop.charts import StatisticsPanel, PublicStatsPanel
 from pokemind.desktop.binder import CardBinder
 from pokemind.desktop.insights import favorite_key, recent_matches, timeline_html, learning_view, OUTCOME_LABELS
 from pokemind.desktop.i18n import QCheckBox, QComboBox, QDockWidget, QFileDialog, QFrame, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTextEdit, QWidget, QStatusBar, Text, set_language, retranslate
@@ -89,6 +97,134 @@ def page(title, description):
     sub.setWordWrap(True)
     layout.addWidget(sub)
     return widget, layout
+
+
+class _DeckRankDelegate(W.QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        # A 100-character name must not move the popup's leading rank off-screen.
+        return QSize(320, max(34, size.height()))
+
+
+class _DeckPicker(QComboBox):
+    def __init__(self):
+        super().__init__()
+        self.setItemDelegate(_DeckRankDelegate(self))
+        self.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+
+    def _retranslate(self):
+        super()._retranslate()
+        for index, tip in getattr(self, '_deck_tips', {}).items():
+            self.setItemData(index, display(tip), Qt.ItemDataRole.ToolTipRole)
+            self.setItemData(index, display(tip), Qt.ItemDataRole.AccessibleTextRole)
+        self.setToolTip(self.currentData(Qt.ItemDataRole.ToolTipRole) or self.currentText())
+        self.setAccessibleName(self.currentText())
+        self.setAccessibleDescription(self.toolTip())
+
+    def paintEvent(self, event):
+        # The native label clips both ends of a long title. Keep its beginning
+        # identifiable; full text stays in the model, tooltip and accessible name.
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        field = self.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
+                                           QStyle.SubControl.SC_ComboBoxEditField, self)
+        option.currentText = self.fontMetrics().elidedText(option.currentText, Qt.TextElideMode.ElideRight,
+                                                         max(0, field.width() - 6))
+        painter = QStylePainter(self)
+        painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, option)
+        painter.drawItemText(field, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             option.palette, self.isEnabled(), option.currentText, QPalette.ColorRole.Text)
+        painter.end()
+
+
+class _DeckControlsLayout(QLayout):
+    """Keep the existing selector/actions together only while their text fits.
+
+    Height-for-width lets the page reserve wrapped rows before placing the
+    gallery. A dock resize, translated label, font or checked glyph invalidates
+    the ordinary Qt layout; no screen-width breakpoint or extra signals needed.
+    """
+    def __init__(self):
+        super().__init__()
+        self.items = []
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSpacing(6)
+
+    def addItem(self, item):
+        self.items.append(item)
+        self.invalidate()
+
+    def count(self):
+        return len(self.items)
+
+    def itemAt(self, index):
+        return self.items[index] if 0 <= index < len(self.items) else None
+
+    def takeAt(self, index):
+        return self.items.pop(index) if 0 <= index < len(self.items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation.Horizontal
+
+    def hasHeightForWidth(self):
+        return True
+
+    def _sizes(self):
+        sizes = []
+        for index, item in enumerate(self.items):
+            control = item.widget()
+            control.ensurePolished()
+            metrics = control.fontMetrics()
+            # Native Qt sizeHint may omit stylesheet padding. Match the existing
+            # BrainBall 14px horizontal/10px vertical button padding + 1px border.
+            content = (QSize(metrics.horizontalAdvance('M' * 12) + 44, metrics.height() + 20)
+                       if index == 0 else QSize(metrics.horizontalAdvance(control.text()) + 30,
+                                                metrics.height() + 22))
+            sizes.append(item.sizeHint().expandedTo(content))
+        return sizes
+
+    def sizeHint(self):
+        sizes = self._sizes()
+        return QSize(sum(s.width() for s in sizes) + self.spacing() * max(0, len(sizes) - 1),
+                     max((s.height() for s in sizes), default=0))
+
+    def minimumSize(self):
+        sizes = self._sizes()
+        return QSize(max((s.width() for s in sizes), default=0),
+                     max((s.height() for s in sizes), default=0))
+
+    def heightForWidth(self, width):
+        return self._arrange(QRect(0, 0, width, 0), False)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._arrange(rect, True)
+
+    def _arrange(self, rect, apply):
+        sizes, gap = self._sizes(), self.spacing()
+        if not sizes:
+            return 0
+        wide = sum(s.width() for s in sizes) + gap * (len(sizes) - 1) <= rect.width()
+        rows = [list(range(len(sizes)))] if wide else [[0]]
+        if not wide:
+            for index in range(1, len(sizes)):
+                used = sum(sizes[i].width() for i in rows[-1]) + gap * len(rows[-1])
+                if len(rows) == 1 or used + sizes[index].width() > rect.width():
+                    rows.append([])
+                rows[-1].append(index)
+        y = rect.y()
+        for row in rows:
+            height = max(sizes[i].height() for i in row)
+            x = rect.x()
+            for index in row:
+                width = sizes[index].width()
+                if index == 0:
+                    width = rect.width() - sum(s.width() + gap for s in sizes[1:]) if wide else rect.width()
+                if apply:
+                    self.items[index].setGeometry(QRect(x, y, width, height))
+                x += width + gap
+            y += height + gap
+        return y - rect.y() - gap
 
 
 def browser():
@@ -304,8 +440,10 @@ class MainWindow(QMainWindow):
         self.standalone = data_state == 'standalone'
         self.catalog_busy, self.catalog_cancel = False, threading.Event()
         self.themed_icons = []  # drawn glyphs (menu, settings, terminal) redrawn in the active theme
+        self.fitted_combos = []  # settings drop-downs sized to their longest choice, again after a language change
         self.preferences = self.store.preferences()
         self.services.season_key = self.preferences['season_view']
+        self.services.main_deck = self.preferences['main_deck']
         self.season_pickers = []
         set_language(self.preferences['language'])
         QFont.insertSubstitution('Segoe UI Variable Text', 'Segoe UI')  # Windows 10 has no variable font
@@ -322,6 +460,7 @@ class MainWindow(QMainWindow):
         self.update_info, self.update_busy, self.update_dismissed = {}, False, False
         self.ingest_busy, self.chat_local_only, self.chat_failed = False, False, False
         self.last_import = None
+        self._combat_match = None  # (conversation id, explicitly chosen reference); None reference blocks a default row
         self.pending_question = ''
         self.import_followup = False
         self._startup_pending = bool(self.preferences['startup_refresh'])
@@ -458,8 +597,16 @@ class MainWindow(QMainWindow):
     def update_home(self):
         self.clear_items(self.home_favorites)
         self.clear_items(self.home_matches)
+        main = self.preferences.get('main_deck', '')
+        principal = next((i for i, row in enumerate(self.deck_rows) if main and favorite_key(row) == main), None)
+        if principal is not None:
+            button = QPushButton('♛  ' + T('Deck principal : ') + self.deck_rows[principal]['label'])
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            button.setObjectName('homeLink')
+            button.clicked.connect(lambda checked=False, index=principal: self.open_deck(index))
+            self.home_favorites.addWidget(button)
         favorites = set(self.preferences.get('favorite_decks', []))
-        available = [(i, row) for i, row in enumerate(self.deck_rows) if favorite_key(row) in favorites]
+        available = [(i, row) for i, row in enumerate(self.deck_rows) if favorite_key(row) in favorites and i != principal]
         for index, row in available[:4]:
             button = QPushButton('★  ' + row['label'])
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -467,7 +614,7 @@ class MainWindow(QMainWindow):
             button.setToolTip(row['kind'] + T(' · version jouée et légalité à vérifier'))
             button.clicked.connect(lambda checked=False, index=index: self.open_deck(index))
             self.home_favorites.addWidget(button)
-        if not available:
+        if not available and principal is None:
             message = QLabel(T('Marque un deck d’une étoile dans Deck Lab pour le retrouver ici.') if not favorites else T('Favoris conservés; leurs références ne sont pas disponibles dans le rapport chargé.'))
             message.setWordWrap(True)
             message.setObjectName('muted')
@@ -516,6 +663,45 @@ class MainWindow(QMainWindow):
         self.update_home()
         self.save_preferences()
 
+    def toggle_main(self):
+        """One main deck at most (D-288); clicking it again clears it."""
+        index = self.deck_picker.currentIndex()
+        if not 0 <= index < len(self.deck_rows):
+            return
+        key = favorite_key(self.deck_rows[index])
+        self.set_main_deck('' if self.preferences.get('main_deck') == key else key)
+
+    def set_main_deck(self, key):
+        self.preferences['main_deck'] = key
+        self.services.main_deck = key
+        self.save_preferences()
+        index = self.deck_picker.currentIndex()
+        self.loaded_decks(self.deck_rows)
+        self.deck_picker.setCurrentIndex(index)
+
+    def add_my_deck(self):
+        from pokemind.desktop.deck_entry import DeckEntryDialog
+        dialog = DeckEntryDialog(self.services, self)
+        accepted = dialog.exec() == DeckEntryDialog.DialogCode.Accepted and dialog.result
+        saved = dialog.result
+        dialog.deleteLater()
+        if accepted:
+            self.deck_added(saved)
+
+    def deck_added(self, saved):
+        self.statusBar().showMessage(T('Deck ajouté à Mes decks : ') + saved['name'])
+        key = favorite_key({'export': saved['export']})
+
+        def show(rows):
+            self.loaded_decks(rows)
+            index = next((i for i, row in enumerate(rows) if favorite_key(row) == key), -1)
+            if saved['main']:
+                self.set_main_deck(key)
+            self.navigation.setCurrentRow(2)
+            if index >= 0:
+                self.deck_picker.setCurrentIndex(index)
+        self.submit(lambda e: self.services.deck_options(), show)
+
     def open_matchup(self, label):
         self.navigation.setCurrentRow(1)
         self.matchup_filter.setText(label)
@@ -532,7 +718,7 @@ class MainWindow(QMainWindow):
             for index in range(self.games.count()):
                 if self.games.itemData(index).get('match') == reference:
                     self.games.setCurrentIndex(index)
-                    self.game_selected()
+                    self.game_selected(explicit=True)
                     break
 
     def submit(self, fn, done, error=None, delta=None, progress=None, phase=None, pool=None, detached=False):
@@ -708,6 +894,7 @@ class MainWindow(QMainWindow):
         self.games = QComboBox()
         self.games.setPlaceholderText(T('Parties contre cet adversaire'))
         self.games.currentIndexChanged.connect(self.game_selected)
+        self.games.activated.connect(lambda index: self.game_selected(index, explicit=True))
         row.addWidget(self.games)
         self.battle_badge = QLabel(T('Choisis une famille et une partie pour voir sa fiche.'))
         self.battle_badge.setObjectName('battleBadge')
@@ -727,18 +914,32 @@ class MainWindow(QMainWindow):
 
     def _decks(self):
         widget, layout = page('Deck Lab', T('Versions exactes et modèles PUBLIC · collection, crédits et légalité distincts.'))
-        self.deck_picker = QComboBox()
+        self.deck_picker = _DeckPicker()
         self.deck_picker.setMinimumContentsLength(12)
         self.deck_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.deck_picker.currentIndexChanged.connect(self.deck_selected)
-        picker_row = QHBoxLayout()
-        picker_row.addWidget(self.deck_picker, 1)
+        self.deck_picker.currentTextChanged.connect(lambda _: self.deck_picker.setToolTip(
+            self.deck_picker.currentData(Qt.ItemDataRole.ToolTipRole) or self.deck_picker.currentText()))
+        self.deck_picker.currentTextChanged.connect(self.deck_picker.setAccessibleName)
+        picker_row = _DeckControlsLayout()
+        picker_row.addWidget(self.deck_picker)
         self.favorite_button = QPushButton(T('☆ Favori'))
         self.favorite_button.setObjectName('favoriteButton')
         self.favorite_button.setCheckable(True)
         self.favorite_button.setAccessibleName(T('Ajouter ou retirer ce deck des favoris'))
         self.favorite_button.clicked.connect(self.toggle_favorite)
         picker_row.addWidget(self.favorite_button)
+        self.main_button = QPushButton(T('☆ Deck principal'))
+        self.main_button.setCheckable(True)
+        self.main_button.setAccessibleName(T('Faire de ce deck mon deck principal'))
+        self.main_button.setToolTip(T('Le deck que tu joues le plus : en tête de la vue d’ensemble et connu du coach'))
+        self.main_button.clicked.connect(self.toggle_main)
+        picker_row.addWidget(self.main_button)
+        self.add_deck_button = QPushButton(T('＋ Ajouter mon deck…'))
+        self.add_deck_button.setObjectName('primary')
+        self.add_deck_button.setToolTip(T('Coller la liste exportée de TCG Live'))
+        self.add_deck_button.clicked.connect(self.add_my_deck)
+        picker_row.addWidget(self.add_deck_button)
         layout.addLayout(picker_row)
         self.deck_info = QLabel(T('Chargement des références…'))
         self.deck_info.setWordWrap(True)
@@ -750,6 +951,51 @@ class MainWindow(QMainWindow):
         self.gallery = DeckGallery()
         self.deck_views.addTab(self.gallery, T('Galerie · 60/60'))
         self.deck_views.addTab(self.deck_text, T('Liste texte'))
+        # Public archetype statistics (PM-DECKLAB-PUBLIC-STATS-001): loaded only when this tab is shown.
+        self.public_stats = PublicStatsPanel()
+        self.public_stats.refresh_requested.connect(lambda: self.load_public_stats('manual'))
+        self.public_stats_scroll = QScrollArea()
+        self.public_stats_scroll.setWidgetResizable(True)
+        self.public_stats_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.public_stats_scroll.setWidget(self.public_stats)
+        self.deck_views.addTab(self.public_stats_scroll, T('Statistiques', en='Statistics'))
+        ranking = QWidget()
+        ranking_layout = QVBoxLayout(ranking)
+        caption = QLabel(T('Classement de TES entrées selon le taux PUBLIC de leur archétype (pas classement mondial)',
+                          en='YOUR entries ranked by their archetype’s PUBLIC rate (not a world ranking)'))
+        caption.setWordWrap(True)
+        ranking_layout.addWidget(caption)
+        self.ranking_table = QTableWidget(0, 4)
+        self.ranking_table.setHorizontalHeaderLabels([T('Rang', en='Rank'), T('Deck', en='Deck'),
+            T('Victoires\nPUBLIC BO1', en='Win rate\nPUBLIC BO1'), T('Matchs\n(n)', en='Matches\n(n)')])
+        self.ranking_table.setAccessibleName(T('Classement des decks par taux PUBLIC BO1', en='Deck ranking by PUBLIC BO1 rate'))
+        self.ranking_table.setEditTriggers(W.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.ranking_table.setSelectionBehavior(W.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.ranking_table.setSelectionMode(W.QAbstractItemView.SelectionMode.SingleSelection)
+        self.ranking_table.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.ranking_table.setWordWrap(False)
+        self.ranking_table.verticalHeader().hide()
+        header = self.ranking_table.horizontalHeader()
+        header.setMinimumSectionSize(32)
+        header.setSectionResizeMode(0, W.QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 52)
+        header.setSectionResizeMode(1, W.QHeaderView.ResizeMode.Stretch)
+        for column in (2, 3):
+            header.setSectionResizeMode(column, W.QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(2, 156)
+        header.resizeSection(3, 70)
+        self.ranking_table.currentCellChanged.connect(
+            lambda row, *_: self.deck_picker.setCurrentIndex(row) if 0 <= row < len(self.deck_rows) else None)
+        ranking_layout.addWidget(self.ranking_table)
+        self.ranking_source = QLabel()
+        self.ranking_source.setWordWrap(True)
+        self.ranking_source.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse |
+                                                   Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        ranking_layout.addWidget(self.ranking_source)
+        self.deck_views.addTab(ranking, T('Classement', en='Ranking'))
+        self._public_stats_request, self.public_stats_busy = None, False
+        self.public_stats_cancel = threading.Event()
+        self.deck_views.currentChanged.connect(self.deck_view_changed)
         layout.addWidget(self.deck_views, 1)
         row = QHBoxLayout()
         self.copy_deck = QPushButton(T('Copier les 60 cartes'))
@@ -936,6 +1182,14 @@ class MainWindow(QMainWindow):
         self.terminal_tabs.removeTab(index)
         view.deleteLater()
 
+    @staticmethod
+    def fit_combo(combo):
+        """Wide enough for its longest choice, closed and open (the style's padding and arrow are not in sizeHint)."""
+        metrics = combo.fontMetrics()
+        widest = max((metrics.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())), default=0)
+        combo.setMinimumWidth(min(max(150, widest + 66), combo.maximumWidth()))
+        combo.view().setMinimumWidth(widest + 48)
+
     def setting_row(self, kind, control=None, title=None, hint=None, tip=None, extra=()):
         """One Windows-like settings line: icon, short title and hint, the control on the right."""
         row = QFrame()
@@ -967,8 +1221,16 @@ class MainWindow(QMainWindow):
         line.addLayout(words, 1)
         if control is not None and not inline:
             control.setMinimumWidth(150)
-            control.setMaximumWidth(260)
-            line.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+            control.setMaximumWidth(340)
+            if isinstance(control, QComboBox):
+                self.fitted_combos.append(control)
+                self.fit_combo(control)
+            if isinstance(hint, str) and len(hint) > 120:
+                # A long explanation keeps the row's full width; beside it, a narrow window left a tall thin column.
+                words.addSpacing(4)
+                words.addWidget(control, 0, Qt.AlignmentFlag.AlignLeft)
+            else:
+                line.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
         if tip is not None:
             info = QLabel()
             info.setPixmap(setting_icon('info').pixmap(QSize(18, 18)))
@@ -1092,7 +1354,7 @@ class MainWindow(QMainWindow):
         self.update_check_button.clicked.connect(lambda: self.check_updates(manual=True))
         self.update_checked = QLabel(T('Jamais vérifié'))
         about_logo = QLabel()
-        about_logo.setPixmap(logo_pixmap(72))
+        about_logo.setPixmap(card_pixmap(96))
         about_name = QLabel('PokeMind ' + __version__)
         about_name.setObjectName('settingTitle')
         sections = [
@@ -1105,7 +1367,7 @@ class MainWindow(QMainWindow):
             ('coach', T('Coach IA'), [
                 self.setting_row('cloud', self.cloud_consent, hint=T('Codex et Claude sont en ligne; Ollama reste sur ce PC.'),
                     tip=T('Codex et Claude utilisent leurs services cloud : tes messages et le contexte choisi peuvent leur être envoyés. Ollama utilise uniquement le serveur local. Les journaux bruts, identités et chemins sont exclus du contexte automatique.')),
-                self.setting_row('share', self.sharing, T('Ce que le coach reçoit'), T('En plus de ta question'),
+                self.setting_row('share', self.sharing, T('Ce que le coach reçoit'), T(SHARING_HINT),
                     tip=T('Ajouter statistiques, listes et événements sélectionnés anonymisés et bornés')),
                 self.setting_row('folder', self.chat_project, hint=T('Comme Claude Code ou Codex dans un terminal.'),
                     tip=T('Le chat travaille dans le dossier PokeMind, comme Codex ou Claude Code dans '
@@ -1248,7 +1510,7 @@ class MainWindow(QMainWindow):
         # The closed box is narrow; the open list must still show readable titles.
         wrap_popup(self.history_picker, 460)
         layout.addLayout(history_controls)
-        self.transcript = browser()
+        self.transcript = RoundedTranscript()
         self.transcript.setObjectName('chatTranscript')
         self.transcript.document().setDocumentMargin(10)
         self.transcript.anchorClicked.connect(self.internal_link)
@@ -1499,7 +1761,7 @@ class MainWindow(QMainWindow):
             self.learning_tiles[key].setText(value)
         self.memory_text.setHtml(memory)
         self.system_health.setText(J('\n',(T(k) + ' : ' + v for k, v in self.services.health().items())))
-        self.submit(lambda e: self.services.deck_options(), self.loaded_decks)
+        self.reload_decks()
         self.statusBar().showMessage(T('Rapport local prêt · aucun taux de victoire global inféré'))
         if self._auto_refresh:
             current = set(self.services.match_index)
@@ -1614,6 +1876,8 @@ class MainWindow(QMainWindow):
             for g in report.get('groups', []) if query in g['archetype'].casefold()])
 
     def matchup_selected(self):
+        # Rebuilding a family list may display its first row, but it is not a choice of a game.
+        self._combat_match = (self.conversation['id'], None)
         row = self.matchups.currentRow()
         if row < 0 or not self.matchups.item(row, 0):
             return
@@ -1629,8 +1893,18 @@ class MainWindow(QMainWindow):
         self.games.blockSignals(False)
         self.game_selected()
 
-    def game_selected(self):
+    def game_selected(self, index=None, *, explicit=False):
         match = self.games.currentData()
+        if explicit:
+            value = self.match_record(match.get('match') if match else None)
+            reference = value['match'] if value else None
+            self._combat_match = (self.conversation['id'], reference)
+            self.services.selected_match = reference
+            if reference:
+                self.conversation['selected_match'] = reference
+            else:
+                self.conversation.pop('selected_match', None)
+            self.remember()
         if not match:
             self.battle_badge.setText(T('Aucune partie sélectionnée.'))
             self.battle_details.clear()
@@ -1644,34 +1918,133 @@ class MainWindow(QMainWindow):
             self.chat_input.setPlainText(T('Dans mes combats, quelles situations travailler contre ') + self.matchups.item(row, 0).text() + T('? Cite n, les sources et ce qui reste inconnu.'))
             self.chat_input.setFocus()
 
+    def reload_decks(self):
+        token = self._decks_request = object()
+        def done(rows):
+            if not self.closing and self._decks_request is token:
+                self.loaded_decks(rows)
+        self.submit(lambda e: self.services.deck_options(), done)
+
+    def rerank_decks(self):
+        rows = list(self.deck_rows)
+        token = self._decks_request = object()
+        def done(ranked):
+            if not self.closing and self._decks_request is token:
+                self.loaded_decks(ranked)
+        self.submit(lambda e: self.services.rank_decks(rows), done)
+
     def loaded_decks(self, rows):
+        old_rows = getattr(self, 'deck_rows', [])
+        old_index = self.deck_picker.currentIndex()
+        selected = favorite_key(old_rows[old_index]) if 0 <= old_index < len(old_rows) else None
+        compared_index = self.compare_picker.currentIndex()
+        compared = favorite_key(old_rows[compared_index]) if 0 <= compared_index < len(old_rows) else None
         self.deck_rows = rows
         self.deck_picker.blockSignals(True)
+        self.compare_picker.blockSignals(True)
         self.deck_picker.clear()
+        self.deck_picker._deck_tips = {}
         self.compare_picker.clear()
-        for row in rows:
-            label = row['label'] + ' · ' + str(row['selector'])
+        self.ranking_table.blockSignals(True)
+        self.ranking_table.setRowCount(len(rows))
+        main = self.preferences.get('main_deck', '')
+        rank = 0
+        for index, row in enumerate(rows):
+            stats = row.get('public_ranking') or {}
+            if stats.get('fraction') is not None:
+                rank += 1
+                percent = T(f"{100 * stats['fraction']:.1f}".replace('.', ','), en=f"{100 * stats['fraction']:.1f}")
+                period = stats['window']['since'] + '–' + stats['window']['until']
+                suffix = percent + ' % PUBLIC BO1 · n=' + str(stats['n']) + ' · ' + period + ' · Limitless'
+                prefix = '#' + str(rank) + ' · ' + percent + ' %'
+            else:
+                suffix = T('Données insuffisantes', en='Insufficient data')
+                prefix = '— · ' + suffix
+            label = prefix + ' · ' + ('♛ ' if main and favorite_key(row) == main else '') + row['label']
             self.deck_picker.addItem(label)
+            tip = label + '\n' + suffix + '\n' + T('Taux d’archétype PUBLIC PTCGL Standard, pas de cette liste exacte ni tes résultats.',
+                                      en='PUBLIC PTCGL Standard archetype rate, not this exact list or your results.')
+            if stats.get('fraction') is not None:
+                tip += '\n' + stats['source_url'] + '\n' + T('Instantané : ', en='Snapshot: ') + str(stats.get('last_success_at'))
+            self.deck_picker._deck_tips[self.deck_picker.count() - 1] = tip
+            self.deck_picker.setItemData(self.deck_picker.count() - 1, display(tip), Qt.ItemDataRole.ToolTipRole)
+            self.deck_picker.setItemData(self.deck_picker.count() - 1, display(tip), Qt.ItemDataRole.AccessibleTextRole)
             self.compare_picker.addItem(label)
+            self.compare_picker.setItemData(index, display(tip), Qt.ItemDataRole.ToolTipRole)
+            values = ['#' + str(rank) if stats.get('fraction') is not None else '—', row['label'],
+                      percent + ' %' if stats.get('fraction') is not None else suffix,
+                      str(stats['n']) if stats.get('fraction') is not None else '—']
+            for column, value in enumerate(values):
+                item = QTableWidgetItem()
+                item.setData(Qt.ItemDataRole.DisplayRole, value)
+                item.setToolTip(display(tip))
+                item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, display(tip))
+                self.ranking_table.setItem(index, column, item)
+        selected_index = next((i for i, r in enumerate(rows) if favorite_key(r) == selected), -1)
+        compared_index = next((i for i, r in enumerate(rows) if favorite_key(r) == compared), -1)
+        if selected_index >= 0:
+            self.deck_picker.setCurrentIndex(selected_index)
+        if compared_index >= 0:
+            self.compare_picker.setCurrentIndex(compared_index)
         self.deck_picker.blockSignals(False)
-        self.deck_selected()
+        self.compare_picker.blockSignals(False)
+        self.deck_picker.setToolTip(self.deck_picker.currentData(Qt.ItemDataRole.ToolTipRole) or self.deck_picker.currentText())
+        self.deck_picker.setAccessibleName(self.deck_picker.currentText())
+        self.deck_picker.setAccessibleDescription(self.deck_picker.toolTip())
+        self.ranking_table.setCurrentCell(max(0, self.deck_picker.currentIndex()), 0)
+        self.ranking_table.blockSignals(False)
+        # Relabel/reorder only: the selected list and gallery keep their scroll and image generation.
+        if selected_index < 0:
+            self.deck_selected()
+        else:
+            self.deck_badges(rows[selected_index])
+        self.ranking_context()
         self.update_home()
+        state = next((r['public_ranking']['refresh'] for r in rows if 'public_ranking' in r), {})
+        if (state.get('automatic_due') and not self.public_stats_busy
+                and getattr(self, '_ranking_auto_day', None) != date.today().isoformat()):
+            self.refresh_deck_ranking()
+
+    def refresh_deck_ranking(self):
+        """The existing PUBLIC-only daily collector, once for the selector, never once per deck."""
+        if self.closing or self.public_stats_busy:
+            return
+        self._ranking_auto_day = date.today().isoformat()  # no loop if the shared refresh guard refuses
+        self.public_stats_busy = True
+        token = self._ranking_request = object()
+        def run(events):
+            from pokemind import deck_public_stats
+            return deck_public_stats.refresh(self.root, as_of=date.today().isoformat(), cancelled=self.public_stats_cancel.is_set)
+        def done(rows):
+            self.public_stats_busy = False
+            if not self.closing and self._ranking_request is token and not self.public_stats_cancel.is_set():
+                self.rerank_decks()
+        def failed(code):
+            self.public_stats_busy = False
+        self.submit(run, done, failed)
 
     def deck_selected(self):
         index = self.deck_picker.currentIndex()
+        self.deck_picker.setAccessibleDescription(self.deck_picker.currentData(Qt.ItemDataRole.ToolTipRole) or '')
+        if hasattr(self, 'ranking_table'):
+            self.ranking_table.blockSignals(True)
+            self.ranking_table.setCurrentCell(index, 0)
+            self.ranking_table.blockSignals(False)
+            self.ranking_context()
         valid = 0 <= index < len(self.deck_rows)
         self.copy_deck.setEnabled(valid)
         self.save_deck.setEnabled(valid)
         self.favorite_button.setEnabled(valid)
+        self.main_button.setEnabled(valid)
         if not valid:
             self.deck_info.setText(T('Aucune référence exacte de 60 cartes disponible localement.'))
             self.deck_text.clear()
             self.gallery.populate([])
+            self._public_stats_request = None
+            self.public_stats.set_view(None)
             return
         row = self.deck_rows[index]
-        favorite = favorite_key(row) in self.preferences.get('favorite_decks', [])
-        self.favorite_button.setChecked(favorite)
-        self.favorite_button.setText(T('★ Favori') if favorite else T('☆ Favori'))
+        self.deck_badges(row)
         self.deck_info.setText(row['kind'] + ' · 60/60\n' + row['legality'] + T(' · possession / crédits inconnus.\nSources : ') + self.source_urls(row.get('source', {})))
         self.deck_text.setPlainText(row['export'])
         token = self._gallery_request = object()
@@ -1687,6 +2060,70 @@ class MainWindow(QMainWindow):
                         lambda value, target=tile: target.set_image(value) if self.preferences['card_images'] and self.gallery.generation == generation else None,
                         pool=self.image_pool)
         self.submit(lambda e: self.services.gallery_cards(row['export']), show)
+        if self.deck_views.currentWidget() is self.public_stats_scroll:
+            self.load_public_stats()
+
+    def deck_badges(self, row):
+        favorite = favorite_key(row) in self.preferences.get('favorite_decks', [])
+        self.favorite_button.setChecked(favorite)
+        self.favorite_button.setText(T('★ Favori') if favorite else T('☆ Favori'))
+        main = favorite_key(row) == self.preferences.get('main_deck', '')
+        self.main_button.setChecked(main)
+        self.main_button.setText(T('♛ Deck principal') if main else T('☆ Deck principal'))
+
+    def ranking_context(self):
+        index = self.deck_picker.currentIndex()
+        stats = (self.deck_rows[index].get('public_ranking') or {}) if 0 <= index < len(self.deck_rows) else {}
+        period = stats.get('window') or {}
+        self.ranking_source.setText(('PUBLIC PTCGL Standard · BO1 · n≥20 · Limitless · '
+            + str(period.get('since', '—')) + ' → ' + str(period.get('until', '—')))
+            if stats.get('fraction') is not None else T('Données insuffisantes · aucun taux PUBLIC BO1 attribué',
+                                                                       en='Insufficient data · no PUBLIC BO1 rate assigned'))
+
+    def deck_view_changed(self, index):
+        if self.deck_views.widget(index) is self.public_stats_scroll:
+            self.load_public_stats()
+
+    def load_public_stats(self, refresh='none'):
+        """Offline read first; then, only if no attempt was made today, the single automatic refresh of the day.
+        A token and the deck's key keep a late result from landing on another deck (two quick selections)."""
+        index = self.deck_picker.currentIndex()
+        if self.closing or not 0 <= index < len(self.deck_rows) or (refresh != 'none' and self.public_stats_busy):
+            return
+        row = self.deck_rows[index]
+        token = self._public_stats_request = object()
+        if refresh != 'none':
+            self.public_stats_busy = True
+            self.public_stats.set_busy(True, T('Actualisation publique bornée en cours; le dernier instantané reste affiché.',
+                                               en='Bounded public refresh running; the last snapshot stays on screen.'))
+
+        def current(view):
+            index = self.deck_picker.currentIndex()
+            return (self._public_stats_request is token and not self.closing and 0 <= index < len(self.deck_rows)
+                    and favorite_key(self.deck_rows[index]) == view.get('deck_key'))
+
+        def done(view):
+            if refresh != 'none':
+                self.public_stats_busy = False
+                self.public_stats.set_busy(False)
+                if not self.closing and not self.public_stats_cancel.is_set():
+                    self.rerank_decks()
+            if not current(view):
+                if refresh != 'none' and not self.closing and self.deck_views.currentWidget() is self.public_stats_scroll:
+                    self.load_public_stats()  # the refreshed snapshot, for the deck now selected
+                return
+            self.public_stats.set_view(view)
+            if refresh == 'none' and view['refresh']['automatic_due'] and not self.public_stats_busy:
+                self.load_public_stats('auto')
+
+        def failed(code):
+            if refresh != 'none':
+                self.public_stats_busy = False
+                self.public_stats.set_busy(False)
+            if self._public_stats_request is token:
+                self.public_stats.set_busy(False, T('Statistiques publiques indisponibles · ', en='Public statistics unavailable · ') + code)
+        cancelled = self.public_stats_cancel.is_set
+        self.submit(lambda e: self.services.deck_public_stats(row, refresh, cancelled=cancelled), done, failed)
 
     @staticmethod
     def source_urls(value):
@@ -1937,6 +2374,7 @@ class MainWindow(QMainWindow):
         color = colors(theme)['link']
         self.corpus_chart.set_theme(theme)
         self.statistics.set_theme(theme)
+        self.public_stats.set_theme(theme)
         self.game_selected()
         for view in self.findChildren(QTextBrowser):
             view.document().setDefaultStyleSheet('a {color:' + color + ';} h2 {font-size:21px;} h3 {font-size:16px;}')
@@ -1963,6 +2401,7 @@ class MainWindow(QMainWindow):
         self.corpus_chart.set_motion_enabled(enabled)
         self.hero_emblem.set_motion_enabled(enabled)
         self.statistics.set_motion_enabled(enabled)
+        self.public_stats.set_motion_enabled(enabled)
         self.gallery.set_motion_enabled(enabled)
         self.card_preview.art.set_motion_enabled(enabled)
         self.activity.spinner.motion = enabled
@@ -2015,6 +2454,15 @@ class MainWindow(QMainWindow):
     def apply_language(self):
         set_language(self.preferences.get('language', 'fr'))
         retranslate(self)
+        for index, tip in getattr(self.deck_picker, '_deck_tips', {}).items():
+            for column in range(self.ranking_table.columnCount()):
+                item = self.ranking_table.item(index, column)
+                if item:
+                    item.setToolTip(display(tip))
+                    item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, display(tip))
+        self.ranking_context()
+        for combo in self.fitted_combos:
+            self.fit_combo(combo)
         names = [T('Vue d’ensemble'), T('Combats'), 'Deck Lab', T('Cartes & méta'), T('Apprentissage'), T('Réglages'), 'Terminal']
         for i, name in enumerate(names):
             self.navigation.item(i).setText('' if self.preferences.get('sidebar_collapsed', False) else display(name))
@@ -2074,6 +2522,7 @@ class MainWindow(QMainWindow):
             return
         self.remember()
         self.conversation = self.store.new(self.provider.currentData())
+        self._combat_match, self.services.selected_match = None, None
         if self.adapter:
             self.adapter.session = None
         self.render_chat()
@@ -2758,6 +3207,9 @@ class MainWindow(QMainWindow):
             self.submit(lambda e: old.close(), lambda r: None)
         try:
             self.conversation = self.store.load(identity)
+            self._combat_match = None
+            value = self.match_record(self.conversation.get('selected_match'))
+            self.services.selected_match = value['match'] if value else None
             self.provider.blockSignals(True)
             self.provider.setCurrentIndex(self.provider.findData(self.conversation['provider']))
             self.provider.blockSignals(False)
@@ -2767,24 +3219,24 @@ class MainWindow(QMainWindow):
         except (ValueError, OSError):
             self.provider_status.setText(T('Historique indisponible; aucune discussion remplacée.'))
 
-    def chat_bubble(self, message, c):
+    def chat_bubble(self, message, c, plain=False):
         """One message's HTML and links, memoized: an unchanged message is never
         re-parsed when a streaming answer refreshes the transcript."""
         key = (self.preferences['theme'], message['role'], str(message['content']))
-        cached = self._bubbles.get(key)
+        cached = self._bubbles.get(key) if not plain else None
         if cached is not None:
             return cached
         user = message['role'] == 'user'
         title = T('TOI') if user else 'POKEMIND'
-        content = message_html(str(message['content'])) if message['role'] == 'assistant' else rich(str(message['content'])).replace('\n','<br>')
+        content = (message_html(str(message['content'])) if message['role'] == 'assistant' and not plain
+                   else rich(str(message['content'])).replace('\n','<br>'))
         urls = () if user else tuple(html.unescape(url) for url in re.findall(r'<a href="(https://[^"]+)"', content))
-        background = c['primary'] if user else c['surface']
-        foreground = c['on_primary'] if user else c['text']
-        heading = c['on_primary'] if user else c['accent']
+        foreground = c['text']
+        heading = c['muted'] if user else c['accent']
         content = content.replace(TOOL_COLOR, 'color:' + c['muted'] + ';')  # tool lines follow the theme
         body = ('<p style="color:' + foreground + '; margin-top:2px;">' + content + '</p>' if user
                 else '<div style="color:' + foreground + ';">' + content + '</div>')
-        bubble = ('<td width="88%" bgcolor="' + background + '" style="border:1px solid ' + c['border'] + '; color:'
+        bubble = ('<td width="88%" style="color:'
                   + foreground + ';"><p style="color:' + heading + '; font-size:11px; font-weight:800; letter-spacing:1px;'
                   ' margin-bottom:2px;">' + title + '</p>' + body + '</td>')
         spacer = '<td width="12%"></td>'
@@ -2792,33 +3244,44 @@ class MainWindow(QMainWindow):
                  (spacer + bubble if user else bubble + spacer) + '</tr></table><p></p>')
         if len(self._bubbles) >= 1000:
             self._bubbles.clear()
-        self._bubbles[key] = table, urls
+        if not plain:
+            self._bubbles[key] = table, urls
         return table, urls
 
     def render_stream(self):
-        """Replace only the streaming last bubble; anything else is a full render."""
+        """Append new text only (linear in incoming characters). Format Markdown once at completion.
+        The 40ms timer batches deltas; neither old messages nor every growing prefix is reparsed/cached.
+        """
         messages, tail = self.conversation['messages'], self._chat_tail
         document = self.transcript.document()
+        previous = getattr(self, '_chat_stream_content', None)
         if not (messages and tail and tail[:3] == (self.conversation['id'], len(messages), self.preferences['theme'])
-                and tail[4] == document.revision()):
-            return self.render_chat()
-        table, _ = self.chat_bubble(messages[-1], colors(self.preferences['theme']))
-        cursor = QTextCursor(document)
-        cursor.setPosition(tail[3])
-        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
-        cursor.insertHtml(display(table))
-        # Language switches re-render from this binding, so it stays complete.
-        self.transcript._bindings['setHtml'] = tail[5] + table
+                and tail[4] == document.revision() and previous is not None
+                and str(messages[-1]['content']).startswith(previous)):
+            return self.render_chat(streaming=True)
+        tables = document.rootFrame().childFrames()
+        cursor = tables[-1].cellAt(0, 1 if messages[-1]['role'] == 'user' else 0).lastCursorPosition()
+        content = str(messages[-1]['content'])
+        fmt = QTextCharFormat()
+        fmt.setFont(self.transcript.font())
+        fmt.setForeground(QColor(colors(self.preferences['theme'])['text']))
+        cursor.insertText(content[len(previous):], fmt)
+        self._chat_stream_content = content
+        self.transcript._bindings.pop('setHtml', None)
         self._chat_tail = tail[:4] + (document.revision(), tail[5])
         self.transcript.moveCursor(QTextCursor.MoveOperation.End)
         self.transcript.ensureCursorVisible()
 
-    def render_chat(self):
+    def render_chat(self, streaming=False):
         c = colors(self.preferences['theme'])
+        self.transcript.chat_theme = self.preferences['theme']
+        self.transcript.bubble_roles = [m['role'] for m in self.conversation['messages']]
         muted = c['muted']
         intro = '<p style="color:' + muted + T('">PokeMind · questions, sources et hypothèses.<br>Choisis une discussion ou pose une question.</p>')
         messages = self.conversation['messages']
-        bubbles = [self.chat_bubble(message, c) for message in messages]
+        bubbles = [self.chat_bubble(message, c, plain=streaming and i == len(messages) - 1)
+                   for i, message in enumerate(messages)]
+        self._chat_stream_content = str(messages[-1]['content']) if messages and streaming else None
         urls = [url for _, links in bubbles for url in links]
         prefix = J('', [intro] + [table for table, _ in bubbles[:-1]])
         self.transcript.setHtml(prefix)
@@ -2930,6 +3393,75 @@ class MainWindow(QMainWindow):
         else:
             messages.append({'role': 'assistant', 'content': text.lstrip('\n'), 'local_only': True})
 
+    @staticmethod
+    def opponent_deck_note(receipt):
+        if receipt.get('status') == 'SAVED_DECK':
+            source = receipt.get('source') or {}
+            dates = source.get('date_range') or [str(source.get('retrieved_at') or '')[:10]]
+            return (T('Deck adverse ajouté (reconstruction hypothétique) : ', en='Opponent deck added (hypothetical reconstruction): ')
+                    + receipt['name'] + ' · PUBLIC/' + str(max(dates)) + ' · '
+                    + str(receipt['observed_names']) + T(' cartes observées / 60 supposées', en=' observed cards / 60 assumed')
+                    + '\n' + MainWindow.source_urls(source))
+        if receipt.get('status') == 'ALREADY_SAVED':
+            return T('Déjà dans Deck Lab', en='Already in Deck Lab')
+        reasons = {'INSUFFICIENT_EVIDENCE': T('preuves insuffisantes', en='insufficient evidence'),
+                   'AMBIGUOUS_PUBLIC_REFERENCE': T('référence publique ambiguë', en='ambiguous public reference'),
+                   'PUBLIC_REFERENCE_UNAVAILABLE': T('référence publique indisponible ou périmée', en='public reference unavailable or stale'),
+                   'OUTCOME_NOT_ELIGIBLE': T('issue non admissible ou victoire serrée non attestée', en='ineligible outcome or close win not attested'),
+                   'CANCELLED': T('annulé', en='cancelled'),
+                   'EXISTING_DECKS_UNAVAILABLE': T('inventaire des decks existants indisponible ou trop grand', en='existing deck inventory unavailable or too large'),
+                   'NO_SELECTED_MATCH': T('aucune partie sélectionnée', en='no selected match')}
+        return T('Non créé : ', en='Not created: ') + reasons.get(receipt.get('reason'), str(receipt.get('reason', 'ERROR')))
+
+    def match_record(self, reference):
+        """Resolve only an explicit reference in the loaded report; no last-game fallback or raw log read."""
+        if not isinstance(reference, str) or not reference:
+            return None
+        return next((m for m in (self.services.full_report or self.services.report or {}).get('matches', [])
+                     if m.get('match') == reference), None)
+
+    def reconstruction_match(self):
+        """Active Combats: an explicit choice in this conversation; otherwise its saved reference.
+        A family list's automatic first row cannot overwrite or stand in for that reference.
+        """
+        reference = self.conversation.get('selected_match')
+        choice = self._combat_match
+        if self.navigation.currentRow() == 1 and choice and choice[0] == self.conversation['id']:
+            visible = self.games.currentData() or {}
+            reference = choice[1] if choice[1] == visible.get('match') else None
+        value = self.match_record(reference)
+        self.services.selected_match = value['match'] if value else None
+        return dict(value) if value else None  # snapshot this request, before the worker starts
+
+    def reconstruct_selected_deck(self, question):
+        """Explicit catch-up for one selected match, entirely local even with no AI provider/consent."""
+        value = self.reconstruction_match()
+        self.chat_busy, self.chat_local_only = True, True
+        self.chat_cancel.clear()
+        self.chat_controls(True)
+        self.chat_input.clear()
+        conversation = self.conversation
+        answer = {'role': 'assistant', 'content': T('Vérification locale de la référence PUBLIC…', en='Checking the local PUBLIC reference…'), 'local_only': True}
+        conversation['messages'].extend([{'role': 'user', 'content': question, 'local_only': True}, answer])
+        self.activity.start(T('Reconstruction publique locale', en='Local public reconstruction'))
+        self.render_chat()
+        def done(receipt):
+            answer['content'] = self.opponent_deck_note(receipt)
+            self.chat_busy = False
+            self.chat_controls(False)
+            self.activity.finish(T('Terminé'))
+            if self.closing:
+                return
+            if self.conversation is conversation:
+                self.render_chat()
+                self.remember()
+            if receipt.get('status') == 'SAVED_DECK':
+                self.reload_decks()
+            self.chat_finished.emit()
+        self.submit(lambda e: self.services.save_public_opponent(value, cancelled=self.chat_cancel.is_set)
+                    if value else {'status': 'SKIPPED', 'reason': 'NO_SELECTED_MATCH'},
+                    done, lambda code: done({'status': 'SKIPPED', 'reason': 'PUBLIC_REFERENCE_UNAVAILABLE'}))
+
     def ingest_phase(self, phase):
         phase = T(phase)
         self.activity.set_stage(phase)
@@ -2958,6 +3490,10 @@ class MainWindow(QMainWindow):
                 lines.append(T('Résultat reconnu : ') + {'W':T('victoire'),'L':T('défaite')}[result['outcome']]
                     + T(' · adversaire : ') + result.get('opponent',T('inconnu')))
             lines.extend(T(reason) for reason in result.get('reasons', []))
+            if result.get('opponent_deck'):
+                lines.append(self.opponent_deck_note(result['opponent_deck']))
+        if any((r.get('opponent_deck') or {}).get('status') == 'SAVED_DECK' for r in results):
+            self.reload_decks()
         report = self.services.report or {}
         current = set(self.services.match_index)
         # Corpus totals go to the status bar: the owner pasted one game to learn about that game.
@@ -2967,17 +3503,27 @@ class MainWindow(QMainWindow):
             totals += ' · ' + T('Statistiques actualisées : n=') + str(report['coverage']['valid']) + ', ' + str(o['wins']) + T(' victoires, ') + str(o['losses']) + T(' défaites. Taux global inconnu.')
         self.statusBar().showMessage(totals)
         self.last_import = next((r for r in reversed(results) if r.get('match')), None)
+        if self.last_import and not self.data_cancel.is_set():
+            value = self.match_record(self.last_import['match'].get('match'))
+            if value:
+                self._combat_match = None
+                self.services.selected_match = value['match']
+                self.conversation['selected_match'] = value['match']
         self.view_import_button.setVisible(self.last_import is not None)
         pending, self.pending_question = self.pending_question, ''
         coach_ready = (self.provider.currentData() == 'ollama'
                        or self.cloud_consent.isChecked() and self.sharing.currentData() == 'aggregates')
         if self.last_import and not self.data_cancel.is_set():
+            from pokemind.loss_watch import outcome_of
+            outcome = outcome_of(self.last_import['match'])
+            lines.append(T(LOG_NOTES[outcome]))
             if not coach_ready:
                 # Even with the owner's own question: without this opt-in the coach cannot see the game.
-                lines.append(T('Pour que le coach trouve le deck adverse, coche l’envoi cloud et « Ajouter statistiques… » dans Réglages.'))
-            elif not pending:
-                pending = T(LOG_QUESTION)
-                lines.append(T('Le coach identifie maintenant le deck adverse et l’ajoute à Mes decks…'))
+                lines.append(T('Pour que le coach analyse cette partie : Réglages › Coach IA, coche l’envoi cloud et choisis « + mes statistiques anonymes ».'))
+            elif not pending and outcome in LOG_QUESTIONS:
+                pending = T(LOG_QUESTIONS[outcome])
+                if outcome == 'loss':
+                    lines.append(T('Le coach analyse maintenant la famille adverse…'))
         self.ingest_note('\n\n' + J('\n', lines))
         self.render_chat()
         self.activity.finish('Interrompu' if self.data_cancel.is_set() else T('Terminé') if latest else T('Refus ou analyse en attente'))
@@ -2985,8 +3531,6 @@ class MainWindow(QMainWindow):
         self.remember()
         self.chat_finished.emit()
         if pending and self.last_import and not self.data_cancel.is_set():
-            self.services.selected_match = self.last_import['match']['match']
-            self.conversation['selected_match'] = self.services.selected_match
             QTimer.singleShot(0, lambda: self.send_import_question(pending))
 
     def send_import_question(self, question):
@@ -3025,10 +3569,11 @@ class MainWindow(QMainWindow):
             group = next((g['archetype'] for g in (self.services.report or {}).get('groups', []) if reference in g.get('matches', [])), match['opponent']['label'] or 'unknown')
             self.matchup_filter.setText(group)
             self.matchups.selectRow(0)
+            self.matchup_selected()  # a refreshed table may keep row 0 without emitting selectionChanged
             for index in range(self.games.count()):
                 if self.games.itemData(index).get('match') == reference:
                     self.games.setCurrentIndex(index)
-                    self.game_selected()
+                    self.game_selected(explicit=True)
                     break
 
     def send_chat(self):
@@ -3061,6 +3606,9 @@ class MainWindow(QMainWindow):
             return
         if len(question) > 12000 or len(self.conversation['messages']) >= 498:
             self.provider_status.setText(T('Message trop long ou discussion pleine; aucun contenu envoyé. Ouvre une nouvelle discussion.'))
+            return
+        if not self.import_followup and self.services.opponent_save_request(question):
+            self.reconstruct_selected_deck(question)
             return
         mode = self.chat_mode.currentData()
         explicit_development = mode == 'development' and not self.import_followup
@@ -3304,7 +3852,7 @@ class MainWindow(QMainWindow):
             # The coach saved a deck: show it in Deck Lab without waiting for a restart.
             self.statusBar().showMessage(T('Deck ajouté à Mes decks : ') + self.services.saved_deck)
             self.services.saved_deck = None
-            self.submit(lambda e: self.services.deck_options(), self.loaded_decks)
+            self.reload_decks()
         self.chat_busy = False
         self.chat_controls(False)
         self.send_button.setEnabled(True)
@@ -3385,6 +3933,7 @@ class MainWindow(QMainWindow):
             self.closing_terminals = True
         self.images.cancelled.set()
         self.catalog_cancel.set()
+        self.public_stats_cancel.set()
         if self.chat_busy:
             self.stop_chat()
             self.closing_message(T('Le tour se termine; fermeture ensuite.'))

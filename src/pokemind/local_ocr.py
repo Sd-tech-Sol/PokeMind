@@ -20,7 +20,7 @@ import zlib
 from pathlib import Path
 from typing import Any, Callable
 
-from pokemind.database import connect_readonly
+from pokemind.database import connect_readonly, local_day
 
 
 ADAPTER = "pokemind_tesseract_roi_v1"
@@ -107,7 +107,7 @@ def _catalog_candidate(db_path: Path, values: dict[str, str], *, as_of: str | No
             allowed = {"eng": {"en"}, "fra": {"fr"}, "eng+fra": {"en", "fr"}}[language]
             if row["language"] not in allowed or row["detail_stale_" + row["language"]]:
                 continue
-            if not row["source_url"] or not row["retrieved_at"] or (as_of and str(row["retrieved_at"])[:10] > as_of):
+            if not row["source_url"] or not row["retrieved_at"] or (as_of and local_day(row["retrieved_at"]) > as_of):
                 continue
             if all(_normalized(row[column]) == _normalized(values[field]) for column, field in (
                 ("name", "name"), ("tcg_online_code", "set_code"), ("local_id", "collector_number"),

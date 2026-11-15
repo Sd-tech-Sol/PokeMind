@@ -18,6 +18,24 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def local_day(stamp) -> str:
+    """Day on this PC of a stored timestamp, to compare with a local `as_of` such as date.today().
+
+    Timestamps are written in UTC ('...Z'): an evening update in Québec is already the next day in UTC,
+    and comparing its first ten characters with the local date rejected it until midnight. A bare date
+    (no time) stays as written.
+    """
+    text = str(stamp or "")
+    if len(text) > 10:
+        try:
+            moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return text[:10]
+        if moment.tzinfo is not None:
+            return moment.astimezone().date().isoformat()
+    return text[:10]
+
+
 def connect_writable(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)

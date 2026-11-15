@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timezone
 
 import pytest
 
 from pokemind import cli, competitive as c, deck_knowledge as k, public_deck_preflight as p
 from pokemind.cards import _canonical_sha256
 from pokemind.catalog_batch_store import initialize_batch_tables
-from pokemind.database import connect_readonly
+from pokemind.database import connect_readonly, local_day
 from pokemind.set_code_aliases import build_aliases, collector_key
 from test_competitive_advisor import AS_OF, sample, tree_bytes
 from test_public_deck_preflight import reference, forbid_all
@@ -135,6 +136,33 @@ def test_alias_requires_cross_checked_source(local_tmp, fault):
     option = preflight(local_tmp, db, ref, selectors=['123:1'])['options'][0]
     assert option['counts']['identity']['unresolved'] > 0
     assert option['status'] == 'unknown'
+
+
+def evening_utc_stamp(day):
+    """23:30 on this PC on `day`, written as the catalogue writes it (UTC, 'Z'). West of UTC it is already the next day."""
+    moment = datetime.fromisoformat(day + 'T23:30:00').astimezone().astimezone(timezone.utc)
+    return moment.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+
+
+def test_local_day_of_utc_catalog_stamps():
+    stamp = evening_utc_stamp(AS_OF)
+    assert local_day(stamp) == AS_OF
+    assert local_day('2027-01-01') == '2027-01-01'  # a bare date stays as written
+    assert local_day('') == '' and local_day(None) == ''
+
+
+def test_alias_kept_after_an_evening_catalog_update(local_tmp):
+    """0.9.5 reception: a catalogue updated at 21:54 in Québec (02:54Z the next day) lost every set code until midnight,
+    so Deck Lab resolved no printing and showed « Image indisponible » on every card."""
+    db, ref = enriched(local_tmp)
+    stamp = evening_utc_stamp(AS_OF)
+    with closing(sqlite3.connect(ref)) as con, con:
+        con.execute("UPDATE catalog_sets SET retrieved_at_en=?", (stamp,))
+        con.execute("UPDATE catalog_translations SET retrieved_at=?", (stamp,))
+    with closing(connect_readonly(ref)) as con:
+        assert 'SYN' in build_aliases(con, as_of=AS_OF)['aliases']
+    assert show(local_tmp, db, ref)['card_role'][0]['identity_status'] == 'resolved'
+    assert not show(local_tmp, db, ref)['uncertainty']['missing_card_text']
 
 
 @pytest.mark.parametrize('kind', ['alias_conflict', 'native_conflict'])

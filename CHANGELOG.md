@@ -7,6 +7,58 @@ All notable public changes to PokeMind are recorded here. The format follows
 This file is for people who use or read the project. The far more detailed internal log of the work lives
 in `.orchestrator/DECISIONS.md`, in French.
 
+## [0.9.5] — 2026-11-15 (pre-release)
+
+0.9.4 was a release candidate that was never published: 0.9.5 contains every change since 0.9.3, listed here.
+
+### Added
+
+- **Deck Lab › Statistics**: public figures for the selected deck's **archetype** (not its exact 60 cards), from
+  public online Pokémon TCG Live Standard tournaments of the Limitless platform: representation, win rate and
+  matchups with their sample size, a 95% interval, the tournaments' dates and the retrieval date. BO1 and BO3
+  are never merged, byes and mirrors are excluded, and no percentage is shown on a small sample. The archetype
+  is recognised from the Pokémon in the list, never from the deck's name; when it is unclear, no rate is
+  attributed and the general public meta is shown instead. At most one automatic collection a day (shared by
+  every deck) plus a bounded **Refresh** button; your lists are never sent.
+- **Add my deck** in Deck Lab: paste the list exported from TCG Live, name it; 60 cards and the deck rules are
+  checked, and nothing is overwritten. **Main deck** marks the one you play most: first on the overview, and
+  known to the coach.
+- **Losses first**: every game counts in the statistics, but only the opponent families that beat you are
+  followed (record, number of games, dates, cards seen in those losses, and how uncertain it is). Ask the coach
+  « which decks do I lose to most? », « why? » or « how do I beat X? ».
+
+### Changed
+
+- Deck selectors show rank and public BO1 rate before long names; **Ranking** lists every deck, with
+  insufficient data left explicit. Statistics has a large public rate, sample size and period, plus
+  expandable **Sources and details**; BO1 and BO3 remain separate, and these are archetype statistics.
+- The coach's messages have rounded backgrounds, with native text selection and links preserved.
+- The **PokeMind / TCG Coach card** replaces the drawn logo in the window, the menu, the overview, About, the
+  card binder, the program and installer icons, and the shortcuts.
+- An admissible new battle can save a recent, corroborated public 60-card reference as an opponent-deck
+  hypothesis, with source and uncertainty; it is never proof of the opponent's exact list. Insufficient
+  evidence or ambiguous references produce no addition. Recovery for an older selected game requires an
+  explicit local request; there is no automatic historical backfill.
+- New installs allow the cloud coach with your anonymised statistics by default; the first-run wizard and
+  **Settings → AI coach** now say exactly what is sent, and the full list of your main deck goes only when
+  your question is about a deck or a list.
+- `PokeMind.exe` and the installer carry their version number in their Windows file properties.
+
+### Fixed
+
+- Games pasted during a season that had begun showed 0 games in « Current season »; they now count on the day
+  their log was added.
+- Deck Lab showed « Image unavailable » on every card for the rest of the day after an evening card-catalogue
+  update: the catalogue's UTC retrieval date was compared with the local date, so every set code was refused.
+  Retrieval dates are now read as the local day.
+- Settings › AI coach › « What the coach receives »: the choice was cut off, the highlighted choice of the open list
+  was white on pale blue in the light theme (Windows 11 style), and the explanation became a tall thin column in a
+  narrow window. The list is now drawn by the theme in every state and the choice sits, in full, under the text.
+
+## [0.9.4] — never published
+
+Release candidate only; its changes are part of 0.9.5 above.
+
 ## [0.9.3] — 2026-11-05
 
 ### Added

@@ -12,6 +12,7 @@ from datetime import date
 from urllib.parse import urlsplit
 
 from pokemind.catalog_batch_store import verified_payload
+from pokemind.database import local_day
 
 
 VERSION = "public-set-code-bridge-v1"
@@ -74,7 +75,7 @@ def build_aliases(connection, *, as_of: str) -> dict:
                 provenance = payload_source(connection, "sets", row["tcgdex_id"], language) if payload else None
                 stamp = row["retrieved_at_" + language]
                 url = row["source_url_" + language] or ""
-                if not payload or not provenance or payload.get("id") != row["tcgdex_id"] or not stamp or stamp[:10] > as_of:
+                if not payload or not provenance or payload.get("id") != row["tcgdex_id"] or not stamp or local_day(stamp) > as_of:
                     continue
                 release = payload.get("releaseDate")
                 try:

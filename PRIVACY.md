@@ -30,6 +30,10 @@ PokeMind uses the network only for these explicit actions:
   SHA-256 from the GitHub release, checks them, and runs the installer only when you confirm;
 - **card images** from the public TCGdex API, cached locally; you can turn them off in Settings;
 - a message sent in **Web research** mode: one bounded collection from public sources;
+- **Deck Lab → Statistics**: when you open that tab, at most one bounded collection a day from the public
+  Limitless tournament API (a few keyless requests: tournaments, standings, pairings), plus the **Refresh**
+  button, limited per day. Nothing about you or your decks is sent: the deck's archetype is recognised on
+  your PC;
 - the **coach engine** you choose: Codex CLI and Claude Code run with your own account and send your
   question and the allowed context to their provider; Ollama runs locally.
 - **web searches by Codex CLI or Claude Code**: when PokeMind's local memory lacks an answer, or for a
@@ -38,9 +42,12 @@ PokeMind uses the network only for these explicit actions:
   `data/local/web_memory.sqlite3`, so the next similar question is answered locally. Ollama never searches
   the web.
 
-Nothing is sent to a cloud engine until you allow it in **Settings → AI coach**, where you also choose
-whether your statistics may be shared. Raw logs, player identities and file paths are never part of the
-automatic context.
+Cloud sending is allowed by default for new installs (Codex or Claude, with **+ my anonymous statistics**);
+both are shown in the first-run wizard and can be changed at any time in **Settings → AI coach**. With
+**+ my anonymous statistics**, the coach receives your anonymised battle statistics, the cards seen and the
+loss follow-up, the pasted or chosen game, and the full list of your main deck (and of your other saved
+decks) only when your question is about a deck or a list. With **Public knowledge**, none of your personal
+data is sent. Raw logs, player identities and file paths are never part of the automatic context.
 
 ## Your control
 

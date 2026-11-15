@@ -69,7 +69,8 @@ def _build(wheel_directory: str, editable: bool) -> str:
     if editable:
         files[f"{DIST}.pth"] = (str((ROOT / "src").resolve()) + os.linesep).encode("utf-8")
     else:
-        for source in sorted((ROOT / "src" / "pokemind").rglob("*.py")):
+        sources = list((ROOT / "src" / "pokemind").rglob("*.py")) + list((ROOT / "src" / "pokemind").rglob("branding/*.png"))
+        for source in sorted(sources):
             relative = source.relative_to(ROOT / 'src').as_posix()
             files[relative] = source.read_bytes()
     files[f"{DIST_INFO}/METADATA"] = _metadata().encode("utf-8")

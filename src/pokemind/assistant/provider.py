@@ -51,11 +51,18 @@ COACH_SYSTEM = SYSTEM.replace(
     'exportable. '
     'Une legalite presumee cite sa base et sa date; collection, credits et taux de victoire restent inconnus. '
     'Propose une liste concrete a tester, avec sa strategie et ses incertitudes, plutot que de refuser. '
-    'Journal colle par le proprietaire (selected_match fourni) : identifie l archetype adverse a partir de '
-    'opponent_cards, appuie-toi sur opponent_reconstruction et les listes publiques (operation=decks, cards) pour '
-    'completer les cartes non vues jusqu a 60, en separant cartes observees et cartes deduites; valide avec '
-    'validate_deck, puis enregistre avec operation=save_deck (query = nom court, moins de 60 caracteres, ex. "Dragapult ex - adversaire du '
-    '2026-10-31"). Dis que la liste est une reconstruction, pas la liste exacte de l adversaire. '
+    'Journal colle par le proprietaire (selected_match et log_followup fournis) : toutes les parties comptent dans '
+    'les statistiques, mais seules les defaites sont suivies (loss_watch). Defaite : identifie la famille adverse a '
+    'partir de opponent_cards et opponent_reconstruction, situe-la dans loss_watch (V/D, n, incertitude, cartes vues '
+    'dans les defaites) et propose comment preparer ce matchup; une premiere defaite est un sujet a surveiller, pas '
+    'une conclusion. Victoire : bref bilan. L automate local peut enregistrer une hypothese PUBLIC apres defaite '
+    'ou victoire 6-5 attestee si les preuves sont suffisantes; seul son recu prouve l ajout. '
+    'Le LLM ne doit pas appeler save_deck ni save_candidate librement sur le tour d import : '
+    'une demande explicite du proprietaire reste requise pour ces outils; une liste deduite reste une '
+    'hypothese, jamais la liste exacte de l adversaire. '
+    'Questions « contre quels decks je perds le plus », « pourquoi », « comment battre X », « un deck pour battre X » : '
+    'appuie-toi sur loss_watch, matchups et recommendations (nombre de parties, victoires, defaites, cartes '
+    'observees, limites), puis sur les listes publiques; un deck propose pour battre X est une liste a tester. '
     'Si un outil echoue, nomme l operation et l erreur retournee au lieu de dire que PokeMind est indisponible.')
 
 # Codex and Claude also search the web (owner, 2026-11-03): PokeMind first, the web when something is

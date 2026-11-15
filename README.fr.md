@@ -9,7 +9,7 @@ tes cartes sur ton PC, et te permet de les revoir avec un coach IA.
 
 > ## État : préversion
 >
-> PokeMind **0.9.3** est une préversion publique (la première était 0.9.0). L'installateur Windows n'est
+> PokeMind **0.9.5** est une préversion publique (la première était 0.9.0; la 0.9.4 n'a jamais été publiée). L'installateur Windows n'est
 > **pas signé**, et avant ces versions PokeMind n'avait été utilisé **que par son auteur**. Attends-toi à des défauts et à
 > des fonctions manquantes, et garde ta propre copie de ce qui compte.
 
@@ -42,6 +42,9 @@ L'installateur n'est pas encore signé : si Windows affiche « Windows a protég
   **Recherche web** (recherche sur le web tout de suite, plus une collecte publique bornée) ou
   **Développement** (depuis le dossier des sources).
 - **Deck Lab** : enregistre tes decks, compare-les, exporte des listes de 60 cartes à copier dans TCG Live.
+  Le rang et le taux public BO1 précèdent le nom; **Classement** liste tous les decks, y compris ceux aux données
+  insuffisantes. **Statistiques** montre les chiffres publics de l'archétype, l'échantillon et les dates,
+  avec **Sources et détails** repliable.
 - **Cartes & méta** : un classeur de cartes hors ligne (textes FR/EN, impressions, légalité datée) tiré du
   catalogue public TCGdex, et les résultats de tournois gardés sur ton PC.
 - **Apprentissage** : les observations sont conservées avec la taille d'échantillon et les hypothèses sont
@@ -55,8 +58,9 @@ Ces absences sont des **choix de conception** :
 - il ne joue **pas** à ta place : pas d'overlay, pas de bot, pas d'automatisation de clics, aucune
   interaction avec le client du jeu;
 - il n'est **pas** fait pour les tournois officiels ni pour les endroits où l'assistance est interdite;
-- il n'envoie **rien** à un moteur cloud sans ton accord (**Réglages → Coach IA**), et un journal collé
-  n'atteint jamais un moteur capable d'exécuter des commandes;
+- l'envoi à Codex ou Claude (avec tes statistiques anonymisées) est **pré-coché** dans l'assistant de premier
+  lancement; décoche-le là ou dans **Réglages → Coach IA** quand tu veux, et un journal collé n'atteint jamais un
+  moteur capable d'exécuter des commandes;
 - il n'a **ni compte, ni télémétrie, ni publicité**;
 - il n'invente **pas** de taux de victoire, de coût en crédits ni ta collection quand ils sont inconnus.
 
@@ -65,7 +69,7 @@ Ces absences sont des **choix de conception** :
 L'interface suit Windows au premier lancement : un Windows en français donne le français, toute autre
 langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**; ton choix est conservé.
 
-## Limites exactes de la version 0.9.3
+## Limites exactes de la version 0.9.5
 
 | Limite | Détail |
 |---|---|
@@ -74,6 +78,7 @@ langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**
 | Catalogue de cartes | La version publique la plus récente de TCGdex (environ 25 Mo à télécharger, 175 Mo sur le disque); les nouvelles extensions arrivent par **Mettre à jour** dès que TCGdex publie leurs cartes. |
 | Coach | Dépend d'un moteur que tu installes toi-même (Codex CLI, Claude Code ou Ollama), avec son compte et ses limites. |
 | Analyse des combats | Tirée de ce que montre le journal TCG Live; l'information cachée (main, Récompenses face cachée) reste inconnue. |
+| Statistiques du Deck Lab | Chiffres publics par **archétype**, pas pour tes 60 cartes exactes. Au plus une collecte par jour d'un tournoi en ligne récent (Limitless) : petits échantillons, pas des chiffres mondiaux; sous les seuils, aucun pourcentage. |
 | Usage réel | Utilisé par une seule personne; les tests tournent sur des données inventées seulement. |
 | Nom | **PokeMind** est un nom de projet de fans non officiel; aucune recherche de marque n'a été faite. |
 
@@ -83,8 +88,9 @@ langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**
   conserve.
 - L'usage du réseau est explicite : téléchargement du catalogue et de ses mises à jour, illustrations de
   l'API publique TCGdex (désactivables), vérification des mises à jour (au plus deux fois par jour,
-  désactivable), messages en **Recherche web**, et les moteurs cloud que tu autorises, qui peuvent chercher
-  sur le web quand la mémoire locale n'a pas la réponse.
+  désactivable), messages en **Recherche web**, **Deck Lab → Statistiques** (au plus une collecte publique
+  Limitless automatique par jour et un bouton **Actualiser** borné; tes decks ne sont pas envoyés), et les
+  moteurs cloud que tu autorises, qui peuvent chercher sur le web quand la mémoire locale n'a pas la réponse.
 - Les journaux bruts, identités de joueurs et chemins de fichiers ne font jamais partie du contexte
   automatique du coach.
 - Toutes les données de ce dépôt sont inventées; les tests ne lisent jamais un vrai dossier utilisateur.

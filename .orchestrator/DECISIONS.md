@@ -1,3 +1,350 @@
+# D-314 — Arbitrage indépendant STOP 018 et nouveau mandat borné 019
+
+**2026-11-15, Québec.** ChatGPT a vérifié directement sur GitHub le rapport `529f764`, le diff des deux commits après activation 018, le test `tests/test_version_metadata.py`, le CHANGELOG et la release publique `v0.9.3`. **Le STOP de Codex 018 est justifié** : échec d'une assertion littérale de métadonnées devenu incompatible avec l'en-tête daté de préversion préparé dans le commit documentaire 018 `2eff8ca`. Codex rapporte **1884 tests réussis / 1 échoué / 3 ignorés** dans une porte complète isolée; ChatGPT n'a pas rejoué pytest ni inspecté le PC Windows. Aucun code applicatif changé, aucun export ni push public tenté, aucune donnée personnelle touchée selon agent. Audit détaillé : `.orchestrator/VERIFICATION_PM-V1-PUBLIC-RELEASE-018_STOP_2026-11-15.md`.
+
+**Décision technique :** le test doit pouvoir accepter strictement deux états de la même 0.9.5 : `unreleased (release candidate)` ou une **date ISO valide** suivie de `(pre-release)`. La version 0.9.4 doit rester qualifiée `never published`, et toutes les autres garanties de métadonnées doivent rester actives. Ne pas masquer l'échec, pas de modification produit, pas de nouvelle version. La date privée de préparation ne prouve pas qu'une release existe.
+
+**Autorité :** D-313 reste la **demande explicite du propriétaire de publier uniquement v0.9.5**; la condition d'arrêt de 018 a été respectée. Après cet audit indépendant, un **nouveau mandat technique 019** est préparé pour Codex High : corriger uniquement cette porte, revalider intégralement, et **seulement si absolument toutes les portes sont vertes**, finir la publication v0.9.5 selon D-313. Ce n'est pas une exécution ou un deuxième essai public de 018 : 018 est consommé, **0 push public et 0 release** à date. Aucun GO pour installation, backup, données personnelles, correctifs supplémentaires, 1.0.0, hotfix ou V2. STOP si nouvelle anomalie; rapport assaini à ChatGPT.
+
+# D-313 — Réception propriétaire 017 et GO de publication publique PokeMind 0.9.5
+
+**2026-11-14, Québec.** Après livraison 017, l'utilisateur confirme directement « TOUT FONCTIONNE ». Cette confirmation accepte **l'interface et les usages qu'il vient de vérifier**, et ferme la réception utilisateur de 017 : `OWNER_GUI_ACCEPTED_017`. Elle ne transforme pas les 1 885 tests et les 480 fichiers protégés, rapportés par Codex, en tests réalisés indépendamment par ChatGPT; `FROZEN_INTERACTIVE_QA_NOT_VERIFIED` demeure une limite des essais automatiques.
+
+Le propriétaire donne maintenant un **nouveau GO explicite** (« mets-le sur GitHub », « pousse-le », « avec Codex », « c'est fini, let's go ») pour une **seule tâche de publication** : préparer un export public sûr de la branche active du privé, pousser une mise à jour **fast-forward** du dépôt public `Sd-tech-Sol/PokeMind` en conservant l'historique public, puis publier `v0.9.5` comme **préversion** avec Setup Windows non signé et SHA-256 **seulement si toutes les portes qualité/confidentialité/identité passent**. La version publique actuelle reste 0.9.3 jusqu'à publication effectivement vérifiée. L'autorisation inclut QA synthétique isolée et, si l'artefact 017 est absent, **un build de distribution neuf et non destructif** du code figé, mais aucune nouvelle fonctionnalité, correction de moteur, changement de version, installation personnelle, migration, backup, restauration ou accès aux données personnelles. 0.9.4 était candidate non publiée; aucune promotion implicite à 1.0.0.
+
+Codex High est l'exécuteur du seul mandat `PM-V1-PUBLIC-RELEASE-018`, prescrit par `NEXT_PROMPT.md`, `NEXT_ACTION.md`, `STATE.json` et le premier en-tête d'`AGENTS.md`. Les vieux STOP `NOT_RELEASE_READY` et autorisations D-312 concernent l'état avant D-313 : ils restent historiques et ne peuvent ni bloquer abusivement la nouvelle autorisation explicite ni autoriser une nouvelle installation. **STOP sans push public si un contrôle échoue**; rapport assaini et audit ChatGPT à la fin, réussite ou arrêt.
+
+# D-312 — GO explicite du propriétaire pour le candidat Windows final 017 incluant l'UX 016
+
+**2026-11-14.** Après audit indépendant favorable de la source `66a1ce0a2f974a480485110bbc10e8d7c086368b` (lot 016), le propriétaire répond **« go »** à la proposition explicite de ChatGPT de **préparer et exécuter le dernier mandat Windows**, comprenant : nouvelle compilation EXE/Setup 0.9.5 du code 013+014+016, QA source et gelée **entièrement synthétique et isolée**, contrôles SHA/scan/PYZ et Inno QA à **AppId distinct**, puis **nouvelle archive intégrale vérifiée** du stockage personnel et **copie vérifiée du programme installé 015**, puis **UNE seule installation locale conditionnelle** du nouveau Setup Inno sous le même AppId de production, uniquement si toutes les portes sont vertes. Le propriétaire fera ensuite la **réception manuelle** de la GUI Windows. GO spécifique pour **ce seul mandat `PM-V1-FINAL-WINDOWS-UX-INSTALL-017`**; ne pas étendre à d'autres usages.
+
+**Arbitrage de priorité explicite :** les anciennes interdictions de build/install/backup de `STATE.json` ou `AGENTS.md` décrivent la tâche 016 **SOURCE-ONLY** et les anciens mandats; D-312 **autorise précisément** la nouvelle archive et l'installation contrôlée dans 017, sans annuler les obligations de protection. L'autorisation D-309/D-310 d'installer 015 était **consommée**; D-312 constitue le **nouveau GO distinct**. `NOT_RELEASE_READY` reste vrai et signifie **publication publique non autorisée**, pas interdiction de l'installation locale expressément approuvée. Les champs globaux de STATE, le premier NEXT_ACTION, AGENTS, HANDOFF et le nouveau NEXT_PROMPT actif doivent correspondre dès la première lecture Codex : STOP si divergence **réelle après fast-forward**, sans improvisation. Le dépôt n'exécute rien automatiquement.
+
+**Limites non négociables :** source de code déjà auditée `66a1ce0`, **aucune correction source, nouvelle fonctionnalité, version bump, nouvelle dépendance ou publication**; tests/build/QA sans vrai deck/journal/sauvegarde, pas de Coach ou cloud sur les données du propriétaire; Setup non signé s'il n'existe pas de signature autorisée; ne pas écraser d'anciens builds/candidats; ordinateur sous session utilisateur, programme fermé, aucune fin de processus forcée. Sauvegardes nouvelles seulement **après** toute la QA synthétique et si racine desktop vérifiée, JSON-first avec SQLite optionnelles; sauvegardes antérieures 012/015 et deux fichiers `synthetic_v2.*` laissés intacts, aucun nettoyage; comparaisons SHA/inventaire et vérifications SQLite locales uniquement, sans données, noms, chemins absolus, hashes personnels ni captures privées dans Git. Une tentative Setup **maximum**; sur n'importe quel échec, STOP sans seconde tentative, désinstallation ni restauration/rollback automatique. Après installation, réception propriétaire de Deck Lab/Classement/Statistiques/Coach et des données; GO **distinct** indispensable avant tag/release/export/publication dans le dépôt public.
+
+Mandat Codex High versionné dans `.orchestrator/NEXT_PROMPT.md` et activé seulement par `.orchestrator/NEXT_ACTION.md`. Rapport final assaini privé et STOP pour audit ChatGPT. **État à l'instant du GO : aucune opération 017 exécutée.**
+
+# D-311 — Réception partielle 015 : classement et statistiques Deck Lab illisibles; correctif SOURCE/QA 016
+
+2026-11-14. Après installation techniquement auditée du candidat 015, le propriétaire a envoyé une **capture de la VRAIE interface** et confirme que les **bulles du Coach sont arrondies**. Il refuse cependant de considérer le classement/statistiques Deck Lab comme reçus : dans le menu des decks, les noms sont tronqués avant d'afficher le pourcentage et **aucun rang explicite** n'est indiqué; dans l'onglet Statistiques, le graphique est suivi d'une légende/règles/sources/dates/statuts sur de nombreuses lignes denses, peu lisibles. **Réception V1 PARTIELLE / NOT_RELEASE_READY.**
+
+Audit du code présent : `services.py:rank_decks` trie déjà les taux PUBLIC BO1 décroissants (n≥20; inconnus ensuite); `window.py:loaded_decks` écrit `<nom> · <pourcentage>` mais `_DeckPicker.paintEvent` tronque à droite, rendant invisible l'information; `charts.py:PublicStatsPanel` présente côte à côte toutes les chaînes `project_public_stats` dans `summary`, `legend`, `source` et note. Le premier deck de la capture a **48,7 % PUBLIC BO1 sur 117 matchs**, visible seulement dans le sélecteur du bas; cette donnée n'est **pas** à coder en dur ni représentative de l'état futur.
+
+**Mandat `PM-V1-DECKLAB-RANKING-STATISTICS-UX-016` :** correction VISUELLE **code source + tests Qt synthétiques uniquement**. Préserver le backend statistique et les contrôles de confidentialité. Afficher rang et pourcentage en premier dans le menu (fermé/ouvert), et un tableau `Classement` lisible de tous les decks, taux connus en tête, inconnus sans taux. Réorganiser l'onglet Statistiques : un gros indicateur PUBLIC, échantillon, période/source, graphique et légende courte; sources/méthodologie/synchronisation détaillées derrière un contrôle `Sources et détails` repliable mais accessible. Ne pas cacher l'incertitude, les exclusions ou la population BO1/BO3. **Aucune permission d'installation, backup, nouvelle version, publication/tag, migration ou accès aux données personnelles**; ne pas relancer les corrections d'auto-deck 013/014 (leur fonctionnement n'est pas démontré incorrect par cette capture). La version 015 installée et ses sauvegardes demeurent intactes. Une nouvelle décision sera requise après audit source 016 pour fabriquer/installer un candidat corrigé.
+
+# D-310 — Arbitrage indépendant du STOP 015 : réconciliation des permissions et mandat inchangé
+
+2026-11-13. ChatGPT a vérifié directement le commit `438021d838e8da66e4a75344610e1088489c262c`, le rapport 015, `STATE.json` **avant** (`aa505a0`) et **après** le STOP, `AGENTS.md`, `.orchestrator/skills/github-executor/SKILL.md`, D-309 et le prompt original conservé. **STOP Codex justifié** : dans le STATE reçu, `latest_decision=D-308`, `release_status` affirmait à tort « no new candidate/build/install GO » et `private_data_rules` cantonnait encore le travail à 014, tandis que `current_task` et D-309 autorisaient 015. Le rapport confirme **aucune phase A–D**, zéro test/build/archive/install, zéro tentative Setup et aucun accès aux données personnelles. Comparaison GitHub `aa505a0...438021d` : **un seul commit d'orchestration**, aucun changement produit.
+
+**ARBITRAGE : D-309 est l'autorisation humaine plus récente et précise pour UN candidat 015**, incluant nouvelle compilation/QA isolée, puis **UNE nouvelle sauvegarde préventive vérifiée des données réelles et copie de l'ancienne installation**, puis **UNE installation conditionnelle** du nouveau Setup 0.9.5 si toutes les portes passent. Les règles plus anciennes de refus de nouvelle sauvegarde et d'interdiction de tout accès aux données étaient limitées aux anciens mandats **sans ce GO explicite**; ne pas en déduire une permission générale ou une répétition de backup en dehors de 015. Les anciens champs globaux de STATE sont **corrigés**, pas prétextes à refuser ou refaire D-309. `release_status` reste **NOT_RELEASE_READY** car il signifie **publication publique non autorisée**, pas interdiction de build/installation locale.
+
+**Ce GO n'est pas consommé** : un STOP prévol n'a exécuté aucune installation et aucune sauvegarde 015. Réactiver manuellement le **MÊME identifiant 015** avec un `NEXT_PROMPT.md` actif explicitement nouveau reprenant le protocole complet et indiquant D-310. `STATE.current_task`, les champs globaux et `NEXT_ACTION/HANDOFF/AGENTS` doivent tous correspondre (`READY_FOR_CODEX`). Les archives ne confèrent aucun droit. Le propriétaire **déclenche lui-même** Codex après synchronisation fast-forward; aucune reprise automatique à la simple écriture Git.
+
+**Garde-fous préservés** : preuve de source `7cede8848fcfeb4606608fed44625df6d612740a`; aucune correction code/version/dépendance, installation 009 actuelle et sauvegardes 012 préservées; pas de PokeMind ouvert au backup/installation, aucun shutdown forcé; tests/build/Inno QA purement synthétiques avant tout accès réel; sauvegarde intégrale + copie programme **neuves et validées** avant la seule installation permise; STOP sur n'importe quel échec, **pas de seconde tentative, restauration, suppression, nettoyage fichiers 008, export de données privées, changement de consentement, tag ou publication**. Réception GUI après installation puis GO distinct pour publication.
+
+# D-309 — GO pour dernier candidat Windows 0.9.5 (013+014), sauvegarde et UNE installation conditionnelle
+
+2026-11-13. Le propriétaire répond explicitement « go » à la proposition **préparer ET exécuter le dernier mandat Windows : compilations 013+014, QA isolée, nouvelle sauvegarde vérifiée et installation contrôlée**. Autorisé : utiliser le code produit privé déjà audité `7cede8848fcfeb4606608fed44625df6d612740a`, version 0.9.5 inchangée; relancer la porte complète isolée sur fixtures, compiler un EXE PyInstaller et un Setup Inno **NON SIGNÉ candidat** dans de **nouveaux dossiers immuables**, contrôler scanner de chemins privés, SHA256, QA synthétique de binaire et installateur QA à AppId inédit; **seulement si tout est vert**, inventorier et archiver **intégralement** les données réelles via l'outil desktop existant et vérifier ZIP/empreintes, copier et vérifier l'actuel répertoire de programme, recontrôler AppId/chemins/empreintes/processus fermé, puis exécuter **UNE seule fois** le nouveau Setup au **même AppId**. Aucun GO additionnel nécessaire pour cette unique installation si les barrières sont toutes satisfaites; sinon STOP, aucune reprise ni restauration automatique. La réception de la GUI finale sera réalisée manuellement par le propriétaire (données/decks, Deck Lab, pourcentages PUBLIC BO1, bulles arrondies, correction 014); **GO distinct indispensable pour toute publication/tag/release/export public**, ainsi que toute suppression des deux fichiers fictifs 008, retour arrière ou correction source. Le GO précédent d'installation 009 ne s'étendait pas à cette source; le GO présent D-309 l'autorise expressément. Aucun ajout fonctionnel ou changement de version. Mandat unique `PM-V1-FINAL-WINDOWS-CANDIDATE-015` dans `.orchestrator/NEXT_PROMPT.md`.
+
+# D-308 — Choix techniques bornés du mandat 013 (2026-11-13)
+
+Décisions d’implémentation sous le GO D-307 : admission adverse locale à 4 tours / 6 noms / 8 mentions,
+deux Pokémon identifiables dont une signature, recouvrement ≥80 %, avance ≥2 noms entre compositions,
+référence publique vérifiée/datée ≤28 jours; victoire seulement avec Récompenses prises 6–5 attestées.
+Déduplication par composition normalisée puis famille, JSON et références SQLite conservés; publication
+atomique exclusive. Rattrapage limité à une demande positive sur une partie sélectionnée, distincte d’un
+contre-deck; le LLM ne reçoit pas d’autorisation d’écriture libre sur import. Classement public BO1 n≥20
+via le read model existant et un échantillon partagé; peinture QPainter 12px derrière le QTextBrowser,
+texte ajouté incrémentalement puis Markdown final. Contrat, limites et QA :
+[QA_PM_COACH_FINISH_013.md](../docs/QA_PM_COACH_FINISH_013.md). Source/fixtures seulement;
+installation 009 et sauvegardes préservées, packaging et publication soumis à une décision distincte.
+
+# D-307 — GO utilisateur pour une dernière correction ciblée de Coach, classement public et bulles Qt (013)
+
+2026-11-12. Après installation contrôlée du candidat 009 (0.9.5) et capture du vrai client, le propriétaire confirme visuellement la galerie Deck Lab 3 colonnes et les images réelles, mais demande trois comportements nouveaux avant réception finale : (1) **défaite** : reconstruction/enregistrement automatique conditionnel d'un deck adverse **PUBLIC connu** si les cartes vues sont suffisamment distinctives, sans doublon d'archétype/liste; preuve insuffisante (départ trop tôt) = aucun deck; **victoire** : uniquement partie effectivement serrée et preuves publiques suffisantes; hypothèse, jamais liste exacte; (2) mettre en tête de Deck Lab les decks avec **taux de victoire public vérifiable**, décroissant, taux/n/mode/source/date affichés, aucun taux si données insuffisantes; (3) arrondir vraiment les messages du chat et adoucir le grand bleu et le compteur d'activité, sans refondre les autres écrans. **Autorisation limitée à la modification du code et aux tests SYNTHÉTIQUES**; aucune autorisation de réinstaller/mettre à jour le PC, exécuter sur les vrais journaux, accéder/supprimer des données privées, publier/taguer ou changer la version. La sauvegarde 012 et le PokeMind 0.9.5 installé restent intacts. Implémenter via briques actuelles `opponent_observer`/`Services`/`deck_public_stats`/Qt; **un seul mandat 013**, pas de nouveau moteur/modèle/collecteur. L'auto-enregistrement doit être une décision locale déterministe sécurisée et idempotente, non un appel libre de `save_deck` par un LLM; l'absence de public source ou l'incertitude doivent provoquer un non-enregistrement honnête. Le classement utilise la population **BO1 PTCGL Standard** comparable, n minimal 20, sans fusion BO3 ni taux inventés. Les coins doivent être rendus natifs Qt : CSS HTML de `QTextBrowser` ne suffit pas. Après test source, STOP pour audit ChatGPT avant toute nouvelle construction et réception réelle.
+
+# D-306 — Correction du protocole de sauvegarde Windows, pas de nouveau GO
+
+2026-11-12. Audit ChatGPT du rapport 011 `a973e2f` : **STOP avant sauvegarde et installation justifié selon le mandat**, mais son exigence de la présence de `data/local/pokemind.sqlite3` était une **erreur de précondition**. Le client PokeMind Desktop installe un `Store` JSON pour préférences/conversations et conserve decks/journaux/rapports en dossiers `data/local`, une SQLite legacy étant optionnelle (source `desktop/app.py`, `window.py`, `assistant/sessions.py`, `desktop/services.py`, `desktop/ingestion.py`). **Absence de la SQLite du CLI ≠ données utilisateur disparues.** Réutiliser l'outil existant `scripts/archive_data.py` / `data_archive.archive` pour une archive **complète et vérifiée** de la racine desktop avant installation, accompagnée d'une copie contrôlée de l'ancienne version du programme; ne pas créer/rechercher/restaurer une SQLite inexistante. Le propriétaire avait déjà donné `GO` pour UNE installation 009 après backup (D-305) ; **aucun Setup ou backup n'a été effectué en 011**, donc cette autorisation reste conditionnellement utilisable pour le successeur `PM-RELEASE-095-CONTROLLED-DESKTOP-INSTALL-012`, déclenché manuellement par le propriétaire. Toute déviation/échec de protection entraîne STOP. Pas de code ou nouvelles dépendances, suppression, restauration, publication, nouvelle version ou migration.
+
+# D-305 — GO pour une installation locale CONTRÔLÉE du candidat 009, sauvegarde préalable obligatoire
+
+2026-11-12. Après audit de code 009 et inspection limitée 010 (deux fichiers `synthetic_v2.*` présents sous POINTEUR=APP_STANDALONE, origine 008 non confirmée), le propriétaire répond explicitement « go » à la proposition d'**installer le candidat 009 sur son PC avec sauvegarde préalable et vérifications**. Autorisation spécifique : prévol en lecture seule, contrôle du SHA-256 du Setup 009, **une nouvelle sauvegarde privée vérifiée** de la base SQLite et copie de protection de l'arbre complet des données, **copie de secours du répertoire de programme actuel** (ancien hotfix 0.9.5), puis **une seule installation locale** du Setup 009 non signé au même AppId/version 0.9.5 et contrôle de conservation des données. L'ancienne règle « aucune nouvelle sauvegarde » visait les mandats précédents sans consentement : ce GO explicite autorise la sauvegarde préventive propre à ce déploiement seulement. **Garde-fou obligatoire : STOP avant toute installation si signature d'empreinte, chemins/AppId, sauvegardes vérifiées, place disque ou état du programme ne sont pas conformes**; pas de suppression ni restauration automatique. Le candidat 008 reste bloqué; les deux exports fictifs demeurent intacts. Après l'installation, réception GUI **manuelle du propriétaire** et audit ChatGPT; aucune installation réputée validée avant cette réception. **NON autorisé :** publication publique, tag, changement de version, auto-update, nouvelle fonctionnalité, migration, import/OCR/LLM/Coach, purge, données dans Git ou restauration sans nouvel ordre. Mandat `PM-RELEASE-095-CONTROLLED-OWNER-INSTALL-011` dans `NEXT_PROMPT.md`; Codex exécute, documente, STOP pour audit.
+
+# D-304 — GO propriétaire pour le contrôle local en lecture seule des deux exports de démo 008
+
+2026-11-12. Le propriétaire répond explicitement « oui » au contrôle proposé par ChatGPT : **une recherche ciblée et en lecture seule** des deux noms `synthetic_v2.txt` / `synthetic_v2.json` éventuellement créés lors de 008. **Autorisé** : localiser les racines plausibles à partir de l'emplacement de projet, du pointeur de données `location.json` (seulement pour la racine), de l'override d'environnement courant et de la racine autonome standard; vérifier la présence, le type, la taille et les horodatages UTC des deux chemins précis, sans contenu. **Non autorisé** : lire les decks, fichiers d'export, DB, journaux, consentements ou sauvegardes; supprimer, déplacer, restaurer, reconstruire, installer, publier ou lancer PokeMind. Rapporter des étiquettes de racines et métadonnées assainies, jamais des chemins personnels. Une absence actuelle ne prouve pas qu'il n'y a jamais eu d'effet historique. Mandat Codex `PM-SAFETY-008-READONLY-IMPACT-CHECK-010` dans `NEXT_PROMPT.md`, STOP pour audit; **GO d'installation distinct requis** avant candidat Windows 009.
+
+# D-303 — Démo confinée et inclusion explicite au binaire, GO limité du propriétaire
+
+2026-11-12. Mandat 009, code `231e6ebc9b99c2adbba95ca217287542bb3e897c` : forcer la racine des enfants avant tout export et tester faux pointeur/override, refus des redirections et conservation des exports existants. Le script Windows existant ne liait pas demo.py au PYZ; après présentation de l'ajout exact **`--hidden-import pokemind.demo`**, le propriétaire a explicitement choisi « Autoriser cet ajout minimal au script de build ». Aucun autre changement de packaging, UI, version ou dépendance autorisé/déduit. Porte complète 1814/3, nouveau candidat local non signé et QA selon RESULT; audit indépendant requis. Candidat 008 bloqué/préservé; OWNER_DATA_SIDE_EFFECT_UNKNOWN et absence de navigation interactive du binaire maintenus. Aucun accès/déploiement privé ni publication sans nouveau GO.
+
+# D-302 — Blocage sécurité 008 : export synthétique hors espace de démo, correctif borné 009
+
+2026-11-09. Audit ChatGPT direct de `d16f046` et du code source : la démo CLI échoue avec `DEMO_EXPORT_OUTSIDE_WORKSPACE` **après** avoir écrit sa sortie `deck export`, car les sous-processus n'imposent pas `POKEMIND_DATA_ROOT` dans leur workspace fictif. Une racine active CLI (projet, pointeur, override) peut recevoir **deux fichiers fictifs neufs sans écraser les fichiers existants**; l'emplacement réel demeure inconnu, **aucune perte/fuite de données propriétaire prouvée**. Candidat EXE/Setup 008 construit mais **BLOQUÉ pour installation et publication**; tests 1809/3 et Inno QA passés selon Codex, binaires non vérifiés indépendamment, parcours UI du binaire non prouvé. Une **unique remédiation** `PM-RELEASE-095-DEMO-CONFINEMENT-009` est préparée : forcer l'isolation AVANT export, test de régression via **faux** pointeur/override, porte complète puis nouveau candidat QA isolé dans nouveaux dossiers, aucun changement UI ni version. **Aucune consultation/nettoyage de la racine privée sans autorisation propriétaire distincte**. Pas d'installation, release ou publication implicite.
+
+# D-301 — Autorisation limitée d'un candidat Windows local 0.9.5 (UI 006 + 007), aucune installation
+
+2026-11-09. Après audit source des lots 006/007 et réception visuelle des captures du vrai PokeMind synthétique, le propriétaire répond « oui » à la proposition **préparer un installateur candidat Windows sans l'installer ni le publier**. Décision : utiliser l'outillage existant `Build-PokeMindDesktop.ps1` (staging dédié) + `Build-PokeMindInstaller.ps1` (sortie unique), garder le **numéro 0.9.5** et identifier le build par SHA/dossier immuable. Candidat de production **non exécuté** pendant QA à cause de son Inno AppId réel; installation/désinstallation simulées avec un **AppId QA distinct** et des données inventées. Exiger porte complète isolée, scan des chemins personnels/PYZ, manifeste SHA256, fumée EXE et tests de mise à niveau fictive. Binaires locaux hors Git. **Ce GO n'autorise aucune installation sur le PC, sauvegarde ou restauration de données, export public, tag, changement de version, ni publication.** Prompt unique `PM-RELEASE-095-BRAINBALL-WINDOWS-CANDIDATE-008`; STOP pour audit ChatGPT et décision distincte avant toute mise à niveau réelle.
+
+# D-300 — Premier lot d'intégration du design approuvé dans la galerie réelle
+
+2026-11-09. GO utilisateur (« oui ») après examen visuel de la finition 005; ChatGPT a recommandé la transition des prototypes autonomes vers le **vrai Deck Lab Qt**, avec une première tâche **limitée à la galerie**. Réutilisation constatée des composants de production `DeckGallery`, `CardTile`, `CardArt`, styles BrainBall et tests Qt. Décision : adapter disposition/cadres/taille/lecture des vrais groupes de cartes et conserver le pipeline image existant. Ne pas porter le bandeau dragon, Coach fictif ni les détails simulés; les autres écrans suivront seulement par décisions ultérieures. `PM-UI-DECKLAB-REAL-GALLERY-006` prêt dans `.orchestrator/NEXT_PROMPT.md`, code privé et validation complète exigés, STOP pour audit ChatGPT. **Ce GO n'autorise aucune installation utilisateur ni publication.** Version installée 0.9.5 hotfix inchangée et publique 0.9.3 conservée.
+
+# D-299 — Direction visuelle Deck Lab 004 approuvée, dernière finition isolée avant intégration
+
+2026-11-09. Le propriétaire répond explicitement « oui » à l'approbation du style 004 **avec** les corrections de cadrage du bandeau, de hauteur utile galerie, d'équilibre Coach et de lisibilité. Décision : **figer la direction graphique**, conserver BrainBall/Qt, arrêter la multiplication de nouvelles propositions de style. Mandat unique `PM-UI-DECKLAB-FINAL-VISUAL-FINISH-005` dans `NEXT_PROMPT.md` : corriger ces points dans la démo existante, valider captures/vidéo et tests; **aucun** changement de `src/`, installation ou publication. Après réception positive du résultat, préparer séparément **une seule tranche d'intégration progressive du vrai Deck Lab**, pas de refonte complète. Le GO ne vaut pas autorisation de release, de setup ou d'usage de données privées.
+
+# D-298 — Retouche visuelle ciblée du prototype, avant intégration (PM-UI-DECKLAB-VISUAL-POLISH-004)
+
+2026-11-08. Nouvelle demande directe du propriétaire après l'audit source 003 : cartes trop petites,
+bandeau discret, manque de profondeur, galerie vide et Coach austère. Base `0a613a9`, code `4f413de`.
+
+1. Six illustrations conservées, rangées complètes de trois cartes à 1500 px, deux à 1100 px. Art ~213 px
+   contre ~144 px en 003; titres 17 px et sous-textes 12 px avec hauteur réservée pour les retours de ligne.
+2. Bandeau panoramique original QPainter, créature existante, halo cyan/or et contours modérés; image composée
+   une fois en mémoire. Sélecteur intégré au bandeau, pochettes en couches, ombres existantes et sélection or.
+3. Coach à droite avec identité renforcée, accueil et panneaux explicatifs des commandes existantes.
+   Aucune réponse IA, recommandation, donnée personnelle, statistique ou fonction produit inventée.
+4. Le prototype reste dans `demos/`, même navigation réelle, même dock et trois onglets. Aucun changement
+   de `src/`, installation, version, dépendance, root personnel ou publication publique. Référence PNG intacte.
+5. Preuve visuelle locale dans `build/qa-decklab-polish/`, anciens aperçus conservés pour comparaison.
+   Tests et porte complète exigés avant push; résultat détaillé dans RESULT. Acceptation artistique au propriétaire,
+   audit indépendant ChatGPT et mandat distinct avant toute intégration au produit.
+
+# D-297 — Référence originale privée et aperçu Qt de la structure réelle (PM-UI-DECKLAB-REFERENCE-INTEGRATION-003)
+
+2026-11-08. GO direct du propriétaire, mandat synchronisé `ecc0679`; référence `2aa249c`, code `84214b9`.
+
+1. PNG fourni inspecté, décodé et conservé intact; versionné seulement en privé. L'image conceptuelle ne devient
+   ni une source de cartes officielles ni une permission de publication publique. Empreinte dans le document de référence.
+2. Adaptation de présentation dans `demos/` : le constructeur MainWindow initialise stockage/services/travaux.
+   Éviter ces chemins protège l'isolation sans refactor de production. Navigation/onglets/dock Coach calqués sur
+   le vrai shell; palette, logo, icônes, ChatInput, CardArt et AnimatedStack réutilisés. Aucun changement de `src/`.
+3. Six illustrations originales fictives, mention de démonstration, commandes hors aperçu désactivées.
+   Aucune statistique, recommandation, fonction simulatrice ou connexion IA inventée. Contraste palette ≥ 4,5:1.
+4. Capture et film de vrais QWidget locaux, hover 220 ms et transitions 180 ms; 1500×970 et 1100×900,
+   contrôle Windows 125 %, mouvement réduit. Aperçus hors Git; preuve technique distincte de réception artistique.
+5. Porte complète isolée verte avant push code : 130 Qt + 1649 cœur, 3 ignorés, zéro échec. Rapport et STOP audit;
+   autre mandat nécessaire pour intégrer, installer ou publier. Hotfix installé et dépôt public conservés sans intervention.
+
+# D-296 — Démo native indépendante avant décision esthétique (PM-UI-PREMIUM-DECKLAB-DEMO-002)
+
+2026-11-08. GO propriétaire après rejet esthétique de la tranche précédente; exécution Codex sur base `da77207`, code `f5f751f`.
+
+1. **Aucun changement produit** : démo dédiée dans `demos/premium_decklab/`, sans `Services`, `Store`, root de données,
+   compte, téléchargement ou LLM. Palette et emblème BrainBall autorisés réutilisés. Commande Windows documentée.
+2. **Six illustrations originales fictives**, dessinées en mémoire avec QPainter : dragon, renard, raie, cerf,
+   chouette et cristal. Code et art sous MIT; ni carte Pokémon TCG ni liste légale ou résultat réel sous-entendu.
+3. `CardArt` et `AnimatedStack` existants hérités/réutilisés : hover 220 ms, transitions d'onglet/détails 180 ms;
+   aucune géométrie voisine animée. Sélection or, focus clavier, mouvement réduit; séquence de démo bornée sur demande.
+4. **Preuve de mouvement issue du vrai QWidget**, pas d'images de maquette : événements Qt, horloge d'animation pilotée,
+   120 frames à 20 i/s, GIF/MP4 de six secondes. Curseur circulaire ajouté à l'enregistrement seulement. Utilisation
+   de FFmpeg/Pillow déjà présents, aucune installation. PNG complets et art source exportés localement hors Git.
+5. Sources et tests versionnés seulement sur la branche privée après porte complète verte. Aperçus consultables
+   dans `build/qa-premium-decklab-demo/`, commande de lecture dans le README de la démo. Audit ChatGPT et jugement
+   esthétique propriétaire requis; aucune intégration/installation/version/publication déduite. Hotfix installé
+   0.9.5 et version publique 0.9.3 conservés sans intervention.
+
+# D-295 — Galerie Deck Lab : une animation existante, sélection visuelle locale (PM-UI-PREMIUM-DECKLAB-001)
+
+2026-11-08. Exécution Codex du mandat propriétaire, base privée `da7efc1`, code `b4d0360`; limites et preuves dans [RESULT](RESULT.md).
+
+1. **Réutiliser `CardTile`, `DeckGallery`, `CardArt` et BrainBall** : marges et sections régulières, grille alignée à
+   gauche, noms/impressions qui se replient; hauteur minimale calculée au changement de largeur ou de texte pour
+   éviter le chevauchement Qt des labels et de l'image. Le mode galerie laisse l'aperçu Cartes & méta inchangé.
+2. **Une seule animation par carte**, celle de `CardArt` : 220 ms OutCubic, zoom 1,8 %, soulèvement de 2 px à
+   l'intérieur de l'image, reflet discret et liseré; aucune géométrie de grille animée. `MotionEffects` continue
+   pour les autres contrôles et évite une deuxième couche sur les tuiles/illustrations de la galerie.
+3. **Sélection visuelle transitoire**, au focus clavier ou à l'activation; un seul cadre dans le token `focus`,
+   distinct du survol bleu, toujours visible avec mouvement désactivé. Aucun choix de carte/deck enregistré.
+4. Réglage de mouvement, masquage et fermeture arrêtent les animations; un événement tardif sur une carte cachée
+   ne les redémarre pas. Aucun timer permanent, snapshot, moteur ou dépendance ajouté. Palette JSON, catalogue,
+   cache, hotfix UTC/local, services, logique des decks et version restent inchangés.
+5. **Code privé seulement** : captures géométriques synthétiques locales hors Git, tests isolés et porte complète
+   obligatoires avant push. L'installation 0.9.5 acceptée et la version publique 0.9.3 restent telles quelles;
+   audit indépendant ChatGPT avant une autre tranche, aucun GO d'installation ou de publication déduit.
+
+# D-294 — Réception 0.9.5 : dates de récupération du catalogue lues en jour local; menus des Réglages lisibles (PM-RELEASE-095-RECEPTION-HOTFIX-001)
+
+2026-11-07 Québec. Demande directe du propriétaire après son contrôle visuel (réception non acceptée). Code `00eecb3`.
+
+1. **Une date de récupération UTC se compare à `as_of` en jour local** (`database.local_day`). Les horodatages du
+   catalogue sont écrits en UTC (`…Z`); `as_of` vient de `date.today()`. Une date nue reste telle quelle; une vraie date
+   future reste refusée. Appliqué aux seules dates de récupération du catalogue (cause des images et textes de cartes).
+   Les autres comparaisons UTC/locale (dates d'import écrites par l'app) sont signalées, non changées.
+2. **Les listes déroulantes sont dessinées par le thème dans chaque état** (`QComboBox QAbstractItemView::item`) :
+   le style natif windows11 de Qt 6.12 ignorait `selection-color`. Aucun style Qt n'est imposé à l'application.
+3. **Menus des Réglages dimensionnés d'après leur choix le plus long** (le `sizeHint` ignore le remplissage de la feuille
+   de style), recalculés après un changement de langue; une explication longue garde la largeur, le menu passe dessous.
+   Libellés et texte de consentement inchangés.
+4. Le candidat correctif garde le numéro 0.9.5 (non publiée), identifié par son commit; installation chez le propriétaire
+   et éventuel passage à 0.9.6 : décisions distinctes.
+
+# D-293 — PokeMind 0.9.5 installé chez le propriétaire, sauvegarde vérifiée d'abord (PM-RELEASE-095-OWNER-INSTALL-001)
+
+2026-11-07 Québec. GO explicite du propriétaire; mandat `6cacf42` (activé `f858b9f`). Aucun changement de code (`24e9cc5`).
+
+1. **Sauvegarde = copie de fichiers vérifiée**, pas `pokemind backup create` (création de backup moderne déjà faite,
+   non répétable) : copie complète de `%LOCALAPPDATA%\PokeMind` dans un dossier horodaté privé hors dépôt, SHA-256 par
+   fichier source/copie, re-hachage de la source après copie, restauration à blanc `robocopy /L`. Manifeste privé local.
+2. **Installation par l'assistant Inno normal** (seulement `/LOG`), même AppId; aucune désinstallation préalable.
+3. **Vérification du programme installé sans toucher aux vraies données** : comparaison fichier par fichier avec la
+   distribution 0.9.5 testée et fumée en root inventé isolé. Le premier lancement sur les vraies données et Deck Lab ›
+   Statistiques reviennent à l'inspection visuelle du propriétaire (pas de collecte réseau ni de LLM par l'agent).
+4. Leçon : la case « Lancer PokeMind » de l'assistant est cochée par défaut; si un contrôle d'intégrité « installation
+   seule » doit précéder le premier lancement, le dire au propriétaire **avant** d'ouvrir l'assistant.
+
+# D-292 — Candidat PokeMind 0.9.5 : une version cumulative, la 0.9.4 jamais publiée (PM-RELEASE-095-WINDOWS-CANDIDATE-001)
+
+2026-11-07 Québec. Mandat ChatGPT `8efe909` (activé `c33cf40`) après l'audit `7f7fcbb`. Code `24e9cc5`.
+
+1. **0.9.5 remplace la 0.9.4 non publiée** : une seule section CHANGELOG `[0.9.5]` avec tous les changements depuis
+   la 0.9.3 publique (Statistiques du Deck Lab D-291 + contenu de la 0.9.4 D-286 à D-290); `[0.9.4] — never published`;
+   notes `RELEASE_NOTES_0.9.5.md` EN/FR; les notes 0.9.4 restent, marquées « Never published ». Les binaires candidats
+   0.9.4 sont conservés tels quels (aucune réécriture).
+2. **Limites d'échantillon publiques visibles** dans les « Limites exactes » README FR/EN et les notes : chiffres par
+   archétype, un tournoi récent par collecte, jamais des statistiques mondiales; aucun pourcentage sous les seuils.
+3. **Fumée de l'onglet Statistiques sur l'EXE gelé sans modifier le produit** : UI Automation Windows (outil système,
+   aucune dépendance), root synthétique, `PATH`/`APPDATA`/`LOCALAPPDATA` redirigés et proxys fermés; instantané fictif
+   produit par le vrai collecteur avec le serveur inventé des tests. Le mode `POKEMIND_DESKTOP_SMOKE` n'a pas été étendu.
+4. Essai d'installation : méthode AppId QA de D-290, avec `/DIR` explicite dans le dossier temporaire (le `DefaultDirName`
+   de production est celui du propriétaire). Publication, tag et installation chez le propriétaire : GO distincts.
+
+# D-291 — Deck Lab › Statistiques : chiffres publics par archétype, datés et sourcés (PM-DECKLAB-PUBLIC-STATS-001, cible 0.9.5)
+
+2026-11-07 Québec. Demande du propriétaire (mandat `3c71b6a`, activé `42ccd84`). Fonction nouvelle pour 0.9.5; la 0.9.4
+candidate (`fae10da`) n'est ni modifiée ni publiée.
+
+1. **Réutilisation, pas de second collecteur** : collecte = `batch_public_research.research_matchups` (API publique
+   `play.limitlesstcg.com/api`, sans clé, ≤ 8 GET, un tournoi par campagne, `/games/{id}/decks` interdit par `meta.py`);
+   agrégats = `meta.meta_tournaments` / `meta_archetypes` / `meta_matchups` sur chaque base de campagne marquée PUBLIC.
+   Ajouts minimes : `force` (bouton Actualiser) et `error` dans le reçu de `research_matchups`. Seul nouveau fichier :
+   le contrôle `data/local/public-campaigns/deck-public-stats.json` (jour, tentatives, dernier résultat).
+2. **Population et calculs** (`src/pokemind/deck_public_stats.py`) : Pokémon TCG Live en ligne, Standard, tournois publics
+   complets, fenêtre de 28 jours. Taux par mode publié (BO1, BO3 jamais fusionnés), victoires / (V+D+N) sur les matchs
+   admissibles (résultat connu, deux archétypes publiés, hors byes, doubles défaites et **miroirs**). Représentation par
+   population de tournois (modes de leurs phases : BO1, BO3, BO1+BO3…), jamais additionnée entre populations.
+   Un même tournoi présent dans plusieurs instantanés est compté une fois (le plus récent). Seuils d'affichage : part si
+   ≥ 20 placements classifiés, taux global si ≥ 20 matchs, pourcentage d'un matchup si ≥ 10 matchs; intervalle de Wilson
+   95 % du moteur existant. Sinon « données insuffisantes », jamais un pourcentage.
+3. **Deck → archétype, localement, jamais par le nom donné par le propriétaire** : (a) référence PUBLIC dont l'étiquette
+   publiée nomme un seul archétype de l'échantillon **et** dont les Pokémon de ce nom sont dans la liste; (b) sinon,
+   l'archétype le plus spécifique de l'échantillon dont tous les Pokémon nommés sont dans la liste (le premier avec
+   ≥ 2 exemplaires), présenté comme un indice. Égalité ou aucun : « Archétype non identifié », aucun taux attribué, méta
+   publique générale affichée. Noms anglais des impressions exactes via le catalogue PUBLIC (listes en français).
+   Pas de choix manuel d'archétype (non indispensable; limite documentée).
+4. **Réseau borné** : rien au démarrage ni au changement de deck; à l'ouverture de l'onglet, au plus **une** tentative
+   par jour, enregistrée avant tout GET, partagée entre decks et avec la collecte du coach (pointeur `chat-matchups.json`);
+   Actualiser ≤ 2 par jour et ≥ 10 min entre deux tentatives; 429/hors ligne/JSON invalide → dernier instantané valide
+   conservé et étiqueté; annulation à la fermeture. Aucune liste, aucun nom de deck, aucune donnée personnelle transmis.
+5. « Tes statistiques » (locales) restent séparées; aucun résumé personnel dans l'onglet (pas de preuve de version jouée).
+
+# D-290 — Candidat PokeMind 0.9.4 : consentement fidèle, une seule version, essai d'installation isolé (PM-RELEASE-094-FINAL-GATE-001)
+
+2026-11-07 Québec. Mandat du propriétaire « finir cette version vraiment au complet » (rédigé `f8ee810`, activé `e5b9504`).
+
+1. Liste du deck principal (`owner_main_deck`) : le nom part toujours avec « + mes statistiques anonymes », la liste
+   complète seulement si la question parle de deck ou de liste (règle déjà appliquée à « Mes decks »); sinon
+   `export_withheld`. Le texte `services.SHARING_HINT` (une seule source) dit ce que ce niveau envoie, dans Réglages et
+   dans l'assistant de bienvenue (avec une ligne de résumé). PRIVACY et README FR/EN : l'envoi cloud est **pré-coché**
+   (D-287), non plus « rien sans ton accord ». D-287 et D-288 restent valides sur le reste.
+2. Version 0.9.4 unique : application, `pyproject`, README, CHANGELOG (non publiée), ROADMAP, SECURITY, notes de version;
+   ressource de version Windows de `PokeMind.exe` (`scripts/make_version_info.py`) et `VersionInfoVersion` du Setup.
+3. Essai d'installation sur ce PC sans toucher l'installation du propriétaire : installateurs **QA** dérivés du même
+   `.iss` (seuls AppId, noms et raccourcis « PokeMind QA » changent), dossiers temporaires, `POKEMIND_DATA_ROOT`
+   inventé. L'installateur de production n'est pas exécuté tant qu'il partagerait l'AppId du propriétaire.
+4. Statut : candidat local, non signé, non publié. Publication 0.9.4, tag et mise à jour du dépôt public : GO distinct
+   du propriétaire après l'audit indépendant ChatGPT.
+
+# D-289 — Défaites prioritaires : aucun deck adverse créé après une victoire (PM-COACH-LOSS-PRIORITY-001)
+
+2026-11-06 Québec. Demande du propriétaire (mandat `4b72cdc` / `df2d839`) : toutes les parties comptent, mais seuls les
+decks adverses des **défaites** deviennent des sujets de travail; une victoire ne crée jamais de deck.
+
+1. Vrais points d'entrée corrigés (pas seulement les prompts) : la question automatique après un journal collé
+   (`window.LOG_QUESTION`, « … enregistre-le dans mes decks ») est remplacée par `LOG_QUESTIONS` selon l'issue vue du
+   propriétaire (`loss_watch.outcome_of` : `wins`/`losses`, sinon `unknown`, jamais inférée). Aucune ne demande
+   d'enregistrement. `prepare_question` : `candidate_allowed` = demande explicite seulement (plus `or log_followup`);
+   nouveau `deck_save_allowed` = faux pendant le tour d'un journal collé sauf demande explicite dans les mots du
+   propriétaire autour du journal; l'outil `save_deck` renvoie alors `DECK_SAVE_REQUIRES_OWNER_REQUEST`.
+   Un tour normal garde `save_deck` sans mot-clé (décision du propriétaire du 2026-11-02).
+2. Suivi des défaites **dérivé, sans second stockage** : `src/pokemind/loss_watch.py` lit le rapport canonique local
+   (`groups`, `matches`, `added_on`) à chaque lecture. Une famille est suivie dès 1 défaite (`watch`), récurrente dès 2
+   (`recurring_loss`); son bilan garde victoires, défaites, n, part des défaites, 1re/dernière date de défaite, cartes
+   vues **dans les défaites** seulement, signaux, incertitude (n < 5 : aucune conclusion). Une victoire ou une issue
+   inconnue n'ouvre aucun suivi; une victoire contre une famille déjà suivie met son bilan à jour (rien n'est effacé).
+   Persistance = le rapport local déjà enregistré par chaque import; pas de nouvelle table ni de nouveau fichier.
+3. Coach : `context()` ajoute `loss_watch` (avec « + mes statistiques anonymes » seulement, jamais en public seul);
+   le tour d'un journal collé reçoit `log_followup`; la reconstruction déterministe n'est calculée que pour une défaite
+   ou si la question parle du deck. Prompt et description de l'outil : plus « enregistre avec save_deck » après un journal.
+4. Anciens decks adverses enregistrés par le coach (D-263) : **non supprimés**. Identifiés par leur nom (adversaire,
+   adverse, opponent, reconstruit…) quand la source n'est pas le propriétaire; listés après ses propres decks, avec
+   « Deck adverse reconstruit · … ancien enregistrement du coach » et le sélecteur « deck adverse · date ».
+   Limite : un ancien deck adverse nommé autrement reste listé comme « Mon deck »; aucune migration des fichiers.
+5. Supplante D-263 sur un point : un journal collé n'ajoute plus le deck adverse à « Mes decks ».
+
+# D-288 — Parties collées comptées dans la saison; decks entrés par le propriétaire et deck principal
+
+2026-11-06 Québec. Demandes du propriétaire : « dans la vue d'ensemble, j'ai aucune partie analysée… J'ai rien » et
+« que je puisse rentrer moi-même des decks que je joue… ça c'est mon deck principal ».
+
+1. Cause du 0 : le rapport affiché (`legacy_bridge._display`) masque `source_relative`; or `seasons` datait chaque partie
+   par ce nom de fichier. Dès qu'une saison officielle a commencé (Delta Reign, 2026-11-05), toutes les parties étaient
+   sans date, donc hors de « Saison actuelle ». Les tests ne le voyaient pas : `conftest` vide `seasons.OFFICIAL`.
+2. Correctif : `saved_report` ajoute à chaque partie `added_on` (date locale d'ajout du journal, une date seule, aucun nom
+   de fichier); `seasons.day_of` la lit en priorité. Test de non-régression avec une saison commencée et des journaux collés.
+3. Deck Lab : « ＋ Ajouter mon deck… » (export TCG Live collé, nom, « C'est mon deck principal » coché par défaut; 60 cartes et
+   règles vérifiées par `save_deck`, création seule, `source='owner'`) et bouton « Deck principal » (un seul, préférence
+   `main_deck` = SHA-256 de la liste, validée). Le deck principal est en tête des favoris de la vue d'ensemble et transmis
+   au coach (`owner_main_deck`) seulement avec « + mes statistiques anonymes ».
+4. Test Qt : les boîtes de dialogue créées par un test sont détruites tant que l'application vit (sinon arrêt brutal de Qt à
+   la fermeture de la session de tests); dans l'application, la fenêtre « Ajouter mon deck » est libérée après usage.
+
+# D-287 — Coach cloud avec statistiques anonymes autorisé par défaut
+
+2026-11-06 Québec. Ordre du propriétaire : « peux-tu faire que ça soit par défaut accepté tout le temps… J'autorise
+tout par défaut. Let's go. » (journal collé bloqué par l'absence de consentement).
+
+1. `sessions.DEFAULTS` : `cloud_consent=True`, `sharing='aggregates'`. Un journal collé atteint le coach (deck adverse)
+   sans rien cocher. Les deux restent modifiables (Réglages, assistant de bienvenue); un choix déjà enregistré est gardé.
+2. Inchangé : un journal collé ne va jamais à un moteur doté d'un shell (coach isolé); pas de journal brut, d'identité ni
+   de chemin envoyé; Ollama reste local. `permission_mode` (workspace) non modifié.
+3. Le message d'aide nomme les vrais contrôles (« Réglages › Coach IA », « + mes statistiques anonymes »).
+4. Copie installée du propriétaire : réglage `sharing` passé à `aggregates` sur son ordre, sauvegarde du fichier de
+   préférences gardée à côté; aucun autre champ lu ni modifié.
+5. Concerne aussi une future version publique : nouveau défaut pour tout nouvel utilisateur. Publication seulement sur GO.
+
+# D-286 — La carte PokeMind / TCG Coach remplace le logo dessiné (PM-UI-BRAINBALL-BRANDING-002)
+
+2026-11-06 Québec. Mandat du propriétaire (rédigé par ChatGPT) : visuel seulement, candidat local, aucune publication.
+
+1. Source unique : `assets/branding/pokemind-tcg-coach-original.png` (SHA-256 `30824d84…f0f5`), jamais modifiée.
+   L'ancien dessin QPainter (deux cartes et un cerveau, `theme.brain_path`) est supprimé.
+2. Dérivé embarqué reproductible (`scripts/make_icon.py --card`) : coins de page blancs rendus transparents
+   (remplissage depuis chaque coin, carré de 96 px), puis réduction exacte de moitié 530×742 :
+   `src/pokemind/desktop/branding/pokemind-card.png`. Sans cela, le blanc des coins apparaissait sur le thème foncé.
+3. Aucune recoupe : la carte entière partout, même à 16 px (silhouette). `card_pixmap` (carte entière, nette en
+   haute densité) pour le bandeau, l'accueil, À propos et la couverture du classeur; `logo_pixmap` (carte centrée
+   dans un carré transparent) pour la fenêtre, le menu et le `.ico` 16–256 px.
+4. Le bandeau « À toi de jouer » passe de 106×106 à 110×124 pour montrer la carte entière (104 px) sans la couper
+   pendant son animation. La couverture du classeur n'écrit plus « PokeMind » sous le logo : la carte le porte.
+5. Installateur : icône de `Setup` = même `.ico`; grande et petite images de l'assistant tirées de la carte, une par
+   échelle d'affichage (100 à 250 %), à la taille exacte de leur zone, jamais étirées.
+6. Couleurs, logique, données, intégrations IA : inchangées. Pas de 0.9.4 sans GO; dépôt public inchangé.
+
+# D-285 — PokeMind 0.9.3 publié (préversion `v0.9.3`)
+
+2026-11-05 Québec. Ordre du propriétaire : « go », en réponse à « publier 0.9.3 demande toujours ton GO ».
+
+1. Publié **avant** l'audit ChatGPT de D-284, sur ce GO explicite : l'audit se fait a posteriori (D-258), il
+   reste à faire. Une correction éventuelle passera par une version suivante, sur GO.
+2. Checklist C.0 à C.2 : dépôt public sans commit du propriétaire depuis `afdb0a3`; version au commit privé
+   `84426b8` (README FR/EN avec la ligne du catalogue corrigée, SECURITY, ROADMAP, CHANGELOG daté); export
+   accepté, arbre identique; porte complète VERTE dans l'export.
+3. Public : `main` = `5629ae2` « PokeMind 0.9.3 » par-dessus `afdb0a3`, même auteur; préversion `v0.9.3` avec
+   l'installateur non signé reconstruit depuis `84426b8` et son `.sha256`. L'historique privé n'est pas poussé.
+
 # D-284 — Couleurs BrainBall pour les thèmes foncé et clair (PM-UI-BRAINBALL-THEMES-001)
 
 2026-11-05 Québec. Mandat du propriétaire (rédigé par ChatGPT, déclenché par le propriétaire) : visuel seulement.

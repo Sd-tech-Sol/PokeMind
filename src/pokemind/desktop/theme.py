@@ -1,10 +1,11 @@
-"""Local, code-drawn Pokédex styling; no downloaded artwork or fonts."""
+"""Local, code-drawn Pokédex styling; no downloaded artwork or fonts. The brand card is bundled (branding/)."""
 import os
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 from PySide6.QtCore import QDir, Qt, QPointF, QRectF
-from PySide6.QtGui import QColor, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPalette
+from PySide6.QtGui import QColor, QGuiApplication, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap, QPalette
 
 
 # BrainBall electric (owner, 2026-11-05): docs/design/pokemind-brainball/palette.json is the source of truth.
@@ -179,12 +180,24 @@ QLabel#corpusNote { color:@warning; padding:12px; background:@warning_bg; border
 QLabel[cardType="pokemon"] { color:@red; font-weight:700; }
 QLabel[cardType="trainer"] { color:@blue; font-weight:700; }
 QLabel[cardType="energy"] { color:@yellow; font-weight:700; }
+QScrollArea#deckGallery { background:@background; border:0; }
+QScrollArea#deckGallery QFrame#card[galleryTile="true"] { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 @surface,stop:1 @input); border:2px solid @border; border-radius:14px; }
+QScrollArea#deckGallery QFrame#card[selected="true"] { border-color:@focus; background:@surface; }
+QLabel#gallerySection { color:@text; font-size:16px; font-weight:700; padding:8px 0; border-bottom:1px solid @blue; }
+QLabel#galleryCardName { color:@text; font-size:17px; font-weight:700; }
+QScrollArea#deckGallery QPushButton#cardArt { background:@input; border:1px solid @border; border-radius:10px; padding:0; }
+QScrollArea#deckGallery QPushButton#cardArt:hover { border-color:@blue; }
+QScrollArea#deckGallery QPushButton#cardArt:focus { border:1px solid @focus; padding:0; }
+QScrollArea#deckGallery QPushButton#cardArt:pressed { background:@alternate; }
 QTextEdit,QTextBrowser,QLineEdit,QComboBox,QTableWidget { background:@input; color:@text; border:1px solid @border; border-radius:10px; padding:9px; selection-background-color:@selection; selection-color:@selection_text; }
 QTextEdit,QLineEdit,QComboBox { border-color:@field_border; }
 QTextEdit:focus,QTextBrowser:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus { border:1px solid @focus; }
 QLineEdit { min-height:25px; }
 QComboBox { min-height:24px; padding-right:24px; }
-QComboBox QAbstractItemView { background:@surface; color:@text; selection-background-color:@selection; selection-color:@selection_text; }
+QComboBox QAbstractItemView { background:@surface; color:@text; selection-background-color:@selection; selection-color:@selection_text; border:1px solid @field_border; padding:4px; outline:0; }
+QComboBox QAbstractItemView::item { color:@text; background:@surface; padding:7px 10px; min-height:22px; border-radius:6px; }
+QComboBox QAbstractItemView::item:hover { color:@text; background:@hover; }
+QComboBox QAbstractItemView::item:selected { color:@selection_text; background:@selection; }
 QPushButton { background:@surface; color:@text; border:1px solid @border; border-radius:10px; padding:10px 14px; font-weight:600; }
 QPushButton:hover { background:@hover; border-color:@blue; }
 QPushButton:pressed { background:@alternate; }
@@ -224,11 +237,11 @@ QFrame#updateBanner QProgressBar { background:@surface; }
 QLabel#loadingTitle { color:@text; font-size:17px; font-weight:800; }
 QLabel#loadingDetail { color:@muted; font-size:12px; }
 QFrame#activityCard { background:transparent; border:1px solid transparent; border-radius:12px; }
-QFrame#activityCard[busy="true"] { background:@alternate; border:1px solid @blue; }
+QFrame#activityCard[busy="true"] { background:@surface; border:1px solid @border; }
 QLabel#activityLabel { color:@muted; font-size:12px; }
 QLabel#activityLabel[busy="true"] { color:@text; font-size:14px; font-weight:600; }
 QLabel#activityClock { color:@muted; font-size:12px; }
-QLabel#activityClock[busy="true"] { color:@accent; background:@sidebar; border-radius:9px; padding:2px 9px; font-weight:700; }
+QLabel#activityClock[busy="true"] { color:@muted; background:@alternate; border:1px solid @border; border-radius:9px; padding:2px 9px; font-weight:600; }
 QLabel#permissionBadge { color:@warning; background:@warning_bg; border:1px solid @yellow; border-radius:10px; padding:3px 9px; font-size:12px; font-weight:600; }
 QLabel#chatNotice { color:@warning; background:@warning_bg; border-radius:9px; padding:5px 9px; font-size:12px; }
 QPushButton#chatExpand { background:transparent; color:@accent; border:1px solid @border; border-radius:8px; padding:3px 10px; font-size:12px; font-weight:600; }
@@ -243,7 +256,7 @@ QFrame#settingRow QRadioButton { background:transparent; padding:2px 0; font-wei
 QRadioButton::indicator { width:14px; height:14px; border-radius:9px; border:2px solid @field_border; background:@input; }
 QRadioButton::indicator:checked { background:@primary; border:2px solid @focus; }
 QLabel#settingTitle { font-weight:600; }
-QLabel#settingHint { color:@muted; font-size:12px; }
+QLabel#settingHint { color:@muted; font-size:13px; }
 QPushButton#settingsTab { background:@surface; color:@muted; border:1px solid @border; border-radius:9px; padding:8px 10px; text-align:center; }
 QPushButton#settingsTab:hover { background:@hover; color:@text; }
 QPushButton#settingsTab:checked { background:@primary; color:@on_primary; border:1px solid @primary; }
@@ -278,66 +291,55 @@ QToolTip { background:@tooltip; color:@tooltip_text; border:1px solid @tooltip_b
     return template + _combo_arrows(c)
 
 
-def brain_path():
-    """A 2D brain, two hemispheres made of rounded lobes, centred on (32, 32) of a 64 grid."""
-    shape = QPainterPath()
-    shape.addEllipse(QPointF(32, 32), 7, 8)
-    for x, y, r in ((26.5, 28, 4.5), (25, 33, 4.2), (28.5, 36.5, 4), (30, 27, 4)):
-        for cx in (x, 64 - x):
-            lobe = QPainterPath()
-            lobe.addEllipse(QPointF(cx, y), r, r)
-            shape = shape.united(lobe)
-    return shape
+BRAND_CARD = Path(__file__).resolve().parent / 'branding' / 'pokemind-card.png'
+BRAND_CARD_SIZE = (530, 742)  # half of the approved 1060 x 1484 card (scripts/make_icon.py --card)
 
 
-def logo_pixmap(size=64):
-    """The PokeMind logo (original design): two fanned trading cards, the front one showing a brain."""
-    result = QPixmap(size, size)
-    result.fill(Qt.GlobalColor.transparent)
-    p = QPainter(result)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.scale(size / 64, size / 64)
-    detailed = size >= 28  # folds and text lines only read from the window icon size upwards
-    for angle, shift, top, bottom in ((-15, -7, '#5b8cf0', '#22397a'), (9, 5, '#f0485c', '#a01d34')):
-        p.save()
-        p.translate(32 + shift, 33)
-        p.rotate(angle)
-        shade = QLinearGradient(0, -21, 0, 21)
-        shade.setColorAt(0, QColor(top))
-        shade.setColorAt(1, QColor(bottom))
-        p.setPen(QPen(QColor('#ffda62'), 2.6 if detailed else 3.4))
-        p.setBrush(shade)
-        p.drawRoundedRect(QRectF(-15, -21, 30, 42), 5, 5)
-        p.restore()
-    p.translate(37, 33)
-    p.rotate(9)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor('#fff1f4'))
-    p.drawRoundedRect(QRectF(-11, -16, 22, 21), 3.5, 3.5)  # the card's picture window
-    if detailed:
-        p.setPen(QPen(QColor('#ffda62'), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(QPointF(-9, 10), QPointF(9, 10))
-        p.drawLine(QPointF(-9, 14.5), QPointF(4, 14.5))
-    p.translate(0, -5.5)
-    p.scale(0.82, 0.82)
-    p.translate(-32, -32)
-    p.setPen(QPen(QColor('#7a1838'), 1.8))
-    p.setBrush(QColor('#ff8fb2'))
-    p.drawPath(brain_path())
-    p.setPen(QPen(QColor('#7a1838'), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    fissure = QPainterPath(QPointF(32, 24.5))
-    fissure.cubicTo(30.8, 28, 33.2, 32, 32, 39.5)
-    p.drawPath(fissure)
-    if detailed:
-        for points in (((24, 31), (27, 30), (27.6, 33.4)), ((27.2, 25.2), (28.4, 28), (26, 29.6)),
-                       ((28.8, 38.6), (28.8, 35.4), (31, 34.6))):
-            for mirror in (False, True):
-                (ax, ay), (bx, by), (cx, cy) = ((64 - x if mirror else x, y) for x, y in points)
-                curve = QPainterPath(QPointF(ax, ay))
-                curve.quadTo(bx, by, cx, cy)
-                p.drawPath(curve)
-    p.end()
+@lru_cache(maxsize=1)
+def _card_source():
+    """The packaged PokeMind / TCG Coach card (owner-approved artwork, never redrawn)."""
+    image = QImage(str(BRAND_CARD))
+    return image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied) if not image.isNull() else image
+
+
+@lru_cache(maxsize=48)
+def _card_scaled(pixels):
+    source = _card_source()
+    if source.isNull():
+        return QImage()
+    return source.scaledToHeight(pixels, Qt.TransformationMode.SmoothTransformation)
+
+
+def screen_ratio():
+    application = QGuiApplication.instance()
+    return application.devicePixelRatio() if application is not None else 1.0
+
+
+def card_width(height):
+    return max(1, round(height * BRAND_CARD_SIZE[0] / BRAND_CARD_SIZE[1]))
+
+
+def card_pixmap(height=96, ratio=None):
+    """The whole card, `height` logical pixels tall, proportions kept, sharp on high-DPI screens."""
+    ratio = ratio or screen_ratio()
+    result = QPixmap.fromImage(_card_scaled(max(1, round(height * ratio))))
+    result.setDevicePixelRatio(ratio)
+    return result
+
+
+def logo_pixmap(size=64, ratio=None):
+    """The PokeMind logo: the whole card, centred in a transparent square (icons, menu, small spots)."""
+    ratio = ratio or screen_ratio()
+    pixels = max(1, round(size * ratio))
+    canvas = QImage(pixels, pixels, QImage.Format.Format_ARGB32_Premultiplied)
+    canvas.fill(Qt.GlobalColor.transparent)
+    card = _card_scaled(pixels)
+    if not card.isNull():
+        p = QPainter(canvas)
+        p.drawImage((pixels - card.width()) // 2, 0, card)
+        p.end()
+    result = QPixmap.fromImage(canvas)
+    result.setDevicePixelRatio(ratio)
     return result
 
 
@@ -366,7 +368,7 @@ def expand_icon(collapse=False, theme='dark'):
 def logo_icon():
     icon = QIcon()
     for size in logo_icon_sizes():
-        icon.addPixmap(logo_pixmap(size))
+        icon.addPixmap(logo_pixmap(size, 1.0))
     return icon
 
 

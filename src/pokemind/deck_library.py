@@ -6,7 +6,7 @@ from contextlib import closing
 
 from pokemind import competitive, rules
 from pokemind.catalog_batch_store import verified_payload
-from pokemind.database import connect_readonly
+from pokemind.database import connect_readonly, local_day
 from pokemind.public_campaign import require_public_database
 from pokemind.public_deck_preflight import _reference_schema
 from pokemind.set_code_aliases import build_aliases, payload_source
@@ -71,7 +71,7 @@ def reference_index(root, db, *, as_of, reference_db=None):
                     entity = identity["ids"][0]
                     for row in con.execute("SELECT * FROM catalog_translations WHERE printing_id=? AND status='present'", (entity,)):
                         language = row["language"]
-                        if language not in {"en", "fr"} or not row["retrieved_at"] or row["retrieved_at"][:10] > as_of:
+                        if language not in {"en", "fr"} or not row["retrieved_at"] or local_day(row["retrieved_at"]) > as_of:
                             continue
                         stale = con.execute(f"SELECT detail_stale_{language} FROM catalog_printings WHERE tcgdex_id=?", (entity,)).fetchone()[0]
                         payload = verified_payload(con, "cards", entity, language, row["payload_sha256"])

@@ -122,7 +122,7 @@ def test_registered_version_history_reuses_engine_without_migration(local_tmp):
 def test_chat_preferences_and_history_survive_restart_without_auth_tokens(local_tmp):
     store = Store(local_tmp)
     prefs = store.preferences()
-    assert prefs['provider'] == 'codex' and not prefs['cloud_consent']
+    assert prefs['provider'] == 'codex' and prefs['cloud_consent'] is True and prefs['sharing'] == 'aggregates'  # D-287
     conversation = store.new('codex')
     conversation.update(session='invented-provider-thread', messages=[{'role': 'user', 'content': 'Question inventée'},
         {'role': 'assistant', 'content': 'Réponse inventée → sourcée'}])

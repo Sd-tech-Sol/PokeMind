@@ -1,0 +1,40 @@
+# Audit indépendant ChatGPT — PM-UI-DECKLAB-RESPONSIVE-CONTROLS-007
+Date : 2026-11-09. Dépôt privé `Sd-tech-Sol/PokeMind-dev`, branche `work/pm-v1-lotj-final-readiness-windows`, base `de9bcba557234ec8332225ec647e1f051c69318e`, code `157ce1079e2112160e8e84e6e2f010a6e7b8574e`, rapport `c434a46e61f0ae77c4225a0fe539ed76bab4a9e7`.
+
+## Verdict
+**VERIFIED_SOURCE / EXECUTOR_REPORTED_LOCAL_GATE_GREEN / OWNER_VISUAL_RECEPTION_PENDING / NOT_INSTALLED / NOT_RELEASE_READY.**
+Le correctif respecte la tâche ciblée 007 et rétablit selon les tests rapportés des libellés lisibles pour les actions de deck à 1100×900, police 18 px et Qt scale 125 %. Aucun blocage source évident n'a été identifié dans le diff. Le correctif n'a pas été installé par Codex, et ChatGPT n'a pas exécuté le code ni vu les nouvelles captures `after` locales : ce n'est **pas** une réception utilisateur ni un GO d'installation.
+
+## Vérification GitHub indépendante
+- Compare `de9bcba...c434a46` : deux commits, un code/tests `157ce10`, un résultat/suivi `c434a46`. Source de production modifiée **uniquement** dans `src/pokemind/desktop/window.py`; nouveau script de QA `scripts/qa_decklab_responsive.py`, nouveaux tests `tests/test_desktop_qt.py` et suivis. Aucun diff `widgets.py`, `card_art.py`, `theme.py`, services, cache/images, Coach, confidentialité, version, installeur ou publication.
+- `_DeckControlsLayout(QLayout)` est un adaptateur local `heightForWidth` fondé sur métriques du contenu + taille/marges et largeur disponible; garde `deck_picker`, `favorite_button`, `main_button`, `add_deck_button` existants, sans duplication de commandes ni nouveau moteur. En large, un rang; sinon sélecteur pleine largeur et actions repliées en lignes distinctes.
+- `_DeckPicker(QComboBox)` conserve le début du titre grâce à l'élision à droite en peinture; `currentTextChanged` alimente `toolTip` et `accessibleName`, avec `ToolTipRole` sur les choix rechargés. À documenter : un titre de deck extrêmement long n'apparaît pas intégralement dans le champ fermé, mais reste consultable.
+- Tests ajoutés sur vrai `MainWindow` synthétique : 16 variantes 1100/1500 × sombre/clair × FR/EN × 14/18, mesures `QFontMetrics`/style et géométrie des 4 contrôles, absence de recouvrement/troncature, contraste indirect via QSS; interaction Tab/Espace/clic sur les commandes, changement de deck et menus, Coach visible et onglets galerie/liste/statistiques, consentements inchangés. Le harnais crée une copie via `local_gate.copy_tree` sans `data/local` et capture les fenêtres hors Git.
+- Les mécanismes d'animation, images, cartes, rendu 006 ne sont pas modifiés. Le test étroit à 900 px est un **stress de page contrainte**, pas une fenêtre de production 900 px (minimum réel 1100 px).
+
+## Preuves rapportées par Codex — non rejouées
+- Local gate `python scripts/local_gate.py --keep` sur copie isolée : **155 tests Qt + 1654 cœur = 1809 réussis, 3 ignorés, 0 échec, code 0**. Ciblés Windows natif : **33/33** à Qt scale 1.25 et **33/33** à scale 1. Les précédentes tentatives incomplètes ne sont pas comptées.
+- Régression `test_qt_deck_controls_layout[18-dark-fr-1100]` sur base `d6efdd2` : échec voulu avant `84 < 139 px`, réussite selon Codex après correction. Tests vérifient la largeur de texte des boutons à la géométrie disponible; meilleures preuves qu'un simple screenshot.
+- Mesures 1100×900 sombre FR police 18/scale 125 % : sélecteur **115 → 464 px**; bouton principal contenu/texte **84/139 → 140/139 px**; bouton Ajouter **85/192 → 192/192 px**. Trois lignes (sélecteur, Favori+principal, Ajouter) pour environ 464 px de largeur. Le viewport galerie **453×441 → 453×337**, soit **−104 px**, colonne 2 toujours; scroll horizontal 0. À 1500×970/14, disposition en une ligne et viewport 852×513 déclarés inchangés, 3 colonnes.
+- Capture complète principale : `build/qa-decklab-responsive/after-1.25/controls-1100-dark-fr-18.png`, et `controls-1500-dark-fr-14.png`; capture avant `before-1.25/controls-1100-dark-fr-18.png`. Fichiers hors Git, **non reçus/visionnés par ChatGPT**. 50 PNG décodés selon Codex; pas de source de données propriétaire utilisée.
+- Vérification GitHub indépendamment au SHA code via `get_commit_combined_status`: `statuses: []`; via `fetch_commit_workflow_runs`: `workflow_runs: []`. **Aucune CI verte à revendiquer**, preuve locale uniquement.
+
+## Réserves et prochaine action unique
+- À 1100/18/125 %, **le viewport vertical perd ~104 px**. Risque UX connu; vérifier l'espace restant pour les cartes et la navigation à l'écran. À 1500, pas de changement attendu selon les mesures rapportées.
+- `_DeckControlsLayout` est une petite classe personnalisée supplémentaire dans `window.py`; proportionnée à la contrainte de layout, mais à surveiller lors de changement de police/langue, largeur de dock et rechargement des decks. Aucun besoin prouvé d'une autre couche.
+- Le nom du deck reste élidé pour des valeurs longues; il doit être récupérable par survol/accessibilité et dans le menu. La mesure positive des boutons ne garantit pas à elle seule l'absence de défaut visuel de toute la fenêtre.
+- **Prochaine action unique : réception visuelle du propriétaire** des deux images locales `after-1.25/controls-1100-dark-fr-18.png` et `controls-1500-dark-fr-14.png`, comparaison à l'avant. Ne pas activer de nouveau mandat Codex, nouvelle modification du thème, build ou Setup avant ce retour.
+- **Aucun GO** de sauvegarde/restauration, installation, numéro de version, tag, release ou publication. Version 0.9.5 hotfix installée et ses sauvegardes antérieures restent inchangées; version publique 0.9.3.
+
+**État : audit de source favorable; réception visuelle et décision d'un futur candidat Windows séparées.**
+
+## Examen visuel indépendant après réception des captures (2026-11-09)
+
+L'utilisateur a joint directement dans la conversation les **deux vraies captures QA synthétiques** du lot 007, `controls-1100-dark-fr-18.png` et `controls-1500-dark-fr-14.png`. ChatGPT a pu voir et comparer ces images, contrairement aux aperçus locaux non fournis lors de l'audit source. Il s'agit d'images du vrai `MainWindow` avec données fictives, **pas** de captures de l'installation propriétaire et **pas** d'une vérification des animations.
+
+**Constats observés :**
+- **1100 px / texte 18 / Qt 125 %** : le sélecteur occupe une ligne pleine et son intitulé long est élidé **à droite** sans perte du début identifiable; ligne suivante Favori + Deck principal affichés entièrement; dernière ligne « + Ajouter mon deck… » affichée avec l'ellipse déjà présente dans le libellé normal. Aucun bouton chevauché ni texte de bouton tronqué visuellement; grille à deux colonnes toujours accessible.
+- **1500 px / texte 14 / Qt 125 %** : sélecteur et trois actions tiennent sur **une seule rangée**, sans perte apparente de libellés; trois grandes cartes alignées et Coach conservé à droite. Aucun défaut nouveau évident sur cette capture.
+- **Compromis UX confirmé** : à 1100 px, les trois lignes et les commandes permanentes d'export/comparaison en bas rétrécissent la partie visible des cartes. Les cartes ne sont pas entièrement visibles sans scroll; cela reste une réserve d'ergonomie **non bloquante pour la préparation d'un candidat de test** si le propriétaire accepte ce comportement. Les illustrations rectangles/carrés de couleur sont une fixture de contrôle des coins, non un problème d'images Pokémon.
+
+**Verdict visuel ChatGPT** : `VISUAL_REVIEW_PASSED_WITH_NARROW_VIEWPORT_TRADEOFF`. Le blocage de troncature constaté sur la capture 006 est levé dans les captures 007. **Ce verdict ne constitue pas un consentement utilisateur à construire ou installer un candidat**, ni une réception personnelle post-installation. Ne pas surdéclarer la vérification de la vidéo/animations, de l'EXE ou des données privées. Prochaine décision unique : **GO distinct du propriétaire pour préparer un candidat Windows non installé**, puis audit de build et sauvegardes avant tout GO ultérieur d'installation. Aucun GO de publication.

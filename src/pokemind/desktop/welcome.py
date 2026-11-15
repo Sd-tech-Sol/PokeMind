@@ -7,7 +7,8 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QButtonGroup, QRadioButton
 
 from pokemind.desktop.i18n import QCheckBox, QComboBox, QDialog, QFrame, QLabel, QPushButton, QWidget, T, set_language, retranslate
-from pokemind.desktop.theme import logo_pixmap, setting_icon
+from pokemind.desktop.theme import card_pixmap, setting_icon
+from pokemind.desktop.services import SHARING_HINT
 
 ENGINES = (('codex', 'Codex CLI', 'codex', T('Ton compte OpenAI, en ligne')),
            ('claude', 'Claude Code', 'claude', T('Ton compte Anthropic, en ligne')),
@@ -52,7 +53,7 @@ class WelcomeWizard(QDialog):
         page, column = self.page(T('Bienvenue dans PokeMind'),
                                  T('Ton compagnon Pokémon TCG Live : tes combats, tes decks et tes cartes restent sur ton PC.'))
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(120))
+        logo.setPixmap(card_pixmap(150))
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         column.insertWidget(0, logo)
         column.addWidget(self.caption(T('Langue')))
@@ -98,6 +99,11 @@ class WelcomeWizard(QDialog):
         cloud_note.setObjectName('settingHint')
         cloud_note.setWordWrap(True)
         column.addWidget(cloud_note)
+        # The default sharing is « + mes statistiques anonymes » (D-287): say what it sends (0.9.4 audit).
+        share_note = QLabel(T(SHARING_HINT) + ' ' + T('Modifiable dans Réglages › Coach IA.'))
+        share_note.setObjectName('settingHint')
+        share_note.setWordWrap(True)
+        column.addWidget(share_note)
         column.addStretch()
 
         # 3. Battles
@@ -168,6 +174,8 @@ class WelcomeWizard(QDialog):
             yes, no = T('oui'), T('non')
             self.summary.setText(T('Coach : ') + names[self.engine()] + '\n'
                                  + T('Envoi au cloud : ') + (yes if self.cloud.isChecked() else no) + '\n'
+                                 + T('Ce que le coach reçoit : ') + (T('+ mes statistiques anonymes')
+                                     if self.preferences.get('sharing') == 'aggregates' else T('Connaissances publiques')) + '\n'
                                  + T('Surveiller les journaux : ') + (yes if self.watch.isChecked() else no) + '\n'
                                  + T('Illustrations TCGdex : ') + (yes if self.images.isChecked() else no)
                                  + ('\n' + T('Catalogue des cartes : ') + (T('téléchargé à l’ouverture') if self.wants_catalog() else no)

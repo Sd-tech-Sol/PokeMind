@@ -1,5 +1,5 @@
 ; PokeMind installer (Inno Setup 6). Built by scripts/Build-PokeMindInstaller.ps1, which passes
-; AppVersion, DistDir, IconFile, SmallImage and OutputDir. Per-user install: no administrator rights.
+; AppVersion, DistDir, IconFile, SmallImage, LargeImage and OutputDir. Every image comes from the PokeMind card. Per-user install: no administrator rights.
 ; Uninstalling removes the program only; the data in %LOCALAPPDATA%\PokeMind stays.
 #ifndef AppVersion
   #error Build with scripts/Build-PokeMindInstaller.ps1
@@ -10,6 +10,9 @@ AppId={{9B4E3B52-6C1D-4E7A-9F3B-5A2C8D1E7F40}
 AppName=PokeMind
 AppVersion={#AppVersion}
 AppVerName=PokeMind {#AppVersion}
+; Windows file properties of Setup show the same version as PokeMind.exe.
+VersionInfoVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}
 AppPublisher=PokeMind (unofficial fan project)
 DefaultDirName={localappdata}\Programs\PokeMind
 DisableProgramGroupPage=yes
@@ -22,6 +25,7 @@ OutputBaseFilename=PokeMind-Setup-{#AppVersion}
 SetupIconFile={#IconFile}
 LicenseFile=..\LICENSE
 WizardSmallImageFile={#SmallImage}
+WizardImageFile={#LargeImage}
 UninstallDisplayIcon={app}\PokeMind.exe
 UninstallDisplayName=PokeMind
 Compression=lzma2/max

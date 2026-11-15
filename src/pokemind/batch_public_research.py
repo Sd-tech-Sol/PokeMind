@@ -383,11 +383,12 @@ def research(root, *, as_of, topic='meta', identity=None, opener=None, offline=F
         'closed_hosts': result['closed_hosts'], 'fresh': False}
 
 
-def research_matchups(root, *, as_of, cancelled=None):
+def research_matchups(root, *, as_of, cancelled=None, force=False):
     """Use the existing PUBLIC campaign and meta engines, with a daily cache.
 
     Eight capped API calls complement the HTML envelope (142 calls /16 MiB).
     Previous source databases stay immutable; the control retains last good data.
+    force: a new bounded campaign the same day (Deck Lab « Actualiser », its own guard in deck_public_stats).
     """
     from pokemind import battle_batch, battle_coach, public_campaign
     root = Path(root).absolute()
@@ -395,7 +396,7 @@ def research_matchups(root, *, as_of, cancelled=None):
     folder.mkdir(parents=True, exist_ok=True)
     pointer = folder / 'chat-matchups.json'
     previous, stamp = battle_coach._control(root, pointer)
-    if previous and previous.get('as_of') == as_of:
+    if previous and previous.get('as_of') == as_of and not force:
         return previous | {'cache_hit':True, 'gets':0}
     name = 'chat-' + uuid.uuid4().hex[:16]
     report = public_campaign.run_campaign(root, name, create=True, execute=True,
@@ -408,6 +409,7 @@ def research_matchups(root, *, as_of, cancelled=None):
     receipt = {'as_of':as_of, 'attempt_campaign':name, 'valid_campaign': name if matches else (previous or {}).get('valid_campaign'),
         'status': 'SOURCE_SNAPSHOT_SAVED' if matches else 'INSUFFICIENT_OR_BLOCKED_PUBLIC_DATA',
         'eligible_matches':matches, 'gets':report['get_attempts'], 'bytes':report.get('response_bytes_received', 0),
+        'error': (report.get('limitless') or {}).get('blocked_reason') or (report.get('limitless') or {}).get('error'),
         'scope':'PUBLIC_ONLY', 'source_url':'https://docs.limitlesstcg.com/developer/tournaments',
         'winrate':None, 'persisted':True, 'cache_hit':False}
     battle_coach._atomic_control(root, pointer, receipt, stamp)

@@ -16,6 +16,7 @@ from shiboken6 import isValid
 
 from pokemind.desktop import window
 from pokemind.assistant.provider import ProviderAdapter
+REAL_DECK_OPTIONS = window.Services.deck_options
 
 
 @pytest.fixture(scope='module')
@@ -80,6 +81,8 @@ def ui(local_tmp, monkeypatch, app):
     monkeypatch.setattr(window.Services,'deck_options',lambda s:[])
     monkeypatch.setattr(window,'CodexAppServer',Fake)
     monkeypatch.setattr(window,'ClaudeCode',Fake)
+    # These tests start from the opt-out (no cloud, public knowledge only); the defaults are tested on their own.
+    window.Store(local_tmp).write('preferences.json',{'cloud_consent':False,'sharing':'public'})
     widget=window.MainWindow(local_tmp)
     widget.show()
     # Dashboard and deck/catalog jobs complete independently. Tests must not
@@ -391,6 +394,23 @@ def test_qt_settings_theme_and_provider_persist(ui, app):
     assert ui.store.preferences()['provider']=='claude'
 
 
+def test_qt_coach_sharing_choice_reads_in_full_in_both_languages(ui, app):
+    """0.9.5 reception: « Ce que le coach reçoit » showed a cut choice beside a tall, thin explanation."""
+    ui.navigation.setCurrentRow(5)
+    wait_until(app, lambda: not ui.stack.transition.isVisible())
+    for language in (1, 0):  # English, then back to French
+        ui.language.setCurrentIndex(language)
+        app.processEvents()
+        metrics = ui.sharing.fontMetrics()
+        widest = max(metrics.horizontalAdvance(ui.sharing.itemText(i)) for i in range(ui.sharing.count()))
+        expected = min(widest + 60, ui.sharing.maximumWidth())  # offscreen without fonts draws wider boxes
+        assert ui.sharing.minimumWidth() >= expected and ui.sharing.width() >= expected
+        assert ui.sharing.view().minimumWidth() >= widest + 40
+        hint = next(label for label in ui.sharing.parentWidget().findChildren(window.QLabel) if label.objectName() == 'settingHint')
+        assert ui.sharing.geometry().top() >= hint.geometry().bottom()  # under the explanation, not squeezing it
+    assert ui.store.preferences()['language'] == 'fr'
+
+
 def test_qt_motion_rapid_navigation_and_resize_restore_live_page(ui, app):
     for index in (1, 5, 2, 4, 0):
         ui.navigation.setCurrentRow(index)
@@ -684,4 +704,723 @@ def test_qt_theme_switch_redraws_the_drawn_icons_and_the_chat(ui, app):
         assert shows(menu, c['accent']) and shows(menu, c['nav_icon_selected'], QIcon.Mode.Selected)
         assert shows(ui.settings_tabs['general'].icon(), c['nav_icon_selected'], state=QIcon.State.On)
         bubble, _ = ui.chat_bubble({'role': 'user', 'content': 'Question inventée'}, c)
-        assert c['primary'] in bubble and '#a9233c' not in bubble
+        assert c['primary'] not in bubble and 'bgcolor=' not in bubble and '#a9233c' not in bubble
+
+
+@pytest.fixture
+def premium_gallery(ui, app, monkeypatch):
+    """Twenty invented entries, exactly sixty cards; an image with four coloured corners."""
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage, QPainter
+    image = QImage(300, 420, QImage.Format.Format_RGB32)
+    image.fill(QColor('#123456'))
+    painter = QPainter(image)
+    for x, y, color in ((0, 0, '#ff0000'), (260, 0, '#00ff00'),
+                        (0, 380, '#ff00ff'), (260, 380, '#ffff00')):
+        painter.fillRect(x, y, 40, 40, QColor(color))
+    painter.end()
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, 'PNG')
+    raw = bytes(buffer.data())
+    cards = [dict(name='Synthetic creature with a long readable name ' + str(i), quantity=3,
+                  category=category, printing='Synthetic printing reference ' + str(i),
+                  identity='synthetic-' + str(i) if i < 19 else None)
+             for i, category in enumerate(['pokemon'] * 10 + ['trainer'] * 6 + ['energy'] * 4)]
+    lines = []
+    for category, title in (('pokemon', 'Pokémon'), ('trainer', 'Trainer'), ('energy', 'Energy')):
+        group = [(i, c) for i, c in enumerate(cards) if c['category'] == category]
+        lines.append(f'{title}: {sum(c["quantity"] for _, c in group)}')
+        lines.extend(f"3 {c['name']} SYN {i}" for i, c in group)
+    export = '\n'.join(lines)
+    monkeypatch.setattr(ui.services, 'gallery_cards', lambda value: cards)
+    monkeypatch.setattr(ui.images, 'fetch', lambda *args: {
+        'data': raw, 'source_url': 'https://example.invalid/synthetic.png'})
+    ui.navigation.setCurrentRow(2)
+    ui.deck_views.setCurrentIndex(0)
+    ui.loaded_decks([dict(label='Synthetic deck · 20 references / 60 cards', selector='synthetic',
+                         total=60, export=export, kind='Synthetic QA', legality='unknown', source={})])
+    wait_until(app, lambda: not ui.jobs and len(ui.gallery.tiles) == 20 and
+               ui.gallery.isVisible() and not ui.stack.transition.isVisible())
+    assert all(not tile.picture.isNull() for tile in ui.gallery.tiles[:-1])
+    return ui.gallery
+
+
+def test_qt_premium_gallery_hover_keeps_grid_and_all_four_image_corners(ui, app, premium_gallery):
+    gallery = premium_gallery
+    tile = gallery.tiles[1]
+    app.processEvents()
+    geometry = [other.geometry() for other in gallery.tiles]
+    art_geometry, picture = tile.art.geometry(), tile.picture.cacheKey()
+    QApplication.sendEvent(tile.art, QEvent(QEvent.Type.Enter))
+    assert tile.art.animation.state() == tile.art.animation.State.Running
+    tile.art.animation.setCurrentTime(110)
+    assert 0 < tile.art.hover < 1
+    tile.art.animation.setCurrentTime(220)
+    assert tile.art.hover == 1
+    app.processEvents()
+    assert [other.geometry() for other in gallery.tiles] == geometry
+    assert tile.art.geometry() == art_geometry and tile.picture.cacheKey() == picture
+    # Native pixel rendering, including the transformed image's extreme corners.
+    image = tile.art.grab().toImage()
+    visible = {image.pixelColor(x, y).name() for y in range(image.height()) for x in range(image.width())}
+    assert {'#ff0000', '#00ff00', '#ff00ff', '#ffff00'} <= visible
+    assert id(tile) not in ui.motion.layers and id(tile.art) not in ui.motion.layers
+    QApplication.sendEvent(tile.art, QEvent(QEvent.Type.Leave))
+    wait_until(app, lambda: tile.art.hover == 0 and tile.art.animation.state() == tile.art.animation.State.Stopped)
+
+
+def test_qt_premium_gallery_keyboard_selection_is_distinct_from_hover_and_opens_zoom(ui, app, premium_gallery):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QDialog
+    gallery = premium_gallery
+    first, second = gallery.tiles[:2]
+    first.art.setFocus()
+    app.processEvents()
+    assert gallery.selected_tile is first and first.property('selected')
+    QApplication.sendEvent(second.art, QEvent(QEvent.Type.Enter))
+    assert gallery.selected_tile is first and not second.property('selected')
+    QTest.keyClick(first.art, Qt.Key.Key_Tab)
+    app.processEvents()
+    assert second.art.hasFocus() and gallery.selected_tile is second and not first.property('selected')
+    dialogs = []
+    def close_zoom():
+        from PySide6.QtWidgets import QLabel
+        dialog = QApplication.activeModalWidget()
+        dialogs.append(isinstance(dialog, QDialog) and dialog.windowTitle() == second.card['name'] and
+                       any(second.provenance in label.text() for label in dialog.findChildren(QLabel)))
+        if dialog:
+            if output := os.environ.get('POKEMIND_GALLERY_QA_DIR'):
+                dialog.grab().save(output + '/zoom.png')
+            dialog.accept()
+    for key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        QTimer.singleShot(50, close_zoom)
+        QTest.keyClick(second.art, key)
+    assert dialogs == [True] * 3 and gallery.selected_tile is second
+
+
+def test_qt_premium_gallery_reduced_motion_hide_and_close_stop_every_card(ui, app, premium_gallery):
+    gallery = premium_gallery
+    tile = gallery.tiles[0]
+    tile.art.animate(1)
+    ui.reduced_motion.setChecked(True)
+    assert not gallery.motion_enabled
+    assert all(not t.art.motion_enabled and t.art.hover == 0 and
+               t.art.animation.state() == t.art.animation.State.Stopped for t in gallery.tiles)
+    QApplication.sendEvent(tile.art, QEvent(QEvent.Type.Enter))
+    assert tile.art.hover == 0 and tile.art.animation.state() == tile.art.animation.State.Stopped
+    # Newly populated cards inherit the setting too.
+    gallery.populate([t.card for t in gallery.tiles])
+    tile = gallery.tiles[0]
+    assert not tile.art.motion_enabled
+    ui.reduced_motion.setChecked(False)
+    app.processEvents()
+    tile.art.animate(1)
+    assert tile.art.animation.state() == tile.art.animation.State.Running
+    ui.deck_views.setCurrentIndex(1)
+    app.processEvents()
+    assert tile.art.hover == 0 and tile.art.animation.state() == tile.art.animation.State.Stopped
+    tile.art.animate(1)  # A queued enter cannot start an animation on a hidden page.
+    assert tile.art.animation.state() == tile.art.animation.State.Stopped
+    ui.deck_views.setCurrentIndex(0)
+    tile.art.animate(1)
+    ui.close()
+    app.processEvents()
+    assert all(t.art.animation.state() == t.art.animation.State.Stopped for t in gallery.tiles)
+
+
+@pytest.mark.parametrize('width,theme,language,font_size', [
+    (1100, 'dark', 'fr', 14), (1500, 'light', 'en', 14),
+    (1100, 'light', 'en', 18), (1500, 'dark', 'fr', 18),
+    (1500, 'dark', 'fr', 14), (1100, 'light', 'en', 14),
+    (1500, 'light', 'en', 18), (1100, 'dark', 'fr', 18)])
+def test_qt_premium_gallery_layout_languages_themes_and_large_font(ui, app, premium_gallery,
+                                                                 width, theme, language, font_size):
+    from PySide6.QtWidgets import QLabel
+    gallery = premium_gallery
+    ui.theme.setCurrentIndex(1 if theme == 'light' else 0)
+    ui.language.setCurrentIndex(ui.language.findData(language))
+    if font_size == 18:
+        ui.setStyleSheet(ui.styleSheet() + '\nQScrollArea#deckGallery QLabel {font-size:18px;}')
+    ui.resize(width, 970 if width == 1500 else 900)
+    app.processEvents()
+    if not os.environ.get('POKEMIND_GALLERY_QA_BASELINE'):
+        # The offscreen shell has different dock/font metrics. Check actual rows
+        # in every backend; the exact full-window 3/2 contract is native Windows.
+        actual_columns = len({tile.x() for tile in gallery.grids[0][1]})
+        assert actual_columns == gallery._columns and 1 <= actual_columns <= 3
+        if app.platformName() == 'windows':
+            assert actual_columns == (3 if width == 1500 else 2), gallery.viewport().width()
+    if output := os.environ.get('POKEMIND_GALLERY_QA_DIR'):
+        import json
+        from pathlib import Path
+        ui.resize(width, 970 if width == 1500 else 900)
+        app.processEvents()
+        name = f'gallery-{width}-{theme}-{language}-{font_size}'
+        folder = Path(output)
+        gallery.select_tile(gallery.tiles[0])
+        ui.grab().save(str(folder / (name + '.png')))
+        tile = gallery.tiles[0]
+        bounds = tile.art.rect().adjusted(*((12, 14, -12, -10)
+            if os.environ.get('POKEMIND_GALLERY_QA_BASELINE') else (7, 10, -7, -6)))
+        art = tile.picture.size().scaled(bounds.size(), Qt.AspectRatioMode.KeepAspectRatio)
+        (folder / (name + '.json')).write_text(json.dumps({
+            'window': [ui.width(), ui.height()], 'dpr': ui.devicePixelRatioF(),
+            'viewport': [gallery.viewport().width(), gallery.viewport().height()],
+            'columns': gallery._columns, 'tile': [tile.width(), tile.height()],
+            'art': [art.width(), art.height()],
+            'horizontal_scroll': gallery.horizontalScrollBar().maximum(),
+            'vertical_scroll': gallery.verticalScrollBar().maximum(),
+        }, indent=2), encoding='utf-8')
+        if (width, theme, language, font_size) == (1500, 'dark', 'fr', 14) and not os.environ.get('POKEMIND_GALLERY_QA_BASELINE'):
+            frames = folder / 'frames'
+            frames.mkdir(exist_ok=True)
+            art = gallery.tiles[1].art
+            for frame in range(24):
+                if frame in (0, 10):
+                    QApplication.sendEvent(art, QEvent(QEvent.Type.Enter if frame == 0 else QEvent.Type.Leave))
+                if frame < 20:
+                    art.animation.setCurrentTime(min(220, (frame % 10) * 50))
+                if frame == 20:
+                    gallery.select_tile(gallery.tiles[1])
+                app.processEvents()
+                ui.grab().save(str(frames / f'{frame:03}.png'))
+    assert gallery.horizontalScrollBar().maximum() == 0
+    assert gallery.verticalScrollBar().maximum() > 0
+    first_edges = []
+    widths = []
+    for grid, tiles in gallery.grids:
+        first_edges.append(tiles[0].x())
+        widths.append(tiles[0].width())
+        for tile in tiles:
+            assert tile.art.geometry().bottom() < tile.name_label.geometry().top()
+            assert tile.name_label.geometry().bottom() < tile.stamp_label.geometry().top()
+            for label in (tile.name_label, tile.stamp_label):
+                assert label.wordWrap() and tile.rect().contains(label.geometry())
+                assert label.height() >= label.heightForWidth(label.width())
+    assert len(set(first_edges)) == 1 and max(widths) - min(widths) <= 1
+    headers = gallery.findChildren(QLabel, 'gallerySection')
+    assert any(('Trainers' if language == 'en' else 'Dresseurs') in h.text() for h in headers)
+    assert all(str(count) in header.text() for count, header in zip((30, 18, 12), headers))
+    fallback = gallery.tiles[-1]
+    gallery.ensureWidgetVisible(fallback)
+    app.processEvents()
+    assert fallback.picture.isNull() and fallback.art.icon().isNull()
+    assert ('Image unavailable' if language == 'en' else 'Image indisponible') in fallback.art.text()
+    bounds = fallback.art.fontMetrics().boundingRect(fallback.art.rect().adjusted(12, 12, -12, -12),
+        int(Qt.TextFlag.TextWordWrap), fallback.art.text())
+    assert bounds.height() <= fallback.art.height() - 24
+    if output := os.environ.get('POKEMIND_GALLERY_QA_DIR'):
+        ui.grab().save(output + '/' + f'last-{width}-{theme}-{language}-{font_size}.png')
+
+
+def test_qt_premium_gallery_scroll_resize_and_repopulate_keep_images_and_release_old_widgets(ui, app, premium_gallery, monkeypatch):
+    gallery = premium_gallery
+    monkeypatch.setattr(ui.images, 'fetch', lambda *a, **k: pytest.fail('scroll/hover must not request an image'))
+    original = [(tile.picture.cacheKey(), tile.art.icon().cacheKey()) for tile in gallery.tiles]
+    for width in (1500, 1100, 1500, 1100):
+        ui.resize(width, 900)
+        app.processEvents()
+        gallery.verticalScrollBar().setValue(gallery.verticalScrollBar().maximum())
+        gallery.verticalScrollBar().setValue(0)
+    assert [(tile.picture.cacheKey(), tile.art.icon().cacheKey()) for tile in gallery.tiles] == original
+    assert gallery.horizontalScrollBar().maximum() == 0
+    tile = gallery.tiles[0]
+    gallery.select_tile(tile)
+    tile.art.animate(1)
+    gallery.populate([dict(name='Replacement fixture', quantity=60, category='energy')])
+    app.processEvents()
+    assert not isValid(tile) and gallery.selected_tile is None
+    assert len(gallery.tiles) == 1 and gallery.tiles[0].picture.isNull()
+
+
+def test_qt_premium_gallery_narrow_singleton_empty_and_scroll_anchor(ui, app, premium_gallery):
+    gallery = premium_gallery
+    ui.resize(1500, 970)
+    app.processEvents()
+    columns = gallery._columns
+    gallery.verticalScrollBar().setValue(150)
+    ui.resize(1490, 970)  # same column count, new card width; keep the user's position
+    app.processEvents()
+    assert abs(gallery.verticalScrollBar().value() - 150) <= 2
+    assert gallery._columns == columns
+    gallery.setFixedWidth(330)  # available central space, e.g. a widened Coach dock
+    app.processEvents()
+    assert gallery._columns == 1 and gallery.horizontalScrollBar().maximum() == 0
+    fallback = gallery.tiles[-1]
+    gallery.ensureWidgetVisible(fallback)
+    app.processEvents()
+    position = fallback.mapTo(gallery.viewport(), fallback.rect().topLeft())
+    assert gallery.viewport().rect().intersects(fallback.rect().translated(position))
+    for category in ('pokemon', 'trainer', 'energy'):
+        gallery.populate([dict(name='Singleton', quantity=60, category=category)])
+        app.processEvents()
+        assert len(gallery.tiles) == 1 and gallery.horizontalScrollBar().maximum() == 0
+        assert gallery.tiles[0].x() == 16
+    gallery.populate([])
+    app.processEvents()
+    assert not gallery.tiles and gallery.horizontalScrollBar().maximum() == 0
+
+
+@pytest.mark.parametrize('theme', ['dark', 'light'])
+@pytest.mark.parametrize('floating', [False, True])
+def test_013_native_chat_curves_selection_links_and_synthetic_capture(ui, app, monkeypatch, theme, floating):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from PySide6.QtGui import QTextCursor, QTextDocument
+    from pokemind.desktop.theme import colors
+    ui.theme.setCurrentIndex(ui.theme.findData(theme))
+    ui.resize(1100 if ui.devicePixelRatioF() > 1 else 1500, 970)
+    ui.navigation.setCurrentRow(2)
+    ui.conversation['messages'] = [
+        {'role': 'user', 'content': 'Question inventée : pourquoi ce matchup?'},
+        {'role': 'assistant', 'content': 'Réponse **hypothétique**. [Source](https://example.org/public)\n\n'
+         '| Carte | Rôle |\n|---|---|\n| Alpha | Attaque |\n\n' + 'Texte inventé lisible. ' * 8},
+        {'role': 'user', 'content': 'Deuxième tour : <script>alert(1)</script>'},
+        {'role': 'assistant', 'content': 'Deuxième réponse, sans carte cachée inventée.'}]
+    ui.render_chat()
+    monkeypatch.setattr(ui.activity, 'elapsed', SimpleNamespace(start=lambda: None, isValid=lambda: True, elapsed=lambda: 14000))
+    ui.activity.start('Outils PokeMind · consultation 1')
+    ui.activity.clock.setText('14 s')
+    if floating:
+        ui.chat_dock.setFloating(True)
+        ui.chat_dock.resize(355, 850)
+    else:
+        ui.resizeDocks([ui.chat_dock], [355], Qt.Orientation.Horizontal)
+    app.processEvents()
+    transcript = ui.transcript
+    assert transcript.document().rootFrame().childFrames() and len(transcript.bubble_rects()) == 4
+    # Sample actual native pixels: the corner is viewport colour, the upper edge is bubble fill.
+    for role, rect in transcript.bubble_rects()[:2]:
+        transcript.verticalScrollBar().setValue(max(0, int(rect.top()) - 8))
+        app.processEvents()
+        image = transcript.viewport().grab().toImage()
+        scale = image.devicePixelRatio()
+        left = rect.left() - transcript.horizontalScrollBar().value()
+        top = rect.top() - transcript.verticalScrollBar().value()
+        def pixel(dx, dy):
+            return image.pixelColor(round((left + dx) * scale), round((top + dy) * scale)).name()
+        c = colors(theme)
+        assert pixel(1, 1) == c['input'].lower(), (role, pixel(1, 1), c['input'])
+        assert pixel(rect.width() - 20, 5) == (c['alternate'] if role == 'user' else c['surface']).lower()
+    transcript.setFocus()
+    QTest.keyClick(transcript, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    assert transcript.textCursor().hasSelection()
+    copied = transcript.createMimeDataFromSelection().text()
+    assert 'Deuxième tour' in copied and '<script>alert(1)</script>' in copied and 'Deuxième réponse' in copied
+    cursor = transcript.textCursor()
+    cursor.clearSelection()
+    transcript.setTextCursor(cursor)
+    # The native hit-test and HTTPS signal remain usable with the custom background painter.
+    document = transcript.document()
+    found = document.find('Source', 0, QTextDocument.FindFlag.FindCaseSensitively)
+    found.setPosition(found.selectionStart() + 2)
+    transcript.setTextCursor(found)
+    transcript.ensureCursorVisible()
+    app.processEvents()
+    opened = []
+    monkeypatch.setattr(window.QDesktopServices, 'openUrl', lambda url: opened.append(url.toString()) or True)
+    point = transcript.cursorRect(found).center()
+    assert transcript.anchorAt(point) == 'https://example.org/public'
+    QTest.mouseClick(transcript.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    assert opened == ['https://example.org/public']
+    assert ui.source_toggle.isVisible() and 'https://example.org/public' in ui.source_drawer.toPlainText()
+    transcript.moveCursor(QTextCursor.MoveOperation.Start)
+    transcript.ensureCursorVisible()
+    app.processEvents()
+    output = Path(__file__).resolve().parents[1] / 'build/qa-013'
+    output.mkdir(parents=True, exist_ok=True)
+    suffix = f'{theme}-{"floating" if floating else "docked"}-{transcript.devicePixelRatioF():g}'
+    assert ui.grab().save(str(output / f'mainwindow-{suffix}.png'))
+    assert ui.chat_dock.grab().save(str(output / f'chat-{suffix}.png'))
+    assert ui.activity.clock.text() == '14 s' and ui.activity.timer.isActive()
+    assert transcript.isReadOnly()  # selection remains available in read-only mode
+
+
+def test_013_streaming_appends_without_reparse_or_growing_prefix_cache(ui, app, monkeypatch):
+    ui.conversation['messages'] = [{'role': 'user', 'content': 'Premier tour'},
+        {'role': 'assistant', 'content': 'Première réponse'}, {'role': 'user', 'content': 'Deuxième tour'},
+        {'role': 'assistant', 'content': ''}]
+    ui.render_chat(streaming=True)
+    parsed = []
+    real = window.message_html
+    monkeypatch.setattr(window, 'message_html', lambda text: (parsed.append(len(text)), real(text))[1])
+    cached = len(ui._bubbles)
+    for _ in range(100):
+        ui.chat_delta(' **inventé**')
+    assert ui.chat_render_timer.isActive()
+    ui.chat_render_timer.stop()
+    ui.render_stream()
+    for _ in range(10):
+        ui.chat_delta(' texte')
+        ui.chat_render_timer.stop()
+        ui.render_stream()
+    assert parsed == [] and len(ui._bubbles) == cached
+    assert ui.transcript.toPlainText().count('POKEMIND') == 2 and 'Première réponse' in ui.transcript.toPlainText()
+    ui.render_chat()
+    assert parsed == [len(ui.conversation['messages'][-1]['content'])]
+    assert '**' not in ui.transcript.toPlainText() and ui.transcript.toPlainText().count('inventé') == 100
+
+
+def install_selected_history(ui, app):
+    """Invented canonical read model; selection must still happen through the real widgets."""
+    from copy import deepcopy
+    from test_opponent_auto_deck import match, NAMES
+    from pokemind.battle_batch import group_matches
+    records = [match() | {'match': ref, 'opponent': {'label': family}, 'evidence': []}
+               for ref, family in [('OLD-A1', 'Invented Alpha'), ('OLD-A2', 'Invented Alpha'),
+                                   ('RECENT-B', 'Invented Beta')]]
+    records[-1]['opponent_cards'] = match(NAMES[:2])['opponent_cards']
+    report = deepcopy(ui.services.report)
+    report.update(matches=records, groups=group_matches(records), coverage={'valid': 3},
+                  outcomes={'wins': 0, 'losses': 3, 'unknown': 0})
+    ui.services.full_report = ui.services.report = report
+    ui.loaded({'report': report, 'learning': None})
+    wait_until(app, lambda: not ui.jobs)
+    return report
+
+
+def select_combo_item(app, combo, index):
+    """A real activation, including choosing the already displayed first item."""
+    combo.showPopup()
+    wait_until(app, lambda: combo.view().isVisible())
+    QTest.keyClick(combo.view(), Qt.Key.Key_Home)
+    for _ in range(index):
+        QTest.keyClick(combo.view(), Qt.Key.Key_Down)
+    QTest.keyClick(combo.view(), Qt.Key.Key_Return)
+    app.processEvents()
+
+
+def select_historical_game(ui, app, reference):
+    """Combats -> family row -> game dropdown. Never inject Services.selected_match."""
+    ui.navigation.setCurrentRow(1)
+    wait_until(app, lambda: ui.games.isVisible() and not ui.stack.transition.isVisible())
+    family = 'Invented Beta' if reference == 'RECENT-B' else 'Invented Alpha'
+    row = next(i for i in range(ui.matchups.rowCount()) if ui.matchups.item(i, 0).text() == family)
+    QTest.mouseClick(ui.matchups.viewport(), Qt.MouseButton.LeftButton,
+                     pos=ui.matchups.visualItemRect(ui.matchups.item(row, 0)).center())
+    app.processEvents()
+    index = next(i for i in range(ui.games.count()) if ui.games.itemData(i)['match'] == reference)
+    select_combo_item(app, ui.games, index)
+    assert ui.games.currentData()['match'] == reference
+
+
+def test_013_explicit_selected_old_match_is_local_and_visible_without_provider(ui, app, monkeypatch):
+    from test_opponent_auto_deck import match, public_index, files
+    from pokemind import battle_batch, deck_public_stats
+    from pokemind.desktop.services import Services
+    monkeypatch.setattr(battle_batch, 'public_context', lambda *a: (public_index(), [], {}))
+    # The independent selector-refresh journey covers collection; this local-action journey never collects.
+    monkeypatch.setattr(deck_public_stats, 'refresh_state', lambda *a, **k: {'automatic_due': False})
+    install_selected_history(ui, app)
+    select_historical_game(ui, app, 'OLD-A2')
+    monkeypatch.setattr(ui, 'get_adapter', lambda: pytest.fail('local request must not reach a provider'))
+    monkeypatch.setattr(ui.services, 'deck_options', lambda: REAL_DECK_OPTIONS(ui.services))
+    ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
+    ui.send_chat()
+    wait_until(app, lambda: not ui.chat_busy and not ui.jobs, timeout=15000)
+    assert len(files(ui.root)) == 1 and len(ui.deck_rows) == 1
+    assert 'Deck adverse ajouté (reconstruction hypothétique)' in ui.transcript.toPlainText()
+    assert 'PUBLIC/' in ui.transcript.toPlainText() and '6 cartes observées / 60 supposées' in ui.transcript.toPlainText()
+    assert not ui.cloud_consent.isChecked() and all(m['local_only'] for m in ui.conversation['messages'])
+    ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
+    ui.send_chat()
+    wait_until(app, lambda: not ui.chat_busy and not ui.jobs, timeout=15000)
+    assert len(files(ui.root)) == 1 and 'Déjà dans Deck Lab' in ui.transcript.toPlainText()
+
+
+def test_013_cancelled_late_selected_reconstruction_never_saves_or_changes_other_discussion(ui, app, monkeypatch):
+    from test_opponent_auto_deck import match, public_index, files
+    from pokemind import battle_batch
+    monkeypatch.setattr(battle_batch, 'public_context', lambda *a: (public_index(), [], {}))
+    entered, release = threading.Event(), threading.Event()
+    real = ui.services.save_public_opponent
+    def slow(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return real(*args, **kwargs)
+    monkeypatch.setattr(ui.services, 'save_public_opponent', slow)
+    install_selected_history(ui, app)
+    select_historical_game(ui, app, 'OLD-A2')
+    ui.chat_input.setPlainText('Ajoute le deck adverse de cette partie')
+    ui.send_chat()
+    wait_until(app, entered.is_set)
+    previous = ui.conversation
+    ui.stop_chat()
+    ui.conversation = ui.store.new('codex')
+    ui.render_chat()
+    release.set()
+    wait_until(app, lambda: not ui.chat_busy and not ui.jobs)
+    assert not files(ui.root) and ui.conversation['messages'] == []
+    assert 'annulé' in previous['messages'][-1]['content']
+
+
+def test_qt_premium_gallery_real_exports_comparison_and_preferences(ui, app, premium_gallery, monkeypatch, local_tmp):
+    from types import SimpleNamespace
+    from pokemind.desktop.insights import favorite_key
+    copied = []
+    # Exercise the real copy slot without reading or replacing the OS clipboard.
+    monkeypatch.setattr(window.QApplication, 'clipboard', staticmethod(lambda: SimpleNamespace(setText=copied.append)))
+    export = ui.deck_rows[0]['export']
+    QTest.mouseClick(ui.copy_deck, Qt.MouseButton.LeftButton)
+    assert copied == [export]
+    destination = local_tmp / 'synthetic-export.txt'
+    monkeypatch.setattr(window.QFileDialog, 'getSaveFileName', lambda *args: (str(destination), ''))
+    QTest.mouseClick(ui.save_deck, Qt.MouseButton.LeftButton)
+    assert destination.read_text(encoding='utf-8') == export
+    destination.write_text('Previous synthetic export', encoding='utf-8')
+    QTest.mouseClick(ui.save_deck, Qt.MouseButton.LeftButton)
+    assert destination.read_text(encoding='utf-8') == 'Previous synthetic export'
+    ui.compare_decks()  # Actual Services.compare and deck parser, same 60-card reference.
+    assert '60 copies communes' in ui.deck_diff.text()
+    QTest.mouseClick(ui.favorite_button, Qt.MouseButton.LeftButton)
+    QTest.mouseClick(ui.main_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.jobs)
+    key = favorite_key(ui.deck_rows[0])
+    saved = window.Store(ui.root).preferences()
+    assert saved['favorite_decks'] == [key] and saved['main_deck'] == key
+    assert not saved['cloud_consent'] and saved['sharing'] == 'public'
+    assert ui.deck_text.toPlainText() == export and len(ui.gallery.tiles) == 20
+    ui.deck_views.setCurrentIndex(1)
+    app.processEvents()
+    assert ui.deck_text.isVisible() and ui.deck_text.toPlainText() == export
+
+
+def configure_deck_controls(ui, app, width, theme, language, font_size):
+    ui.theme.setCurrentIndex(1 if theme == 'light' else 0)
+    ui.language.setCurrentIndex(ui.language.findData(language))
+    ui.apply_theme()  # reset a prior large-font QA override; keep 006's 17/14px defaults
+    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button):
+        control.setStyleSheet(f'font-size:{font_size}px;')
+    if font_size == 18:
+        ui.setStyleSheet(ui.styleSheet() + '\nQScrollArea#deckGallery QLabel {font-size:18px;}')
+    ui.resize(width, 970 if width == 1500 else 900)
+    for _ in range(4):
+        app.processEvents()
+
+
+def deck_controls_measurements(ui):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QStyle, QStyleOptionButton
+    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button)
+    result = []
+    for control in controls:
+        position = control.mapTo(ui, QPoint(0, 0))
+        value = dict(text=control.currentText() if control is ui.deck_picker else control.text(),
+                     geometry=[position.x(), position.y(), control.width(), control.height()],
+                     font_px=control.font().pixelSize(), visible=control.isVisible())
+        if control is not ui.deck_picker:
+            option = QStyleOptionButton()
+            control.initStyleOption(option)
+            contents = control.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, control)
+            value.update(text_width=control.fontMetrics().horizontalAdvance(control.text()),
+                         text_height=control.fontMetrics().height(),
+                         contents=[contents.x(), contents.y(), contents.width(), contents.height()])
+        result.append(value)
+    return result
+
+
+def assert_deck_controls_readable(ui):
+    from PySide6.QtCore import QRect
+    measurements = deck_controls_measurements(ui)
+    boxes = [QRect(*entry['geometry']) for entry in measurements]
+    for entry, box in zip(measurements, boxes):
+        assert entry['visible'] and ui.rect().contains(box), entry
+    page = ui.deck_picker.parentWidget()
+    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button):
+        assert page.rect().contains(control.geometry())
+    for entry in measurements[1:]:
+        # Both native style contents and independent QSS padding/border budget.
+        assert entry['contents'][2] >= entry['text_width'], entry
+        assert entry['geometry'][2] >= entry['text_width'] + 30, entry
+        assert entry['contents'][3] >= entry['text_height'], entry
+    for index, box in enumerate(boxes):
+        assert all(not box.intersects(other) for other in boxes[index + 1:]), measurements
+    combo = ui.deck_picker
+    assert combo.width() >= combo.fontMetrics().horizontalAdvance('M' * 12) + 35
+    assert combo.currentText() == combo.accessibleName()
+    assert combo.toolTip().startswith(combo.currentText())  # full source/period now augment the readable name
+    assert combo.itemData(combo.currentIndex(), Qt.ItemDataRole.ToolTipRole) == combo.toolTip()
+    assert ui.gallery.horizontalScrollBar().maximum() == 0
+    return measurements
+
+
+@pytest.mark.parametrize('width', [1100, 1500])
+@pytest.mark.parametrize('theme,language', [('dark', 'fr'), ('light', 'en'), ('light', 'fr'), ('dark', 'en')])
+@pytest.mark.parametrize('font_size', [14, 18])
+def test_qt_deck_controls_layout(ui, app, premium_gallery, width, theme, language, font_size):
+    configure_deck_controls(ui, app, width, theme, language, font_size)
+    if output := os.environ.get('POKEMIND_CONTROLS_QA_DIR'):
+        import json
+        from pathlib import Path
+        folder = Path(output)
+        name = f'controls-{width}-{theme}-{language}-{font_size}'
+        ui.gallery.select_tile(ui.gallery.tiles[0])
+        ui.grab().save(str(folder / (name + '.png')))
+        (folder / (name + '.json')).write_text(json.dumps(dict(
+            window=[ui.width(), ui.height()], dpr=ui.devicePixelRatioF(),
+            controls=deck_controls_measurements(ui),
+            viewport=[ui.gallery.viewport().width(), ui.gallery.viewport().height()],
+            columns=ui.gallery._columns,
+            horizontal_scroll=ui.gallery.horizontalScrollBar().maximum()), indent=2), encoding='utf-8')
+    measurements = assert_deck_controls_readable(ui)
+    if app.platformName() == 'windows' and width == 1500 and font_size == 14:
+        # QComboBox is 3 px taller; fixed-height buttons are vertically centred.
+        centers = [entry['geometry'][1] + entry['geometry'][3] / 2 for entry in measurements]
+        assert max(centers) - min(centers) <= 1
+    if app.platformName() == 'windows':
+        assert ui.gallery._columns == (3 if width == 1500 else 2)
+    assert ui.gallery.viewport().height() >= 200
+
+
+def test_qt_deck_controls_resize_language_focus_and_real_actions(ui, app, premium_gallery, monkeypatch):
+    from pokemind.desktop.deck_entry import DeckEntryDialog
+    from pokemind.desktop.insights import favorite_key
+    from PySide6.QtWidgets import QDockWidget
+    rows = [dict(ui.deck_rows[0]), dict(ui.deck_rows[0], label='Second invented deck', selector='second',
+                                     export=ui.deck_rows[0]['export'].replace('Synthetic', 'Alternative'))]
+    rows[0]['label'] = 'Synthetic deck with a very long title ' * 5
+    ui.loaded_decks(rows)
+    wait_until(app, lambda: not ui.jobs)
+    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button)
+    configure_deck_controls(ui, app, 1100, 'dark', 'fr', 18)
+    before = dict(ui.preferences)
+    for width, language in ((1500, 'en'), (1100, 'fr'), (1500, 'fr'), (1100, 'en')):
+        ui.language.setCurrentIndex(ui.language.findData(language))
+        ui.resize(width, 900)
+        for _ in range(4):
+            app.processEvents()
+        assert_deck_controls_readable(ui)
+        assert (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button) == controls
+    # The production shell enforces 1100 px. Constrain only this test page to
+    # exercise a smaller content area; the shell/dock minimums stay unchanged.
+    dock = next(d for d in ui.findChildren(QDockWidget) if d.isVisible())
+    ui.resize(900, 900)
+    app.processEvents()
+    assert ui.width() >= 1100  # existing production minimum, deliberately preserved
+    page = ui.deck_picker.parentWidget()
+    page.setFixedWidth(340)
+    for _ in range(4):
+        app.processEvents()
+    assert_deck_controls_readable(ui)
+    assert ui.deck_picker.width() <= 300
+    assert ui.gallery._columns == 1
+    assert ui.gallery.viewport().height() >= 200
+    if output := os.environ.get('POKEMIND_CONTROLS_QA_DIR'):
+        import json
+        from pathlib import Path
+        folder = Path(output)
+        ui.grab().save(str(folder / 'controls-narrow-content-dark-en-18.png'))
+        (folder / 'controls-narrow-content-dark-en-18.json').write_text(json.dumps(dict(
+            requested_window_width=900, actual_window_width=ui.width(), dock_width=dock.width(),
+            page_width=ui.deck_picker.parentWidget().width(), controls=deck_controls_measurements(ui),
+            viewport=[ui.gallery.viewport().width(), ui.gallery.viewport().height()],
+            columns=ui.gallery._columns, horizontal_scroll=ui.gallery.horizontalScrollBar().maximum()),
+            indent=2), encoding='utf-8')
+    page.setMinimumWidth(0)
+    page.setMaximumWidth(16777215)
+    for _ in range(4):
+        app.processEvents()
+    # Natural Tab order survives wrapping; Space invokes each same slot once.
+    ui.deck_picker.setFocus()
+    for control in controls[1:]:
+        QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
+        assert control.hasFocus()
+    calls = []
+    monkeypatch.setattr(DeckEntryDialog, 'exec', lambda dialog: calls.append(dialog.services) or
+                        DeckEntryDialog.DialogCode.Rejected)
+    key = favorite_key(rows[0])
+    for button, preference in ((ui.favorite_button, 'favorite_decks'), (ui.main_button, 'main_deck')):
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        wait_until(app, lambda: not ui.jobs)
+        assert key in ui.preferences[preference]
+        assert_deck_controls_readable(ui)  # checked glyph/text also fit
+        button.setFocus()
+        QTest.keyClick(button, Qt.Key.Key_Space)
+        wait_until(app, lambda: not ui.jobs)
+        assert not ui.preferences[preference]
+    QTest.mouseClick(ui.add_deck_button, Qt.MouseButton.LeftButton)
+    ui.add_deck_button.setFocus()
+    QTest.keyClick(ui.add_deck_button, Qt.Key.Key_Space)
+    assert calls == [ui.services, ui.services]
+    ui.deck_picker.setFocus()
+    QTest.keyClick(ui.deck_picker, Qt.Key.Key_Down)
+    wait_until(app, lambda: not ui.jobs)
+    assert ui.deck_picker.currentIndex() == 1 and ui.deck_text.toPlainText() == rows[1]['export']
+    assert_deck_controls_readable(ui)
+    ui.deck_picker.showPopup()
+    # Native Qt animates the popup before its live list becomes visible.
+    wait_until(app, lambda: ui.deck_picker.view().isVisible())
+    view = ui.deck_picker.view()
+    index = view.model().index(0, 0)
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=view.visualRect(index).center())
+    ui.deck_picker.hidePopup()
+    ui.deck_picker.setFocus()
+    QTest.keyClick(ui.deck_picker, Qt.Key.Key_Up)
+    wait_until(app, lambda: not ui.jobs)
+    assert ui.deck_picker.currentIndex() == 0
+    # Use the real offline public-stats read, forbid any refresh path.
+    original = ui.services.deck_public_stats
+    def offline_stats(row, refresh='none', **kwargs):
+        assert refresh == 'none'
+        return original(row, refresh, **kwargs)
+    monkeypatch.setattr(ui.services, 'deck_public_stats', offline_stats)
+    for index, view in ((1, ui.deck_text), (2, ui.public_stats_scroll), (0, ui.gallery)):
+        ui.deck_views.setCurrentIndex(index)
+        wait_until(app, lambda: not ui.jobs)
+        assert view.isVisible()
+    assert dock.isVisible() and ui.chat_input.isVisible()
+    configure_deck_controls(ui, app, 1500, 'light', 'fr', 14)
+    assert_deck_controls_readable(ui)
+    configure_deck_controls(ui, app, 1100, 'dark', 'fr', 18)
+    assert_deck_controls_readable(ui)
+    saved = window.Store(ui.root).preferences()
+    assert saved['cloud_consent'] == before['cloud_consent'] and not saved['cloud_consent']
+    assert saved['sharing'] == before['sharing'] == 'public'
+    ui.loaded_decks([])
+    app.processEvents()
+    assert ui.deck_picker.toolTip() == ui.deck_picker.accessibleName() == ''
+    assert not ui.favorite_button.isEnabled() and not ui.main_button.isEnabled()
+    assert ui.add_deck_button.isEnabled()
+
+
+@pytest.mark.parametrize('delayed', ['gallery', 'image'])
+def test_qt_premium_gallery_real_delayed_workers_never_cross_decks(ui, app, premium_gallery, monkeypatch, delayed):
+    raw = premium_gallery.tiles[0].picture.toImage()
+    from PySide6.QtCore import QBuffer, QIODevice
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    raw.save(buffer, 'PNG')
+    data = bytes(buffer.data())
+    entered, release = threading.Event(), threading.Event()
+    def cards(export):
+        if export == 'A' and delayed == 'gallery':
+            entered.set()
+            assert release.wait(5)
+        return [dict(name=export, category='pokemon', quantity=60, identity=export)]
+    def fetch(identity):
+        if identity == 'A' and delayed == 'image':
+            entered.set()
+            assert release.wait(5)
+        return dict(data=data, source_url='https://example.invalid/' + identity)
+    monkeypatch.setattr(ui.services, 'gallery_cards', cards)
+    monkeypatch.setattr(ui.images, 'fetch', fetch)
+    rows = [dict(label=name, selector=name, export=name, kind='Synthetic QA', legality='unknown',
+                 source={}, total=60) for name in ('A', 'B')]
+    try:
+        ui.loaded_decks(rows)
+        wait_until(app, entered.is_set)
+        old = ui.gallery.tiles[0]
+        old.art.animate(1)
+        ui.deck_picker.setCurrentIndex(1)
+        wait_until(app, lambda: len(ui.gallery.tiles) == 1 and ui.gallery.tiles[0].card['name'] == 'B' and
+                   ui.gallery.tiles[0].provenance.endswith('/B'))
+        generation = ui.gallery.generation
+        assert not isValid(old)
+        release.set()
+        wait_until(app, lambda: not ui.jobs)
+        assert ui.gallery.generation == generation
+        assert ui.gallery.tiles[0].card['name'] == 'B' and ui.gallery.tiles[0].provenance.endswith('/B')
+        assert ui.deck_text.toPlainText() == 'B' and not ui.cloud_consent.isChecked()
+    finally:
+        release.set()

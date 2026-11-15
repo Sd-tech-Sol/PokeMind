@@ -1,0 +1,11 @@
+# PM-RELEASE-095-DEMO-CONFINEMENT-009 — READY_FOR_CODEX (2026-11-09)
+
+**Audit indépendant ChatGPT 008 terminé : [VERIFICATION_PM-RELEASE-095-BRAINBALL-WINDOWS-CANDIDATE-008_2026-11-09.md](VERIFICATION_PM-RELEASE-095-BRAINBALL-WINDOWS-CANDIDATE-008_2026-11-09.md), commit `abd8206`.** Le bug `DEMO_EXPORT_OUTSIDE_WORKSPACE` est confirmé en source : `demo.py` crée une DB fictive avec `--db`, mais ne force pas `POKEMIND_DATA_ROOT` de ses sous-processus, et teste l'export après écriture. `cli.py` peut suivre une racine active projet/pointeur/override. **Ce défaut ne prouve pas que la racine privée a été touchée; il peut avoir créé 2 fichiers purement fictifs hors workspace, sans écrasement des fichiers existants grâce à `_atomic_write_new`.** Emplacement/effets non vérifiés, aucune consultation des données propriétaire autorisée.
+
+**Décision : candidat 008 CONSTRUIT mais BLOQUÉ, ne pas installer/publier.** Build/test et Inno QA rapportés favorables (1809 tests, 3 ignorés, 797 fichiers binaires, 99 fichiers fictifs de QA intacts), mais artefacts/hashes contrôlés **seulement par Codex**, parcours interactif EXE non vérifié. GitHub source SHA `3074e17`: 0 statut et 0 workflow. Rapport privé `d16f046`. Ce verdict ne signifie ni fuite de données ni perte prouvée.
+
+**Tâche unique suivante : [NEXT_PROMPT.md](NEXT_PROMPT.md), commit `c4584b4`, `PM-RELEASE-095-DEMO-CONFINEMENT-009`.** Codex doit synchroniser fast-forward, corriger uniquement le routage de la démo AVANT écriture, créer une vraie régression qui échoue sur ancien code avec pointeur/override **fictifs seulement**, lancer la porte complète isolée, puis reconstruire EXE/Setup dans dossiers neufs et requalifier en QA fictive. **NE JAMAIS inspecter ni modifier les données réelles, le programme installé, les sauvegardes ou un chemin privé; leur vérification exigera un GO distinct.** Ne pas reprendre `python -m pokemind demo --json` dans le repo opérationnel; aucun nouveau design, aucune publication, aucune installation. Commit/push privé, RESULT, STOP pour audit ChatGPT.
+
+**Statut :** candidat 008 préservé comme preuve; installation hotfix 0.9.5 actuelle non modifiée par mandat; dernière publique 0.9.3; `NOT_RELEASE_READY`. Ce prompt corrige un défaut nécessaire à la qualification déjà autorisée, **pas une nouvelle fonctionnalité ni permission d'accès aux données propriétaires**.
+
+---

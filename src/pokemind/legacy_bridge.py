@@ -208,6 +208,10 @@ def saved_report(root, *, report, learning=None):
         if value.get('revision_of'):
             selected['revision_of'] = {'model_version': value['revision_of']['model_version']}
         projection = _display(selected)
+        # File names stay hidden; the day each log was added is what places a game in its season (D-288).
+        from pokemind import seasons
+        for shown, raw in zip(projection['matches'], value['matches']):
+            shown['added_on'] = seasons.file_day(root, raw.get('source_relative'))
         rendered = battle_batch.human_report(projection).replace('analyse réelle locale', 'analyse conservée')
         blocked = value['persistence'].get('schema_version') == 7
         result = {'status': 'READ_ONLY_SAVED_REPORT', 'snapshot_selection': 'EXPLICIT_CANONICAL' if canonical

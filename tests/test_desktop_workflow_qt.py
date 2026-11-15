@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 import pytest
+import shiboken6
 pytest.importorskip('PySide6')
 from PySide6.QtCore import Qt, QMimeData, QUrl, QTimer, QBuffer, QIODevice
 from PySide6.QtGui import QImage
@@ -14,6 +15,172 @@ from test_desktop_qt import app, ui, wait_until, dispose_window, Fake
 from test_desktop_ingestion import text
 from pokemind.desktop import window, ingestion
 from pokemind.assistant.sessions import Store
+
+
+@pytest.fixture
+def selected_history(ui, app, monkeypatch):
+    from test_desktop_qt import install_selected_history, REAL_DECK_OPTIONS
+    from test_opponent_auto_deck import public_index
+    from pokemind import battle_batch, deck_public_stats
+    report = install_selected_history(ui, app)
+    monkeypatch.setattr(battle_batch, 'public_context', lambda *a: (public_index(), [], {}))
+    monkeypatch.setattr(deck_public_stats, 'refresh_state', lambda *a, **k: {'automatic_due': False})
+    monkeypatch.setattr(ui.services, 'deck_options', lambda: REAL_DECK_OPTIONS(ui.services))
+    monkeypatch.setattr(ui, 'get_adapter', lambda: pytest.fail('recovery must not contact an AI provider'))
+    monkeypatch.setattr(window.Services, 'played_reference', lambda *a: pytest.fail('recovery must not read old raw logs'))
+    calls = []
+    original = ui.services.save_public_opponent
+    def record(value, **options):
+        calls.append(value['match'])
+        return original(value, **options)
+    monkeypatch.setattr(ui.services, 'save_public_opponent', record)
+    return report, calls
+
+
+def request_selected_recovery(ui, app):
+    ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
+    QTest.mouseClick(ui.send_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.chat_busy and not ui.jobs, timeout=15000)
+    return ui.conversation['messages'][-1]['content']
+
+
+def test_014_actual_battles_choice_not_latest_match_saves_once_and_refreshes_deck_lab(ui, app, selected_history):
+    from test_desktop_qt import select_historical_game
+    from test_opponent_auto_deck import files
+    _, calls = selected_history
+    select_historical_game(ui, app, 'OLD-A2')
+    assert ui.conversation['selected_match'] == 'OLD-A2'
+    assert 'Deck adverse ajouté' in request_selected_recovery(ui, app)
+    assert calls == ['OLD-A2'] and len(files(ui.root)) == len(ui.deck_rows) == 1
+    assert 'Déjà dans Deck Lab' in request_selected_recovery(ui, app)
+    assert calls == ['OLD-A2', 'OLD-A2'] and len(files(ui.root)) == 1
+    assert not ui.cloud_consent.isChecked() and all(m['local_only'] for m in ui.conversation['messages'])
+
+
+def test_014_automatic_first_row_and_family_change_are_not_explicit_game_choices(ui, app, selected_history):
+    from test_desktop_qt import select_historical_game
+    _, calls = selected_history
+    ui.navigation.setCurrentRow(1)
+    ui.matchups.selectRow(0)  # family list populates its first game; no game activation
+    app.processEvents()
+    assert ui.games.currentData()
+    assert 'aucune partie sélectionnée' in request_selected_recovery(ui, app)
+    assert calls == []
+    select_historical_game(ui, app, 'OLD-A2')
+    row = next(i for i in range(ui.matchups.rowCount()) if ui.matchups.item(i, 0).text() == 'Invented Beta')
+    QTest.mouseClick(ui.matchups.viewport(), Qt.MouseButton.LeftButton,
+                     pos=ui.matchups.visualItemRect(ui.matchups.item(row, 0)).center())
+    assert ui.games.currentData()['match'] == 'RECENT-B'
+    assert ui.conversation['selected_match'] == 'OLD-A2'  # population never overwrites saved context
+    assert 'aucune partie sélectionnée' in request_selected_recovery(ui, app)
+    assert calls == []
+    select_historical_game(ui, app, 'RECENT-B')  # explicit activation of the already displayed row
+    assert 'preuves insuffisantes' in request_selected_recovery(ui, app)
+    assert calls == ['RECENT-B']
+
+
+def test_014_resume_conversation_revalidates_its_reference_instead_of_other_visible_game(ui, app, selected_history):
+    from test_desktop_qt import select_historical_game, select_combo_item
+    _, calls = selected_history
+    select_historical_game(ui, app, 'OLD-A2')
+    first = ui.conversation['id']
+    QTest.mouseClick(ui.new_button, Qt.MouseButton.LeftButton)
+    assert 'aucune partie sélectionnée' in request_selected_recovery(ui, app)
+    select_historical_game(ui, app, 'RECENT-B')
+    second = ui.conversation['id']
+    assert first != second
+    ui.refresh_history()
+    select_combo_item(app, ui.history_picker, ui.history_picker.findData(first))
+    assert ui.conversation['id'] == first and ui.games.currentData()['match'] == 'RECENT-B'
+    assert 'Deck adverse ajouté' in request_selected_recovery(ui, app)
+    assert calls == ['OLD-A2']
+    # A historical discussion may refer to a match removed from the current canonical report.
+    stale = ui.store.new('codex')
+    stale.update(title='Invented stale history', selected_match='MISSING-MATCH')
+    ui.store.save(stale)
+    ui.preferences['conversations'].append({'id': stale['id'], 'title': stale['title'], 'provider': 'codex'})
+    ui.refresh_history()
+    select_combo_item(app, ui.history_picker, ui.history_picker.findData(stale['id']))
+    assert ui.conversation['id'] == stale['id']
+    assert 'aucune partie sélectionnée' in request_selected_recovery(ui, app)
+    assert calls == ['OLD-A2']
+
+
+def test_014_restart_recovers_saved_discussion_reference_without_auto_saving(ui, app, selected_history, monkeypatch):
+    from copy import deepcopy
+    from test_desktop_qt import select_historical_game
+    from test_opponent_auto_deck import files
+    report, _ = selected_history
+    select_historical_game(ui, app, 'OLD-A2')
+    identity = ui.conversation['id']
+    ui.close()
+    assert not ui.isVisible() and not files(ui.root)
+    def load(services, *a, **k):
+        services.full_report = services.report = deepcopy(report)
+        return {'report': services.report, 'learning': None}
+    monkeypatch.setattr(window.Services, 'load', load)
+    fresh = window.MainWindow(ui.root)
+    try:
+        fresh.show()
+        wait_until(app, lambda: fresh.metrics[0].text() == '3' and not fresh.jobs)
+        assert fresh.conversation['id'] == identity and not files(ui.root)
+        calls = []
+        original = fresh.services.save_public_opponent
+        def record(value, **options):
+            calls.append(value['match'])
+            return original(value, **options)
+        monkeypatch.setattr(fresh.services, 'save_public_opponent', record)
+        monkeypatch.setattr(fresh, 'get_adapter', lambda: pytest.fail('restart recovery must remain local'))
+        assert 'Deck adverse ajouté' in request_selected_recovery(fresh, app)
+        assert calls == ['OLD-A2'] and len(files(ui.root)) == 1
+    finally:
+        dispose_window(fresh, app)
+
+
+def test_014_new_local_import_without_cloud_is_selected_before_any_llm_followup(ui, app, selected_history, monkeypatch):
+    from test_desktop_qt import select_historical_game
+    from pokemind import battle_batch
+    # No catalog/counter-deck database accompanies this tiny parser fixture; use the real offline refusal.
+    monkeypatch.setattr(battle_batch, 'public_context', lambda *a: (None, [], {'status': 'BLOCKED_PUBLIC_REFERENCE'}))
+    _, calls = selected_history
+    select_historical_game(ui, app, 'OLD-A2')
+    ui.chat_input.setPlainText(text())
+    QTest.mouseClick(ui.send_button, Qt.MouseButton.LeftButton)
+    wait_until(app, lambda: not ui.ingest_busy and not ui.jobs, timeout=15000)
+    reference = ui.last_import['match']['match']
+    assert reference != 'OLD-A2' and ui.conversation['selected_match'] == reference
+    assert not ui.cloud_consent.isChecked() and not ui.chat_busy
+    assert 'preuves insuffisantes' in request_selected_recovery(ui, app)
+    assert calls == [reference]
+    QTest.mouseClick(ui.view_import_button, Qt.MouseButton.LeftButton)
+    assert ui.games.currentData()['match'] == ui.conversation['selected_match'] == reference
+
+
+@pytest.mark.parametrize('cancelled', [False, True])
+def test_014_late_worker_keeps_original_game_snapshot_when_family_changes(ui, app, selected_history, monkeypatch, cancelled):
+    from test_desktop_qt import select_historical_game
+    from test_opponent_auto_deck import files
+    _, calls = selected_history
+    select_historical_game(ui, app, 'OLD-A2')
+    started, release = threading.Event(), threading.Event()
+    original = ui.services.save_public_opponent
+    def slow(value, **options):
+        started.set()
+        assert release.wait(10)
+        return original(value, **options)
+    monkeypatch.setattr(ui.services, 'save_public_opponent', slow)
+    ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
+    QTest.mouseClick(ui.send_button, Qt.MouseButton.LeftButton)
+    wait_until(app, started.is_set)
+    assert not ui.new_button.isEnabled() and not ui.history_picker.isEnabled()
+    select_historical_game(ui, app, 'RECENT-B')
+    if cancelled:
+        QTest.mouseClick(ui.stop_button, Qt.MouseButton.LeftButton)
+    release.set()
+    wait_until(app, lambda: not ui.chat_busy and not ui.jobs)
+    assert calls == ['OLD-A2'] and len(files(ui.root)) == (0 if cancelled else 1)
+    assert ui.conversation['selected_match'] == 'RECENT-B'
+    assert ('annulé' if cancelled else 'Deck adverse ajouté') in ui.conversation['messages'][-1]['content']
 
 
 def choose(window_under_test, mode):
@@ -451,30 +618,48 @@ def test_paste_is_local_then_normal_question_never_resends_import_history(ui,app
     assert 'InventedRival' not in captured[0][0] and 'Reference player:' not in captured[0][0]
 
 
-def test_pasted_defeat_alone_makes_the_coach_rebuild_and_save_the_opponent_deck(ui,app,monkeypatch):
-    # The owner pastes a lost game and wants the deck that beat them in « Mes decks », named.
+def test_pasted_defeat_alone_is_followed_and_never_saves_the_opponent_deck(ui,app,monkeypatch):
+    # PM-COACH-LOSS-PRIORITY-001: a lost game opens the loss follow-up; the opponent's deck is not saved by itself.
     captured=[]
     export='Pokémon: 20\n20 Invented Alpha INV 1\nTrainer: 20\n20 Invented Beta INV 2\nEnergy: 20\n20 Basic Invented Energy INV 3'
     class Capture(Fake):
         def ask_stream(self,prompt,history,emit,tool=None):
             captured.append(prompt)
             captured.append(tool({'operation':'save_deck','query':'Deck adverse inventé','export_text':export}))
-            before.append(len(refreshed))
             super().ask_stream(prompt,history,emit,tool)
     monkeypatch.setattr(window,'CodexAppServer',Capture)
-    refreshed,before=[],[]
-    monkeypatch.setattr(window.Services,'deck_options',lambda s:refreshed.append(1) or [])
     ui.cloud_consent.setChecked(True);ui.sharing.setCurrentIndex(1)
     ui.chat_input.setPlainText(text())
     QTest.keyClick(ui.chat_input,Qt.Key.Key_Return)
     wait_until(app,lambda:len(captured)==2 and not ui.chat_busy and not ui.ingest_busy)
-    assert 'Quel deck m’a affronté' in captured[0] and '"selected_match"' in captured[0] and '"opponent_reconstruction"' in captured[0]
+    assert captured[0].startswith('Question : '+window.LOG_QUESTIONS['loss'])
+    assert '"log_followup"' in captured[0] and '"loss_watch"' in captured[0] and '"opponent_reconstruction"' in captured[0]
     assert 'InventedRival' not in captured[0] and 'Reference player:' not in captured[0]
-    assert captured[1]['status']=='SAVED_DECK' and captured[1]['name']=='Deck adverse inventé'
-    assert ui.services.my_decks()[0]['name']=='Deck adverse inventé' and ui.services.my_decks()[0]['export']==export
-    assert 'Deck ajouté à Mes decks : Deck adverse inventé' in ui.statusBar().currentMessage()
-    wait_until(app,lambda:len(refreshed)>before[0])  # Deck Lab reloads after the save (the fixture stubs the list)
+    assert captured[1]['error']=='DECK_SAVE_REQUIRES_OWNER_REQUEST' and ui.services.my_decks()==[]
+    assert 'Défaite ajoutée au suivi des matchups difficiles' in ui.transcript.toPlainText()
+    assert 'Deck ajouté à Mes decks' not in ui.statusBar().currentMessage()
     assert 'Statistiques actualisées' not in ui.transcript.toPlainText()
+
+
+def test_pasted_win_counts_and_the_coach_gets_a_short_review_without_deck(ui,app,monkeypatch):
+    captured=[]
+    class Capture(Fake):
+        def ask_stream(self,prompt,history,emit,tool=None):
+            captured.append(prompt)
+            captured.append(tool({'operation':'save_deck','query':'Gagné inventé','export_text':'x'}))
+            super().ask_stream(prompt,history,emit,tool)
+    monkeypatch.setattr(window,'CodexAppServer',Capture)
+    ui.cloud_consent.setChecked(True);ui.sharing.setCurrentIndex(1)
+    ui.chat_input.setPlainText(text('InventedSelf'))
+    QTest.keyClick(ui.chat_input,Qt.Key.Key_Return)
+    wait_until(app,lambda:len(captured)==2 and not ui.chat_busy and not ui.ingest_busy)
+    assert captured[0].startswith('Question : '+window.LOG_QUESTIONS['win'])
+    assert '"opponent_reconstruction"' not in captured[0] and '"outcome": "win"' in captured[0]
+    assert captured[1]['error']=='DECK_SAVE_REQUIRES_OWNER_REQUEST' and ui.services.my_decks()==[]
+    assert 'Victoire comptée dans tes statistiques.' in ui.transcript.toPlainText()
+    assert 'Non créé' in ui.transcript.toPlainText()
+    from pokemind.desktop.services import SAVE_REQUEST
+    assert not any(SAVE_REQUEST.search(q) for q in window.LOG_QUESTIONS.values())
 
 
 def test_owner_text_around_a_pasted_log_is_kept_as_the_question(ui,app,monkeypatch):
@@ -792,9 +977,10 @@ def test_streaming_refresh_replaces_only_the_last_bubble_like_a_full_render(ui, 
         ui.conversation['messages'][-1]['content'] += ' ' + word
         ui.render_stream()
     streamed = ui.transcript.toPlainText()
-    assert streamed.count('POKEMIND') == 1 and 'Début inventé un deux trois' in streamed
+    assert streamed.count('POKEMIND') == 1 and 'Début **inventé** un deux trois' in streamed
     ui.render_chat()
-    assert ui.transcript.toPlainText() == streamed
+    assert 'Début inventé un deux trois' in ui.transcript.toPlainText()
+    assert '**' not in ui.transcript.toPlainText()
     ui.conversation['messages'].append({'role':'user','content':'Suite inventée'})
     ui.render_stream()  # structural change: full render fallback
     assert ui.transcript.toPlainText().count('Suite inventée') == 1
@@ -905,26 +1091,68 @@ def test_unchecking_the_project_folder_brings_back_the_isolated_coach(ui, app, m
     assert configured[-1]['development'] is False and configured[-1]['cwd'] == ui.store.sandbox
 
 
-def test_logo_is_two_cards_with_a_brain_and_the_exe_icon_holds_every_size(app):
-    import importlib.util, struct
-    from pokemind.desktop.theme import logo_pixmap, logo_icon_sizes
-    picture=logo_pixmap(256).toImage()
-    for x,y in ((125,110),(165,100)):                                             # pink brain
-        colour=picture.pixelColor(x,y)
-        assert colour.red()>200 and 120<colour.green()<170 and colour.blue()>150
-    window,front,back=picture.pixelColor(150,140),picture.pixelColor(160,195),picture.pixelColor(70,150)
-    assert min(window.red(),window.green(),window.blue())>230                     # the card's picture window
-    assert front.red()>150 and front.green()<60                                   # red front card
-    assert back.blue()>150 and back.red()<100                                     # blue card behind
-    assert picture.pixelColor(4,4).alpha()==0                                     # no square background
-    spec=importlib.util.spec_from_file_location('make_icon',Path(__file__).resolve().parents[1]/'scripts/make_icon.py')
+def test_logo_is_the_approved_pokemind_card_and_the_exe_icon_holds_every_size(app):
+    import hashlib, importlib.util, struct
+    from PySide6.QtGui import QImage
+    from pokemind.desktop import theme
+    from pokemind.desktop.theme import BRAND_CARD, card_pixmap, card_width, logo_pixmap, logo_icon_sizes
+    root=Path(__file__).resolve().parents[1]
+    spec=importlib.util.spec_from_file_location('make_icon',root/'scripts/make_icon.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    original=root/'assets/branding/pokemind-tcg-coach-original.png'
+    assert hashlib.sha256(original.read_bytes()).hexdigest()==module.ORIGINAL_SHA256=='30824d84f594be0e1fe33b3e9531f487e497252e17d7a16ff57763b787d7f0f5'
+    assert not hasattr(theme,'brain_path')                                      # the drawn two-card logo is gone
+    packaged,fresh=QImage(str(BRAND_CARD)),module.card_image(original)           # reproducible from the original
+    assert (packaged.width(),packaged.height())==(fresh.width(),fresh.height())==(530,742)
+    for x,y in ((265,371),(265,120),(265,650),(40,400),(500,40),(3,3)):
+        a,b=packaged.pixelColor(x,y),fresh.pixelColor(x,y)
+        assert max(abs(a.red()-b.red()),abs(a.green()-b.green()),abs(a.blue()-b.blue()),abs(a.alpha()-b.alpha()))<=2
+    source=QImage(str(original))
+    for x,y in ((265,371),(265,120),(400,600)):                                  # half size: the original's own pixels
+        a,b=packaged.pixelColor(x,y),source.pixelColor(2*x,2*y)
+        assert max(abs(a.red()-b.red()),abs(a.green()-b.green()),abs(a.blue()-b.blue()))<=40
+    assert packaged.pixelColor(0,0).alpha()==packaged.pixelColor(529,741).alpha()==0  # page outside the corners only
+    assert packaged.pixelColor(0,371).alpha()==packaged.pixelColor(265,0).alpha()==255
+    picture=logo_pixmap(256,1.0).toImage()
+    assert (picture.width(),picture.height())==(256,256)
+    side=(256-card_width(256))//2
+    assert picture.pixelColor(side//2,128).alpha()==0 and picture.pixelColor(255-side//2,128).alpha()==0  # never stretched
+    ball,brain=picture.pixelColor(128,128),picture.pixelColor(128,95)
+    assert min(ball.red(),ball.green(),ball.blue())>180                          # the Poke Ball button
+    assert brain.red()>180 and brain.green()<110                                 # the red brain
+    whole=card_pixmap(150,1.0)
+    assert whole.height()==150 and whole.width()==card_width(150)==107
+    hidpi=card_pixmap(104,2.0)
+    assert (hidpi.height(),hidpi.devicePixelRatio())==(208,2.0)
     data=module.ico_bytes(logo_icon_sizes())
     reserved,kind,count=struct.unpack_from('<HHH',data)
     assert (reserved,kind,count)==(0,1,len(logo_icon_sizes()))
     for index in range(count):
         side,_,_,_,_,_,length,offset=struct.unpack_from('<BBBBHHII',data,6+16*index)
         assert data[offset:offset+8]==b'\x89PNG\r\n\x1a\n' and offset+length<=len(data)
+    large=module.bitmap(164,314,'#07142F')
+    assert (large.width(),large.height())==(164,314) and large.pixelColor(82,2).name()=='#07142f'
+
+
+def test_brand_card_reaches_every_brand_spot_and_the_windows_build(ui,app):
+    from pokemind.desktop.binder import BinderCover
+    root=Path(__file__).resolve().parents[1]
+    ui.show()
+    wait_until(app,lambda:not ui.stack.transition.isVisible())
+    assert (ui.hero_emblem.width(),ui.hero_emblem.height())==(110,124)
+    banner=ui.hero_emblem.grab().toImage()
+    middle=banner.pixelColor(55,62)                                               # the card's Poke Ball, mid-banner
+    assert min(middle.red(),middle.green(),middle.blue())>150
+    assert not ui.windowIcon().isNull() and ui.navigation.item(0).icon().availableSizes()
+    cover=BinderCover();cover.resize(420,560)
+    centre=cover.grab().toImage().pixelColor(210,280)
+    assert min(centre.red(),centre.green(),centre.blue())>150
+    build=(root/'scripts/Build-PokeMindDesktop.ps1').read_text(encoding='utf-8')
+    assert "pokemind/desktop/branding" in build and '@brandingArguments' in build and '--icon $icon' in build
+    installer=(root/'scripts/Build-PokeMindInstaller.ps1').read_text(encoding='utf-8')
+    setup=(root/'packaging/PokeMind.iss').read_text(encoding='utf-8')
+    assert 'make_icon.py $icon' in installer and '/DLargeImage=' in installer
+    assert 'SetupIconFile={#IconFile}' in setup and 'WizardImageFile={#LargeImage}' in setup
 
 
 def test_settings_are_short_rows_in_categories_with_details_on_demand(ui,app):
@@ -1235,3 +1463,520 @@ def test_a_follow_up_in_the_same_engine_session_pastes_only_the_data_that_change
     ui.new_conversation()
     ask('Nouvelle discussion')
     assert full(prompts[4])
+
+
+def test_new_install_allows_the_cloud_coach_with_anonymous_statistics_by_default(local_tmp,app):
+    # Owner, 2026-11-06 (D-287): no opt-in to tick before a pasted log reaches the coach; still switchable.
+    from pokemind.desktop import welcome
+    preferences=window.Store(local_tmp).preferences()
+    assert preferences['cloud_consent'] is True and preferences['sharing']=='aggregates'
+    wizard=welcome.WelcomeWizard(preferences,detect=lambda c:True)
+    assert wizard.cloud.isChecked() and wizard.choices()['cloud_consent'] is True
+    wizard.cloud.setChecked(False)
+    assert wizard.choices()['cloud_consent'] is False
+    window.Store(local_tmp).write('preferences.json',{'cloud_consent':False,'sharing':'public'})
+    kept=window.Store(local_tmp).preferences()
+    assert kept['cloud_consent'] is False and kept['sharing']=='public'      # an explicit choice stays
+    shiboken6.delete(wizard)                                                   # while the Qt application lives
+
+
+DECK_60='Pokémon: 20\n20 Invented Alpha INV 1\nTrainer: 20\n20 Invented Beta INV 2\nEnergy: 20\n20 Basic Invented Energy INV 3'
+
+
+def test_owner_enters_a_deck_and_marks_it_main_for_the_overview_and_the_coach(ui,app,monkeypatch):
+    # Owner, 2026-11-06 (D-288): « que je puisse rentrer moi-même des decks… ça c'est mon deck principal ».
+    from pokemind.desktop.deck_entry import DeckEntryDialog
+    from pokemind.desktop.insights import favorite_key
+    monkeypatch.setattr(window.Services,'deck_options',lambda s:[{'label':d['name'],'selector':'mon deck','export':d['export'],
+        'source':{},'kind':'Mon deck · référence personnelle entrée par moi','legality':'inconnue','total':60} for d in s.my_decks()])
+    dialog=DeckEntryDialog(ui.services,ui)
+    dialog.name.setText('Mon deck inventé');dialog.export.setPlainText(DECK_60.replace('20 Basic','19 Basic'))
+    dialog.save()
+    assert dialog.result is None and '60 cartes' in dialog.message.text() and ui.services.my_decks()==[]
+    dialog.export.setPlainText(DECK_60)
+    dialog.save()
+    assert dialog.result['status']=='SAVED_DECK' and dialog.result['main'] is True
+    record=ui.services.my_decks()[0]
+    assert record['source']=='owner' and record['name']=='Mon deck inventé'
+    ui.deck_added(dialog.result)
+    key=favorite_key({'export':DECK_60})
+    wait_until(app,lambda:ui.preferences['main_deck']==key and ui.deck_rows)
+    assert window.Store(ui.root).preferences()['main_deck']==key                 # kept after a restart
+    assert '· ♛ Mon deck inventé' in ui.deck_picker.currentText() and ui.main_button.isChecked()
+    assert any('Deck principal : Mon deck inventé' in w.text() for w in ui.findChildren(window.QPushButton) if w.isVisibleTo(ui) or True)
+    assert ui.services.prepare_question('Quel est mon deck?','aggregates')['owner_main_deck']['export']==DECK_60
+    assert 'owner_main_deck' not in ui.services.prepare_question('Quel est mon deck?','public')   # personal: never public-only
+    ui.toggle_main()
+    assert ui.preferences['main_deck']=='' and not ui.main_button.isChecked()
+    assert 'owner_main_deck' not in ui.services.prepare_question('Quel est mon deck?','aggregates')
+    shiboken6.delete(dialog)                                                   # while the Qt application lives
+
+
+def test_owner_entered_decks_are_labelled_and_main_deck_preference_is_validated(local_tmp):
+    services=window.Services(local_tmp)
+    assert services.save_deck('Mien',DECK_60,source='owner')['status']=='SAVED_DECK'
+    assert services.save_deck('Autre',DECK_60,source='intrus')=={'error':'DECK_SOURCE_INVALID'}
+    option=services.deck_options()[0]
+    assert option['owner_entered'] is True and 'entrée par moi' in option['kind'] and 'personnelle' in option['kind']
+    store=window.Store(local_tmp)
+    store.write('preferences.json',{'main_deck':'pas-un-hash'})
+    with pytest.raises(ValueError,match='CHAT_PREFERENCES_INVALID'):
+        store.preferences()
+
+
+# Deck Lab › Statistiques (PM-DECKLAB-PUBLIC-STATS-001): invented public tournaments, the real collector and engines.
+from test_deck_public_stats import server, PRIVATE_DECK, A, X  # noqa: E402,F401  (server is a pytest fixture)
+
+
+def _public_rows():
+    other=PRIVATE_DECK.replace('3 Betadrake INV 3','3 Alphamon ex INV 9')
+    return [{'label':'Gammaroo secret','selector':'mon deck','export':PRIVATE_DECK,'source':{},'total':60,
+             'kind':'Mon deck · référence personnelle entrée par moi','legality':'inconnue'},
+            {'label':'Autre deck inventé','selector':'mon deck','export':other,'source':{},'total':60,
+             'kind':'Mon deck · référence personnelle entrée par moi','legality':'inconnue'}]
+
+
+def _settled(ui):
+    return not ui.jobs and not ui.public_stats_busy
+
+
+def test_013_selector_daily_refresh_reranks_preserves_selection_gallery_and_favorites(ui, app, server, monkeypatch):
+    from pokemind import deck_public_stats
+    from pokemind.desktop.insights import favorite_key
+    web = server(['t-bo1'])
+    rows = _public_rows()
+    ui.navigation.setCurrentRow(2)
+    # Pause the shared collector: offline unknown labels appear immediately and remain selectable.
+    entered, release = threading.Event(), threading.Event()
+    refresh = deck_public_stats.refresh
+    def delayed(*a, **k):
+        entered.set()
+        assert release.wait(5)
+        return refresh(*a, **k)
+    monkeypatch.setattr(deck_public_stats, 'refresh', delayed)
+    ui.loaded_decks(ui.services.rank_decks(rows))
+    wait_until(app, entered.is_set)
+    ui.deck_picker.setCurrentIndex(1)
+    wait_until(app, lambda: len(ui.gallery.tiles) > 0)
+    key = favorite_key(ui.deck_rows[1])
+    ui.favorite_button.click()
+    ui.main_button.click()
+    wait_until(app, lambda: len(ui.jobs) == 1)  # only the paused collector remains, both gallery jobs settled
+    generation = ui.gallery.generation
+    ui.compare_picker.setCurrentIndex(0)
+    compare = favorite_key(ui.deck_rows[0])
+    release.set()
+    wait_until(app, lambda: _settled(ui))
+    assert len(web.urls) == 5
+    rates = [r['public_ranking']['fraction'] for r in ui.deck_rows if r['public_ranking']['fraction'] is not None]
+    assert rates == sorted(rates, reverse=True) and rates
+    assert favorite_key(ui.deck_rows[ui.deck_picker.currentIndex()]) == key
+    assert favorite_key(ui.deck_rows[ui.compare_picker.currentIndex()]) == compare
+    assert ui.gallery.generation == generation
+    assert key in ui.preferences['favorite_decks'] and ui.preferences['main_deck'] == key
+    assert ui.favorite_button.isChecked() and ui.main_button.isChecked()
+    for i in range(ui.deck_picker.count()):
+        label = ui.deck_picker.itemText(i)
+        tip = ui.deck_picker.itemData(i, Qt.ItemDataRole.ToolTipRole)
+        if ui.deck_rows[i]['public_ranking']['fraction'] is not None:
+            assert label.startswith('#') and '% · ' in label
+            assert '% PUBLIC BO1' in tip and 'n=' in tip and 'Limitless' in tip
+            assert 'https://' in tip and 'Instantané' in tip
+    ui.deck_picker.setFocus()
+    QTest.keyClick(ui.deck_picker, Qt.Key.Key_Home)
+    assert ui.deck_picker.currentIndex() == 0
+    ui.rerank_decks()
+    wait_until(app, lambda: _settled(ui))
+    assert len(web.urls) == 5  # relabeling does not collect or loop
+
+
+def test_013_selector_late_worker_cannot_replace_a_newer_result(ui, app, monkeypatch):
+    rows = _public_rows()
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def load():
+        calls.append(1)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(5)
+            return rows[:1]
+        return rows[1:]
+    monkeypatch.setattr(ui.services, 'deck_options', load)
+    ui.reload_decks()
+    wait_until(app, entered.is_set)
+    ui.reload_decks()
+    wait_until(app, lambda: ui.deck_rows and ui.deck_rows[0]['label'] == rows[1]['label'])
+    release.set()
+    wait_until(app, lambda: _settled(ui))
+    assert ui.deck_rows[0]['label'] == rows[1]['label']
+
+
+@pytest.mark.parametrize('width', [1100, 1500])
+def test_013_selector_full_rate_accessibility_at_narrow_width(ui, app, width):
+    from datetime import date
+    from pathlib import Path
+    rows = _public_rows()
+    for row in rows:
+        row['public_ranking'] = {'fraction': .625, 'n': 40, 'mode': 'BO1',
+            'window': {'since': '2026-10-16', 'until': date.today().isoformat()},
+            'source_url': 'https://play.limitlesstcg.com/api/tournaments', 'last_success_at': '2026-11-12',
+            'refresh': {'automatic_due': False}}
+    ui.navigation.setCurrentRow(2)
+    ui.resize(width, 970)
+    ui.loaded_decks(rows)
+    wait_until(app, lambda: _settled(ui))
+    assert ui.deck_picker.currentText().startswith('#1 · 62,5 % · ') and 'n=40' in ui.deck_picker.toolTip()
+    assert ui.deck_picker.accessibleName() == ui.deck_picker.currentText()
+    assert ui.deck_picker.width() <= ui.stack.width()
+    assert ui.gallery.horizontalScrollBar().maximum() == 0
+    output = Path(__file__).resolve().parents[1] / 'build/qa-013'
+    output.mkdir(parents=True, exist_ok=True)
+    ui.grab().save(str(output / f'selector-{width}-{ui.devicePixelRatioF():g}.png'))
+
+
+def test_deck_lab_statistics_tab_one_daily_refresh_no_mixing_languages_and_themes(ui,app,server):
+    from pokemind.desktop.insights import favorite_key
+    from pokemind.desktop.i18n import set_language
+    web=server(['t-bo1'])
+    ui.navigation.setCurrentRow(2)
+    rows=_public_rows()
+    ui.loaded_decks(rows)
+    assert ui.deck_views.count()==4 and ui.deck_views.tabText(2)=='Statistiques'
+    assert ui.deck_views.tabText(0).startswith('Galerie') and ui.deck_views.tabText(1)=='Liste texte'
+    wait_until(app,lambda:_settled(ui))
+    assert web.urls==[]                                                 # no request while the tab is not shown
+    ui.deck_views.setCurrentIndex(2)
+    wait_until(app,lambda:_settled(ui) and ui.public_stats.view and ui.public_stats.view.get('archetype'))
+    view=ui.public_stats.view
+    assert view['identity']['archetype_id']==A[0] and view['deck_key']==favorite_key(rows[0])
+    assert len(web.urls)==5 and all('/api/' in url for url in web.urls)
+    assert 'Alphamon Betadrake' in ui.public_stats.identity.text() and 'pas de tes 60 cartes exactes' in ui.public_stats.identity_detail.text()
+    assert 'Taux de victoire BO1' in ui.public_stats.summary.text() and 'n=' in ui.public_stats.summary.text()
+    assert 'Limitless' in ui.public_stats.source.text() and 'pas date des matchs' in ui.public_stats.source.text()
+    assert ui.public_stats.matchups.rows and 'n=' in ui.public_stats.matchups.accessibleDescription()
+    assert ui.public_stats.meta.rows and ui.public_stats.mode.count()==1 and not ui.public_stats.mode.isEnabled()
+    ui.public_stats.matchups.setFocus()
+    QTest.keyClick(ui.public_stats.matchups,Qt.Key.Key_Down)
+    assert ui.public_stats.matchups.hovered==0 and 'n=' in ui.public_stats.matchups.toolTip()   # keyboard reading
+    sent=len(web.urls)
+    ui.deck_picker.setCurrentIndex(1)                                   # another deck the same day: zero request
+    wait_until(app,lambda:_settled(ui) and ui.public_stats.view['deck_key']==favorite_key(rows[1]))
+    assert ui.public_stats.view['identity']['archetype_id']==X[0] and len(web.urls)==sent
+    ui.deck_picker.setCurrentIndex(0);ui.deck_picker.setCurrentIndex(1);ui.deck_picker.setCurrentIndex(0)
+    wait_until(app,lambda:_settled(ui))
+    assert ui.public_stats.view['deck_key']==favorite_key(rows[0])   # quick selections: the last deck wins, unmixed
+    assert ui.public_stats.view['identity']['archetype_id']==A[0]
+    ui.deck_views.setCurrentIndex(0);ui.deck_views.setCurrentIndex(2)
+    wait_until(app,lambda:_settled(ui))
+    assert len(web.urls)==sent                                          # tab changes: no request
+    QTest.mouseClick(ui.public_stats.refresh_button,Qt.MouseButton.LeftButton)   # « Actualiser » right after: bounded
+    wait_until(app,lambda:_settled(ui) and 'trop rapprochée' in ui.public_stats.status.text())
+    assert len(web.urls)==sent and ui.public_stats.refresh_button.isEnabled()
+    ui.theme.setCurrentIndex(ui.theme.findData('light'))
+    assert ui.public_stats.theme=='light' and ui.public_stats.matchups.theme=='light'
+    ui.theme.setCurrentIndex(ui.theme.findData('dark'))
+    try:
+        ui.language.setCurrentIndex(ui.language.findData('en'));app.processEvents()
+        assert ui.deck_views.tabText(2)=='Statistics' and ui.public_stats.refresh_button.text()=='Refresh'
+        assert 'Public archetype' in ui.public_stats.identity.text() and 'Win rate BO1' in ui.public_stats.summary.text()
+        assert 'retrieval date, not match date' in ui.public_stats.source.text()
+    finally:
+        ui.language.setCurrentIndex(ui.language.findData('fr'));app.processEvents()
+        set_language('fr')
+    assert 'Archétype public' in ui.public_stats.identity.text() and len(web.urls)==sent
+
+
+def test_deck_lab_statistics_without_snapshot_and_a_refused_source_stay_honest(ui,app,server):
+    web=server(['t-bo1'],failure='429')
+    ui.navigation.setCurrentRow(2)
+    ui.loaded_decks(_public_rows())
+    ui.deck_views.setCurrentIndex(2)
+    wait_until(app,lambda:_settled(ui) and ui.public_stats.view and ui.public_stats.view['refresh']['last_outcome'])
+    assert len(web.urls)==1                                             # stopped at the first refusal
+    assert ui.public_stats.view['status']=='NO_SNAPSHOT' and ui.public_stats.view['archetype'] is None
+    assert 'Aucun instantané public' in ui.public_stats.identity.text()
+    assert 'dernier instantané valide conservé' in ui.public_stats.source.text()
+    assert ui.public_stats.matchups.rows==[] and ui.public_stats.summary.text()==''
+    ui.deck_picker.setCurrentIndex(1)
+    wait_until(app,lambda:_settled(ui))
+    assert len(web.urls)==1                                             # no retry loop the same day
+
+
+# 016: presentation-only fixtures; the statistical engines keep their own independent oracle tests.
+def ranking_016():
+    from copy import deepcopy
+    from datetime import date
+    rows = []
+    for i, fraction in enumerate((57 / 117, .42, None, None, None)):
+        rows.append({'label': f'Invented deck {i} ' + 'very long invented title ' * 5,
+            'selector': f'invented-{i}', 'export': PRIVATE_DECK.replace('Invented Trainer', f'Invented Trainer {i}'),
+            'kind': 'Invented reference', 'legality': 'Unknown', 'source': {}, 'total': 60,
+            'public_ranking': {'fraction': fraction, 'n': 117 if i == 0 else 100 if i == 1 else 0,
+                'mode': 'BO1', 'window': {'since': '2026-10-18', 'until': date.today().isoformat()},
+                'source_url': 'https://play.limitlesstcg.com/api/tournaments',
+                'last_success_at': date.today().isoformat(), 'refresh': {'automatic_due': False}}})
+    return deepcopy(rows)
+
+
+def public_view_016():
+    from copy import deepcopy
+    data = {'n': 117, 'wins': 57, 'losses': 59, 'ties': 1, 'win_fraction': 57 / 117,
+            'wilson_95': (.39, .58), 'mirror_matches': 3,
+            'matchups': [{'opponent': 'Invented Beta', 'wins': 57, 'losses': 59, 'ties': 1,
+                'n': 117, 'win_fraction': 57 / 117, 'wilson_95': (.39, .58)}]}
+    return {'status': 'OK', 'identity': {'status': 'IDENTIFIED', 'archetype_name': 'Invented Alpha',
+            'evidence': 'pokemon_in_list'}, 'archetype': {'modes': {'BO1': data,
+                'BO3': deepcopy(data) | {'n': 40, 'wins': 12, 'losses': 28, 'ties': 0, 'win_fraction': .3}},
+                'excluded_all_archetypes': {'bye_or_automatic_loss': 2}},
+            'window': {'since': '2026-10-18', 'until': '2026-11-14'},
+            'source': 'Limitless', 'docs_url': 'https://docs.limitlesstcg.com/developer/tournaments',
+            'last_success_at': '2026-11-14T12:00:00Z', 'refresh': {'automatic_due': False}, 'meta': {}}
+
+
+def test_016_selector_prefix_and_explicit_ranking(ui, app):
+    ui.navigation.setCurrentRow(2)
+    rows = ranking_016()
+    ui.loaded_decks(rows)
+    wait_until(app, lambda: _settled(ui))
+    assert ui.deck_picker.currentText().startswith('#1 · 48,7 % · ')
+    assert ui.deck_picker.itemText(1).startswith('#2 · 42,0 % · ')
+    assert all(ui.deck_picker.itemText(i).startswith('— · ') for i in (2, 3, 4))
+    assert ui.deck_views.count() == 4 and ui.deck_views.tabText(3) == 'Classement'
+    assert [ui.ranking_table.item(i, 0).text() for i in range(5)] == ['#1', '#2', '—', '—', '—']
+    assert 'PUBLIC BO1' in ui.deck_picker.toolTip() and '117' in ui.deck_picker.accessibleDescription()
+
+
+def test_016_stats_details_closed_and_short_legend(ui, app, monkeypatch):
+    panel = ui.public_stats
+    ui.navigation.setCurrentRow(2)
+    ui.deck_views.setCurrentIndex(2)
+    wait_until(app, lambda: _settled(ui))
+    panel.set_view(public_view_016())
+    QTest.qWait(300)
+    assert hasattr(panel, 'details_toggle'), 'Long methodology must be behind a native disclosure'
+    assert not panel.details.isVisible()
+    assert 'n ≥' not in panel.legend.text()
+    assert '48,7' in panel.value.text() and '117' in panel.sample.text()
+    QTest.mouseClick(panel.details_toggle, Qt.MouseButton.LeftButton)
+    assert panel.details.isVisible()
+    assert 'miroirs exclus' in panel.summary.text() and 'Limitless' in panel.source.text()
+
+
+def test_016_stats_kpi_unknown_and_mode_separation(ui, app):
+    panel = ui.public_stats
+    view = public_view_016()
+    panel.set_view(view)
+    assert hasattr(panel, 'value'), 'Public headline needs a distinct visual value'
+    assert panel.value.text() == '48,7 %'
+    panel.mode.setCurrentIndex(panel.mode.findData('BO3'))
+    assert panel.value.text() == '30,0 %' and 'BO3' in panel.rate_title.text()
+    view['archetype']['modes'] = {'BO3': view['archetype']['modes']['BO3'] | {'win_fraction': None, 'n': 7}}
+    panel.set_view(view)
+    assert panel.value.text() == '—' and 'BO3' in panel.rate_title.text()
+    assert 'Données insuffisantes' in panel.availability.text() and '7' in panel.sample.text()
+
+
+
+def test_016_ranking_mouse_keyboard_refresh_preserves_deck_and_readonly_selection(ui, app, monkeypatch):
+    from copy import deepcopy
+    from pokemind.desktop.insights import favorite_key
+    rows = ranking_016()
+    ui.navigation.setCurrentRow(2)
+    ui.loaded_decks(rows)
+    wait_until(app, lambda: _settled(ui))
+    ui.deck_views.setCurrentIndex(3)
+    QTest.qWait(300)
+    writes = []
+    save = ui.save_preferences
+    monkeypatch.setattr(ui, 'save_preferences', lambda: writes.append(True))
+    table = ui.ranking_table
+    table.setFocus()
+    QTest.keyClick(table, Qt.Key.Key_Down)
+    wait_until(app, lambda: _settled(ui))
+    assert ui.deck_picker.currentIndex() == 1 and not writes
+    point = table.visualItemRect(table.item(4, 1)).center()
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    wait_until(app, lambda: _settled(ui))
+    assert ui.deck_picker.currentIndex() == 4 and not writes
+    assert table.editTriggers() == table.EditTrigger.NoEditTriggers
+    monkeypatch.setattr(ui, 'save_preferences', save)
+    ui.deck_picker.setCurrentIndex(1)
+    wait_until(app, lambda: _settled(ui))
+    ui.favorite_button.click(); ui.main_button.click()
+    key = favorite_key(rows[1])
+    ui.compare_picker.setCurrentIndex(4)
+    compared = favorite_key(rows[4])
+    generation = ui.gallery.generation
+    ui.gallery.verticalScrollBar().setValue(25)
+    scroll = ui.gallery.verticalScrollBar().value()
+    changed = deepcopy(rows)
+    changed[1]['public_ranking']['fraction'] = .7
+    changed = [changed[1], changed[0], *changed[2:]]  # worker's new descending order
+    ui.loaded_decks(changed)
+    assert ui.deck_picker.currentIndex() == 0 and ui.ranking_table.currentRow() == 0
+    assert ui.deck_picker.currentText().startswith('#1 · 70,0 % · ♛ ')
+    assert favorite_key(ui.deck_rows[ui.compare_picker.currentIndex()]) == compared
+    assert key in ui.preferences['favorite_decks'] and ui.preferences['main_deck'] == key
+    assert ui.gallery.generation == generation and ui.gallery.verticalScrollBar().value() == scroll
+    changed[1]['public_ranking']['fraction'] = .7
+    ui.loaded_decks(changed)
+    assert [ui.ranking_table.item(i, 0).text() for i in (0, 1)] == ['#1', '#2']
+    assert ui.deck_rows[0]['selector'] == changed[0]['selector']  # stable ties, no extra UI sort
+    for row in changed: row['public_ranking']['fraction'] = None
+    ui.loaded_decks(changed)
+    assert all(ui.ranking_table.item(i, 0).text() == '—' for i in range(5))
+    assert all('Données insuffisantes' in ui.ranking_table.item(i, 2).text() for i in range(5))
+    ui.loaded_decks([])
+    assert table.rowCount() == 0 and ui.deck_picker.count() == 0
+
+
+@pytest.mark.parametrize('identity', ['AMBIGUOUS', 'UNIDENTIFIED'])
+def test_016_stats_unidentified_error_and_details_copy_are_honest(ui, app, identity):
+    from copy import deepcopy
+    from pokemind.desktop.i18n import display
+    from pokemind.desktop.insights import project_public_stats
+    view = public_view_016()
+    view.update(archetype=None, identity={'status': identity, 'candidates': ['Invented A', 'Invented B']},
+                refresh={'last_outcome': {'status': 'ERROR'}, 'last_attempt_at': '2026-11-14T12:01:00Z'})
+    before = deepcopy(view)
+    panel = ui.public_stats
+    panel.set_view(view)
+    assert panel.value.text() == '—' and not panel.details_toggle.isChecked()
+    assert 'échec' in panel.status.text() and 'instantané' in panel.status.text()
+    assert 'non identifié' in panel.identity.text() and '0 %' not in panel.value.text()
+    model = project_public_stats(view)
+    assert panel.source.text() == display(model['source']) and view == before
+    assert panel.source.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByKeyboard
+    panel.set_busy(False, 'Statistiques publiques indisponibles · INVENTED_QA_ERROR')
+    panel.set_theme('light')
+    assert 'INVENTED_QA_ERROR' in panel.status.text()
+    panel.details_toggle.setChecked(True)
+    panel.set_view(public_view_016())
+    assert not panel.details_toggle.isChecked()  # deck change resets disclosure
+
+
+@pytest.mark.parametrize('width,docked', [(1100, True), (1500, True), (1500, False)])
+@pytest.mark.parametrize('theme', ['dark', 'light'])
+@pytest.mark.parametrize('language', ['fr', 'en'])
+def test_016_native_visual_ranking_and_statistics(ui, app, monkeypatch, width, docked, theme, language):
+    import os
+    from copy import deepcopy
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QStyleOptionComboBox, QStyle
+    from pokemind.desktop.i18n import display, set_language
+    from pokemind.desktop.insights import favorite_key, project_public_stats
+    ui.navigation.setCurrentRow(2)
+    ui.resize(width, 970)
+    ui.chat_dock.setVisible(docked)
+    ui.theme.setCurrentIndex(ui.theme.findData(theme))
+    rows = ranking_016()
+    ui.loaded_decks(rows)
+    wait_until(app, lambda: _settled(ui))
+    def view_for(row, *args, **kwargs):
+        view = deepcopy(public_view_016()) | {'deck_key': favorite_key(row)}
+        if row['public_ranking']['fraction'] is None:
+            view.update(status='ARCHETYPE_AMBIGUOUS', archetype=None,
+                identity={'status': 'AMBIGUOUS', 'candidates': ['Invented A', 'Invented B']},
+                refresh={'automatic_due': False, 'last_outcome': {'status': 'ERROR'}})
+        return view
+    monkeypatch.setattr(ui.services, 'deck_public_stats', view_for)
+    ui.language.setCurrentIndex(ui.language.findData(language))
+    try:
+        QTest.qWait(300)
+        picker = ui.deck_picker
+        prefix = '#1 · ' + ('48,7 %' if language == 'fr' else '48.7 %')
+        assert picker.currentText().startswith(prefix)
+        option = QStyleOptionComboBox(); picker.initStyleOption(option)
+        field = picker.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
+            QStyle.SubControl.SC_ComboBoxEditField, picker)
+        assert field.width() > picker.fontMetrics().horizontalAdvance(prefix) + 20
+        scale = picker.devicePixelRatioF()
+        crop = QRect(round(field.x()*scale), 0,
+                     round(picker.fontMetrics().horizontalAdvance(prefix)*scale), round(picker.height()*scale))
+        long = picker.grab().toImage().copy(crop)
+        original = picker.currentText()
+        picker.setItemText(0, prefix + ' · QA')
+        app.processEvents()
+        short = picker.grab().toImage().copy(crop)
+        assert long == short, 'Real native closed selector must paint the entire leading rank/rate'
+        picker.setItemText(0, original)
+        output = Path(os.environ.get('POKEMIND_016_CAPTURE_DIR') or Path(__file__).resolve().parents[1] / 'build/qa-016')
+        output.mkdir(parents=True, exist_ok=True)
+        tag = f'{theme}-{language}-{width}-coach{int(docked)}-{scale:g}'
+        assert ui.grab().save(str(output / ('selector-' + tag + '.png')))
+        ui.activateWindow()
+        ui.raise_()
+        picker.setFocus()
+        QTest.mouseClick(picker, Qt.MouseButton.LeftButton)
+        wait_until(app, lambda: picker.view().isVisible())
+        QTest.qWait(60)
+        popup = picker.view(); assert popup.isVisible()
+        rect = popup.visualRect(picker.model().index(0, 0))
+        assert rect.width() < width and rect.left() >= 0
+        item_option = QStyleOptionViewItem()
+        item_option.initFrom(popup)
+        item_option.rect = rect
+        picker.itemDelegate().initStyleOption(item_option, picker.model().index(0, 0))
+        text_rect = popup.style().subElementRect(QStyle.SubElement.SE_ItemViewItemText, item_option, popup)
+        popup_crop = QRect(round(text_rect.left()*scale), round(rect.top()*scale),
+            round(picker.fontMetrics().horizontalAdvance(prefix)*scale), round(rect.height()*scale))
+        long_popup = popup.viewport().grab().toImage().copy(popup_crop)
+        picker.setItemText(0, prefix + ' · QA'); app.processEvents()
+        short_popup = popup.viewport().grab().toImage().copy(popup_crop)
+        assert long_popup == short_popup, 'Real open popup must retain the same visible rank/rate prefix'
+        picker.setItemText(0, original)
+        assert popup.grab().save(str(output / ('popup-' + tag + '.png')))
+        picker.hidePopup()
+        ui.deck_views.setCurrentIndex(3); QTest.qWait(100)
+        table = ui.ranking_table
+        assert table.rowCount() == 5 and table.horizontalScrollBar().maximum() == 0, (
+            table.width(), table.viewport().width(), [table.columnWidth(c) for c in range(4)],
+            table.horizontalHeader().minimumSectionSize())
+        for c in range(4):
+            assert not table.isColumnHidden(c)
+            assert table.columnViewportPosition(c) >= 0
+            assert table.columnViewportPosition(c) + table.columnWidth(c) <= table.viewport().width()+1
+        assert table.item(0, 0).text() == '#1' and '48' in table.item(0, 2).text()
+        assert table.item(0, 2).text() == ('48,7 %' if language == 'fr' else '48.7 %')
+        assert table.item(2, 2).text() == ('Données insuffisantes' if language == 'fr' else 'Insufficient data')
+        assert ui.grab().save(str(output / ('ranking-' + tag + '.png')))
+        ui.deck_views.setCurrentIndex(2)
+        wait_until(app, lambda: _settled(ui))
+        QTest.qWait(600)  # settle the existing chart animation before native capture
+        panel = ui.public_stats
+        assert panel.value.isVisible() and not panel.details.isVisible()
+        assert panel.sample.isVisible() and panel.sample.width() >= 90
+        assert panel.sample.geometry().left() > panel.value.geometry().right()
+        assert panel.value.fontMetrics().height() > panel.rate_title.fontMetrics().height() * 1.5
+        assert panel.value.geometry().bottom() < panel.period.geometry().top()
+        assert panel.legend.geometry().top() > panel.tabs.geometry().bottom()
+        assert ui.public_stats_scroll.horizontalScrollBar().maximum() == 0
+        assert panel.matchups.rows == project_public_stats(panel.view, 'BO1')['matchup_rows']
+        assert ui.grab().save(str(output / ('statistics-' + tag + '.png')))
+        ui.public_stats_scroll.ensureWidgetVisible(panel.details_toggle); QTest.qWait(100)
+        assert ui.grab().save(str(output / ('chart-' + tag + '.png')))
+        # Native keyboard disclosure and actual copy, then scroll to long source text.
+        panel.details_toggle.setFocus(); QTest.keyClick(panel.details_toggle, Qt.Key.Key_Space)
+        assert panel.details.isVisible()
+        QTest.qWait(100)
+        ui.public_stats_scroll.ensureWidgetVisible(panel.source); QTest.qWait(100)
+        assert ui.public_stats_scroll.viewport().rect().contains(
+            panel.source.mapTo(ui.public_stats_scroll.viewport(), panel.source.rect().center()))
+        panel.source.setFocus(); QTest.keyClick(panel.source, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClick(panel.source, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        assert QApplication.clipboard().text() == panel.source.text()
+        assert ui.grab().save(str(output / ('details-' + tag + '.png')))
+        panel.tabs.setCurrentIndex(1)
+        assert ('placements' if language == 'fr' else 'placements') in panel.chart_title.text().lower()
+        assert 'Victoires' not in panel.legend.text() and 'Wins' not in panel.legend.text()
+        panel.tabs.setCurrentIndex(0)
+        ui.deck_picker.setCurrentIndex(2)
+        wait_until(app, lambda: _settled(ui) and panel.view.get('archetype') is None)
+        ui.public_stats_scroll.verticalScrollBar().setValue(0); QTest.qWait(100)
+        assert panel.value.text() == '—' and not panel.details_toggle.isChecked()
+        assert ('échec' if language == 'fr' else 'failed') in panel.status.text()
+        assert ui.grab().save(str(output / ('unknown-' + tag + '.png')))
+    finally:
+        if ui.deck_picker.view().isVisible(): ui.deck_picker.hidePopup()
+        ui.language.setCurrentIndex(ui.language.findData('fr'))
+        set_language('fr')

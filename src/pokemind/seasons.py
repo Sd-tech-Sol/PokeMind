@@ -92,18 +92,27 @@ def resolve(key, rows):
     return next((r for r in rows if r['key'] == key), rows[-1]) if key != CURRENT else rows[-1]
 
 
+def file_day(root, name):
+    """Local date a log file was added to PokeMind; None when it is no longer there."""
+    if not isinstance(name, str):
+        return None
+    path = Path(root) / LOGS / name
+    try:
+        battle_batch.safe_path(root, path)
+        return datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
+    except (OSError, ValueError):
+        return None
+
+
 def added_dates(root, matches):
     """{log file name: local date it was added}; None when the file is no longer there."""
-    folder = Path(root) / LOGS
-    dates = {}
-    for name in {m.get('source_relative') for m in matches if isinstance(m.get('source_relative'), str)}:
-        path = folder / name
-        try:
-            battle_batch.safe_path(root, path)
-            dates[name] = datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
-        except (OSError, ValueError):
-            dates[name] = None
-    return dates
+    return {name: file_day(root, name)
+            for name in {m.get('source_relative') for m in matches if isinstance(m.get('source_relative'), str)}}
+
+
+def day_of(match, dates):
+    """The day a game was added: `added_on` of the displayed report (file names are hidden there), else its file."""
+    return _day(match.get('added_on')) or dates.get(match.get('source_relative'))
 
 
 def _within(day, period):
@@ -123,10 +132,10 @@ def scoped(report, period, dates):
     matches = report.get('matches', [])
     if period is None:
         return dict(report, season={'key': ALL, 'name': 'Cumul · toutes les saisons', 'games': len(matches),
-                                    'undated': sum(dates.get(m.get('source_relative')) is None for m in matches)})
+                                    'undated': sum(day_of(m, dates) is None for m in matches)})
     if period['start'] is None and period['end'] is None:
         return report  # no season begun yet: every game, the report itself
-    keep = [m for m in matches if _within(dates.get(m.get('source_relative')), period)]
+    keep = [m for m in matches if _within(day_of(m, dates), period)]
     view = dict(report, matches=keep, groups=battle_batch.group_matches(keep), outcomes=counts(keep),
                 coverage=dict(report.get('coverage', {}), valid=len(keep)),
                 own_decks=dict(Counter(m.get('own_deck_hypothesis', {}).get('label') or 'unknown' for m in keep)))
@@ -139,7 +148,7 @@ def summary(report, dates, rows):
     """Per-season counts and the total, small enough for the coach."""
     matches = (report or {}).get('matches', [])
     result = [{'name': r['name'], 'start': r['start'], 'end': r['end'], 'games': len(kept), **counts(kept)}
-              for r in rows for kept in [[m for m in matches if _within(dates.get(m.get('source_relative')), r)]]]
+              for r in rows for kept in [[m for m in matches if _within(day_of(m, dates), r)]]]
     return {'seasons': [r for r in result if r['games'] or r['end'] is None],
             'all_seasons': {'games': len(matches), **counts(matches)},
             'rule': 'Une partie compte dans la saison du jour où son journal a été ajouté à PokeMind.'}

@@ -7,7 +7,7 @@ from PySide6.QtCore import (QObject, QEvent, Qt, Property, QPropertyAnimation,
                             QEasingCurve, QPointF, QRectF)
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QLinearGradient
 from PySide6.QtWidgets import QApplication, QFrame, QPushButton, QStackedWidget, QWidget
-from pokemind.desktop.theme import logo_pixmap
+from pokemind.desktop.theme import card_pixmap
 from pokemind.desktop.i18n import QFrame, QPushButton, QWidget
 
 
@@ -190,6 +190,8 @@ class MotionEffects(QObject):
             return False
         if not self.window.isAncestorOf(watched):
             return False
+        if watched.property('galleryTile') or watched.property('galleryArt'):
+            return False  # CardArt already drives the gallery lift and outline.
         key = id(watched)
         layer = self.layers.get(key)
         if layer is not None and kind == QEvent.Type.Resize:
@@ -217,10 +219,10 @@ class EmblemWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('motionOverlay')
-        self.setFixedSize(106, 106)
+        self.setFixedSize(110, 124)  # room for the card to tilt and bob without being clipped
         self.setAccessibleName(T('Emblème PokeMind décoratif'))
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.picture, self.motion_enabled, self._progress = logo_pixmap(96), True, 1.0
+        self.motion_enabled, self._progress = True, 1.0
         self.animation = QPropertyAnimation(self, b'progress', self)
         self.animation.setDuration(850)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -264,5 +266,6 @@ class EmblemWidget(QWidget):
         value = self._progress
         p.translate(self.width() / 2, self.height() / 2 - 5 * math.sin(value * math.pi))
         p.rotate(16 * math.sin(value * 4 * math.pi) * (1 - value))
-        p.drawPixmap(-48, -48, self.picture)
+        picture = card_pixmap(104, self.devicePixelRatioF())  # the whole PokeMind / TCG Coach card
+        p.drawPixmap(QPointF(-picture.width() / picture.devicePixelRatio() / 2, -52), picture)
         p.end()

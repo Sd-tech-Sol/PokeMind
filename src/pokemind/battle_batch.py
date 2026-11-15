@@ -278,6 +278,7 @@ def _public_context_uncached(root, as_of):
                     family = canonical_family(fact["archetype"], {r["archetype"] for r in index["references"]})
                     composition = {"composition_id": competitive._composition_id(cards),
                         "source_urls": [fact["source_url"]], "archetypes": [family],
+                        "retrieved_at": fact.get("retrieved_at"),
                         "interpretation": "published_reference_not_attested_tournament_or_matchup_strength"}
                     index["references"].append({"archetype": family, "original_public_label": fact["archetype"],
                         "names": sorted({rules._normalized_name(c["name"]) for c in cards.values()}),

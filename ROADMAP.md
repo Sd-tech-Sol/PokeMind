@@ -24,6 +24,14 @@ This roadmap states intentions, not promises. The detailed plan and its current 
   the app with their SHA-256 checked; the first catalogue comes from the newest TCGdex version.
 - BrainBall colours for the dark and light themes, with WCAG AA contrast.
 
+## Done — 0.9.5 pre-release (includes the unpublished 0.9.4 candidate)
+- Deck Lab › Statistics: public figures for the deck's archetype from online Limitless tournaments, with
+  sample sizes, dates and thresholds; BO1 and BO3 apart; nothing about your decks is sent.
+- The PokeMind / TCG Coach card everywhere: window, menu, installer and shortcuts.
+- Losses first: a pasted log never saves the opponent's deck; the families that beat you are followed
+  and the coach can say how to prepare for them.
+- Seasons count pasted games; « Add my deck » and one main deck in Deck Lab.
+
 ## Next
 - Code signing if a publisher identity is set up (see `CODE_SIGNING.md`).
 

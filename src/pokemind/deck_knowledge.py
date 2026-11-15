@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from pokemind import cards, competitive, public_deck_preflight, rules
 from pokemind.catalog_batch_store import verified_payload
-from pokemind.database import connect_readonly
+from pokemind.database import connect_readonly, local_day
 from pokemind.set_code_aliases import payload_source
 
 
@@ -44,7 +44,7 @@ def _observation(reference_db, connection, identity, as_of):
         row = connection.execute("SELECT * FROM catalog_translations WHERE printing_id=? AND language=?",
                                  (entity, language)).fetchone()
         if (not row or row["status"] != "present" or not row["retrieved_at"]
-                or row["retrieved_at"][:10] > as_of or urlsplit(row["source_url"] or "").scheme != "https"
+                or local_day(row["retrieved_at"]) > as_of or urlsplit(row["source_url"] or "").scheme != "https"
                 or urlsplit(row["source_url"] or "").hostname not in {"github.com", "api.tcgdex.net"}):
             continue
         payload = verified_payload(connection, "cards", entity, language, row["payload_sha256"])

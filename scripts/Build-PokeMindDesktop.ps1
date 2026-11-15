@@ -44,11 +44,19 @@ if ($SyntheticQaRoot) { $qaArguments = @('--paths', 'scripts', '--hidden-import'
 $winpty = & $interpreter -c "import os, winpty; print(os.path.dirname(winpty.__file__))"
 if ($LASTEXITCODE -ne 0) { throw 'pywinpty absent de la venv de build.' }
 $terminalArguments = @('--add-binary', ((Join-Path $winpty 'OpenConsole.exe') + ';winpty'), '--add-binary', ((Join-Path $winpty 'winpty-agent.exe') + ';winpty'))
-# The logo is drawn in code; the .ico is generated for the EXE (Explorer, taskbar, shortcuts).
+# The PokeMind / TCG Coach card (src/pokemind/desktop/branding) is bundled for the window, menu and banner, and
+# the .ico derived from it becomes the EXE resource (Explorer, taskbar, Start menu and desktop shortcuts).
 $icon = Join-Path $buildRoot 'build/pokemind.ico'
 & $interpreter scripts/make_icon.py $icon
 if ($LASTEXITCODE -ne 0) { throw 'Icône PokeMind impossible.' }
-& $interpreter -m PyInstaller --noconfirm --onedir --windowed --name PokeMind --icon $icon --paths src --distpath (Join-Path $buildRoot 'dist') --workpath (Join-Path $buildRoot 'build/desktop') --specpath (Join-Path $buildRoot 'build') @qaArguments @terminalArguments --collect-binaries winpty --hidden-import winpty --hidden-import pyte --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtPdf --exclude-module PySide6.QtQml src/pokemind/desktop/app.py
+$branding = Join-Path $projectRoot 'src/pokemind/desktop/branding'
+if (-not (Test-Path -LiteralPath (Join-Path $branding 'pokemind-card.png'))) { throw 'Carte PokeMind absente : python scripts/make_icon.py --card' }
+$brandingArguments = @('--add-data', ($branding + ';pokemind/desktop/branding'))
+# Version shown in the file properties of PokeMind.exe, from pokemind.__version__ (same as the app and the installer).
+$versionFile = Join-Path $buildRoot 'build/version-info.txt'
+& $interpreter scripts/make_version_info.py $versionFile
+if ($LASTEXITCODE -ne 0) { throw 'Version de PokeMind.exe impossible.' }
+& $interpreter -m PyInstaller --noconfirm --onedir --windowed --name PokeMind --icon $icon --version-file $versionFile --paths src --distpath (Join-Path $buildRoot 'dist') --workpath (Join-Path $buildRoot 'build/desktop') --specpath (Join-Path $buildRoot 'build') @qaArguments @terminalArguments @brandingArguments --collect-binaries winpty --hidden-import winpty --hidden-import pyte --hidden-import pokemind.demo --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtPdf --exclude-module PySide6.QtQml src/pokemind/desktop/app.py
 if ($LASTEXITCODE -ne 0) { throw 'Compilation Windows impossible.' }
 $notices = Join-Path $outputTarget 'THIRD_PARTY_NOTICES.md'
 Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') -Destination $notices
