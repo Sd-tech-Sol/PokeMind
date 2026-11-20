@@ -9,7 +9,7 @@ tes cartes sur ton PC, et te permet de les revoir avec un coach IA.
 
 > ## État : préversion
 >
-> PokeMind **0.9.5** est une préversion publique (la première était 0.9.0; la 0.9.4 n'a jamais été publiée). L'installateur Windows n'est
+> PokeMind **0.9.6** est une préversion publique (la première était 0.9.0; la 0.9.4 n'a jamais été publiée). L'installateur Windows n'est
 > **pas signé**, et avant ces versions PokeMind n'avait été utilisé **que par son auteur**. Attends-toi à des défauts et à
 > des fonctions manquantes, et garde ta propre copie de ce qui compte.
 
@@ -69,7 +69,7 @@ Ces absences sont des **choix de conception** :
 L'interface suit Windows au premier lancement : un Windows en français donne le français, toute autre
 langue donne l'anglais. Change-la quand tu veux dans **Réglages → Général**; ton choix est conservé.
 
-## Limites exactes de la version 0.9.5
+## Limites exactes de la version 0.9.6
 
 | Limite | Détail |
 |---|---|

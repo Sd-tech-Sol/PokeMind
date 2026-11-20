@@ -7,6 +7,30 @@ All notable public changes to PokeMind are recorded here. The format follows
 This file is for people who use or read the project. The far more detailed internal log of the work lives
 in `.orchestrator/DECISIONS.md`, in French.
 
+## [0.9.6] — 2026-11-20 (pre-release)
+
+Un nouveau look, des textes plus simples et un Coach qui sait sur quelle page tu es.
+
+### Nouveautés
+
+- **Nouveau look** : un seul style pour toutes les pages, barres arrondies, panneaux et tableaux plus calmes, thème
+  clair compris.
+- **Textes simplifiés** : une seule phrase d'aide par page, avec des mots de joueur; les détails et les mises en
+  garde sont derrière le bouton ⓘ à côté de chaque titre.
+- **Mode avancé** (Réglages › Général, décoché par défaut) : la page **Terminal** est cachée tant que tu ne
+  l'actives pas. Un terminal déjà ouvert n'est jamais arrêté quand tu décoches l'option.
+- **Images de cartes plus rapides** : pendant que tu regardes une page du classeur, les pages voisines sont
+  préparées d'avance à partir des images déjà sur ton PC (rien n'est téléchargé pour ça); une silhouette de carte
+  discrète s'affiche pendant l'attente.
+- **Deck adverse probable** : Combats, la Vue d'ensemble et Apprentissage affichent « Probablement : … » quand les
+  cartes vues chez l'adversaire correspondent à un archétype connu, avec les cartes et la confiance dans le ⓘ. C'est
+  une hypothèse, jamais la preuve de la liste de l'adversaire.
+- **Résumés des pages** : la Vue d'ensemble, Combats et Apprentissage racontent tes parties en phrases simples
+  (série en cours, 5 dernières parties, durée moyenne, adversaires les plus croisés), chacune avec son nombre de
+  parties.
+- **Idées de questions du Coach par page** : le Coach propose des questions sur la page où tu es (l'adversaire, le
+  deck ou la carte affichés); un clic remplit la zone de saisie sans envoyer.
+
 ## [0.9.5] — 2026-11-15 (pre-release)
 
 0.9.4 was a release candidate that was never published: 0.9.5 contains every change since 0.9.3, listed here.

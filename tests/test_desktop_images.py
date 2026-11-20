@@ -83,3 +83,14 @@ def test_source_refusal_closes_automatic_network_attempts(local_tmp,monkeypatch)
     source=Refused();cache=ImageCache(local_tmp,source)
     assert cache.fetch('invented-1')['status']=='UNAVAILABLE'
     assert cache.fetch('invented-2')['status']=='UNAVAILABLE' and source.calls==1
+
+
+def test_cached_only_never_downloads(local_tmp,monkeypatch):
+    monkeypatch.delenv('POKEMIND_TEST_OFFLINE',raising=False)
+    http=HTTP();cache=ImageCache(local_tmp,http)
+    assert cache.fetch('invented-1','en',cached_only=True)['status']=='UNAVAILABLE' and http.calls==[]
+    assert not cache.failed  # a later page in sight may still download it once
+    cache.fetch('invented-1','en')
+    calls=len(http.calls)
+    again=cache.fetch('invented-1','en',cached_only=True)
+    assert again['data']==PNG and again['cached'] and len(http.calls)==calls

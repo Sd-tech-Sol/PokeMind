@@ -1,22 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760">
 <rect width="1120" height="760" rx="24" fill="#E9EEF8"/>
 <text x="34" y="50" font-size="27" font-weight="bold" font-family="Segoe UI,Arial,sans-serif" fill="#081B3A">PokeMind — BrainBall électrique</text>
-<rect x="30" y="76" width="520" height="648" rx="18" fill="#07142F" stroke="#335A8E" stroke-width="2"/>
+<rect x="30" y="76" width="520" height="648" rx="18" fill="#030A1F" stroke="#335A8E" stroke-width="2"/>
 <text x="54" y="117" font-size="24" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#FFD54F">THÈME FONCÉ</text>
 <rect x="50" y="134" width="480" height="64" rx="10" fill="#00339F"/>
 <text x="68" y="174" font-size="22" font-family="Segoe UI,Arial,sans-serif" font-weight="bold" fill="#FFFFFF">À toi de jouer.</text>
-<rect x="50" y="222" width="84" height="36" rx="7" fill="#07142F" stroke="#335A8E" stroke-width="1"/>
+<rect x="50" y="222" width="84" height="36" rx="7" fill="#030A1F" stroke="#335A8E" stroke-width="1"/>
 <text x="147" y="244" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Fond</text>
-<text x="506" y="244" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#07142F</text>
-<rect x="50" y="274" width="84" height="36" rx="7" fill="#081E4A" stroke="#335A8E" stroke-width="1"/>
+<text x="506" y="244" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#030A1F</text>
+<rect x="50" y="274" width="84" height="36" rx="7" fill="#06163A" stroke="#335A8E" stroke-width="1"/>
 <text x="147" y="296" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Menu</text>
-<text x="506" y="296" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#081E4A</text>
-<rect x="50" y="326" width="84" height="36" rx="7" fill="#102652" stroke="#335A8E" stroke-width="1"/>
+<text x="506" y="296" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#06163A</text>
+<rect x="50" y="326" width="84" height="36" rx="7" fill="#0A1B41" stroke="#335A8E" stroke-width="1"/>
 <text x="147" y="348" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Panneau</text>
-<text x="506" y="348" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#102652</text>
-<rect x="50" y="378" width="84" height="36" rx="7" fill="#081C3E" stroke="#335A8E" stroke-width="1"/>
+<text x="506" y="348" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#0A1B41</text>
+<rect x="50" y="378" width="84" height="36" rx="7" fill="#050F2A" stroke="#335A8E" stroke-width="1"/>
 <text x="147" y="400" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Entrée</text>
-<text x="506" y="400" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#081C3E</text>
+<text x="506" y="400" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#050F2A</text>
 <rect x="50" y="430" width="84" height="36" rx="7" fill="#F7FAFF" stroke="#335A8E" stroke-width="1"/>
 <text x="147" y="452" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#F7FAFF">Texte</text>
 <text x="506" y="452" font-family="Consolas,monospace" font-size="14" text-anchor="end" fill="#F7FAFF">#F7FAFF</text>

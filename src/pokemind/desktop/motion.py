@@ -216,10 +216,12 @@ class MotionEffects(QObject):
 
 
 class EmblemWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, card=104):
         super().__init__(parent)
+        self.card = card  # the height of the brand card drawn
         self.setObjectName('motionOverlay')
-        self.setFixedSize(110, 124)  # room for the card to tilt and bob without being clipped
+        # Room for the card to tilt and bob without being clipped: 110 x 124 for a card of 104 px.
+        self.setFixedSize(round(card * 110 / 104), card + round(card * 20 / 104))
         self.setAccessibleName(T('Emblème PokeMind décoratif'))
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.motion_enabled, self._progress = True, 1.0
@@ -264,8 +266,8 @@ class EmblemWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         value = self._progress
-        p.translate(self.width() / 2, self.height() / 2 - 5 * math.sin(value * math.pi))
+        p.translate(self.width() / 2, self.height() / 2 - 5 * self.card / 104 * math.sin(value * math.pi))
         p.rotate(16 * math.sin(value * 4 * math.pi) * (1 - value))
-        picture = card_pixmap(104, self.devicePixelRatioF())  # the whole PokeMind / TCG Coach card
-        p.drawPixmap(QPointF(-picture.width() / picture.devicePixelRatio() / 2, -52), picture)
+        picture = card_pixmap(self.card, self.devicePixelRatioF())  # the whole PokeMind / TCG Coach card
+        p.drawPixmap(QPointF(-picture.width() / picture.devicePixelRatio() / 2, -self.card / 2), picture)
         p.end()

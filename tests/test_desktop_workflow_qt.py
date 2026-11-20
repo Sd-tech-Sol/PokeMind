@@ -7,7 +7,7 @@ import pytest
 import shiboken6
 pytest.importorskip('PySide6')
 from PySide6.QtCore import Qt, QMimeData, QUrl, QTimer, QBuffer, QIODevice
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QFont, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
 
@@ -90,7 +90,7 @@ def test_014_resume_conversation_revalidates_its_reference_instead_of_other_visi
     second = ui.conversation['id']
     assert first != second
     ui.refresh_history()
-    select_combo_item(app, ui.history_picker, ui.history_picker.findData(first))
+    ui.history_actions[first].trigger()
     assert ui.conversation['id'] == first and ui.games.currentData()['match'] == 'RECENT-B'
     assert 'Deck adverse ajouté' in request_selected_recovery(ui, app)
     assert calls == ['OLD-A2']
@@ -100,7 +100,7 @@ def test_014_resume_conversation_revalidates_its_reference_instead_of_other_visi
     ui.store.save(stale)
     ui.preferences['conversations'].append({'id': stale['id'], 'title': stale['title'], 'provider': 'codex'})
     ui.refresh_history()
-    select_combo_item(app, ui.history_picker, ui.history_picker.findData(stale['id']))
+    ui.history_actions[stale['id']].trigger()
     assert ui.conversation['id'] == stale['id']
     assert 'aucune partie sélectionnée' in request_selected_recovery(ui, app)
     assert calls == ['OLD-A2']
@@ -172,7 +172,7 @@ def test_014_late_worker_keeps_original_game_snapshot_when_family_changes(ui, ap
     ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
     QTest.mouseClick(ui.send_button, Qt.MouseButton.LeftButton)
     wait_until(app, started.is_set)
-    assert not ui.new_button.isEnabled() and not ui.history_picker.isEnabled()
+    assert not ui.new_button.isEnabled() and not ui.chat_menu_button.isEnabled()
     select_historical_game(ui, app, 'RECENT-B')
     if cancelled:
         QTest.mouseClick(ui.stop_button, Qt.MouseButton.LeftButton)
@@ -246,7 +246,7 @@ def test_imported_trailing_instruction_cannot_enable_project_tools_or_discard_a_
 
 
 def test_declined_development_preserves_draft_history_and_never_starts_provider(ui, app, monkeypatch):
-    assert 'données privées accessibles' in ui.permission_badge.text()
+    assert ui.permission_badge.text() == 'Le coach peut lire tes données PokeMind' and ui.permission_badge.isVisibleTo(ui.chat_dock)
     ui.cloud_consent.setChecked(True)
     monkeypatch.setattr(window.QMessageBox, 'question', lambda *a: window.QMessageBox.StandardButton.No)
     monkeypatch.setattr(ui, 'get_adapter', lambda: pytest.fail('no provider before acceptance'))
@@ -711,7 +711,8 @@ def test_paste_duplicate_does_not_increment_counts(ui,app):
         ui.chat_input.setPlainText(text())
         ui.send_chat();wait_until(app,lambda:not ui.ingest_busy)
     assert ui.metrics[0].text()=='1' and 'Doublon détecté' in ui.transcript.toPlainText()
-    assert 'Nouvelles parties uniques dans le corpus : 0' in ui.statusBar().currentMessage()
+    assert 'Nouvelles parties ajoutées : 0' in ui.statusBar().currentMessage()
+    assert 'corpus' not in ui.statusBar().currentMessage() and 'n=' not in ui.statusBar().currentMessage()
 
 
 def test_incomplete_and_ambiguous_pastes_are_refused_without_provider(ui,app):
@@ -797,13 +798,37 @@ def test_question_during_background_analysis_is_answered_and_only_imports_wait(u
     assert not ui.queued_send.isActive()
 
 
-def test_history_list_opens_wide_with_the_title_first(ui,app):
-    ui.preferences['conversations']=[{'id':'0'*32,'title':'Crée-moi un deck puissant avec Dracaufeu inventé','provider':'codex'}]
+def test_one_menu_holds_history_copy_and_deletions_and_an_empty_discussion_offers_three_ideas(ui,app):
+    """Owner, 2026-11-16: the session and « Nouveau » stay in sight; the rest is one « ⋯ » menu."""
+    ui.preferences['conversations']=[{'id':'0'*32,'title':'Crée-moi un deck puissant avec Dracaufeu & inventé','provider':'codex'}]
     ui.refresh_history()
-    assert ui.history_picker.itemText(1).startswith('Crée-moi un deck puissant') and ui.history_picker.itemText(1).endswith(' · codex')
-    assert ui.history_picker.view().minimumWidth()>=420
-    assert ui.history_picker.view().textElideMode()==Qt.TextElideMode.ElideNone
-    for combo in (ui.history_picker,ui.starters):
+    assert ui.chat_menu_button.text()=='⋯' and ui.chat_menu_button.menu() is ui.chat_menu
+    assert ui.chat_menu_button.toolTip() and ui.chat_menu_button.accessibleName()
+    assert [a.text() for a in ui.chat_menu.actions() if not a.isSeparator()]==[
+        'Historique','Copier la dernière réponse','Supprimer cette discussion','Tout supprimer']
+    title=ui.history_actions['0'*32].text()
+    assert title.startswith('Crée-moi un deck puissant') and title.endswith(' · codex') and '&&' in title  # no mnemonic
+    assert not ui.copy_action.isEnabled()  # no answer to copy yet
+    row=ui.provider.parentWidget().layout().itemAt(0).layout()
+    assert [row.itemAt(i).widget() for i in range(row.count())]==[ui.provider,ui.new_button,ui.chat_menu_button]
+    assert not [b for b in ui.chat_dock.findChildren(window.QPushButton) if b.text() in ('Copier','Supprimer','Tout supprimer')]
+    ui.language.setCurrentIndex(ui.language.findData('en'));app.processEvents()
+    assert [a.text() for a in ui.chat_menu.actions() if not a.isSeparator()][0]=='History'
+    ui.language.setCurrentIndex(ui.language.findData('fr'));app.processEvents()
+    # An empty discussion: three ideas instead of an empty frame; a click fills the message box and sends nothing.
+    assert not ui.conversation['messages'] and ui.chat_empty.isVisibleTo(ui.chat_dock)
+    assert not ui.transcript.isVisibleTo(ui.chat_dock)
+    overview=['Fais-moi le bilan de ma saison en 5 points.','Quelle est ma plus grosse faiblesse en ce moment?',
+              'Sur quoi devrais-je m’entraîner cette semaine?']
+    assert [b.text() for b in ui.idea_buttons]==overview
+    QTest.mouseClick(ui.idea_buttons[1],Qt.MouseButton.LeftButton)
+    assert ui.chat_input.toPlainText()==overview[1] and not ui.chat_busy and not ui.conversation['messages']
+    ui.conversation['messages']=[{'role':'user','content':'Question inventée'},{'role':'assistant','content':'Réponse inventée'}]
+    ui.render_chat();ui.chat_menu.aboutToShow.emit()
+    assert ui.transcript.isVisibleTo(ui.chat_dock) and not ui.chat_empty.isVisibleTo(ui.chat_dock) and ui.copy_action.isEnabled()
+    ui.copy_action.trigger()
+    assert window.QApplication.clipboard().text()=='Réponse inventée'
+    for combo in (ui.starters,):
         view=combo.view();delegate=combo.itemDelegate()
         option=QStyleOptionViewItem();option.initFrom(view);option.fontMetrics=view.fontMetrics()
         long_title=combo.model().index(1,0)
@@ -815,7 +840,8 @@ def test_history_list_opens_wide_with_the_title_first(ui,app):
 
 def test_chat_header_is_light_and_the_work_is_visible_near_the_message_box(ui,app):
     assert not hasattr(ui,'chat_sources') and not hasattr(ui,'sidebar_footer')
-    assert ui.context_status.isHidden() and 'données privées' in ui.permission_badge.text()
+    assert ui.context_status.isHidden() and 'lire tes données' in ui.permission_badge.text()
+    assert ui.provider_status.text() == '' and ui.provider_status.isHidden()  # nothing to say before the first message
     assert len(ui.permission_badge.text())<50 and ui.permission_badge.toolTip()
     body=ui.chat_dock.widget().layout()
     order=[body.itemAt(i).widget() for i in range(body.count())]
@@ -969,6 +995,183 @@ def test_gallery_grouped_exact60_thumbnail_and_enlargement_keep_list(ui,app,monk
     assert observed==[True]
 
 
+def test_coach_bubbles_never_overlap_nor_leave_the_frame_and_their_label_sits_inside(ui, app):
+    """Owner, 2026-11-18: bubbles overlapped, the user's ran past the right edge, « TOI » sat on the border."""
+    from PySide6.QtGui import QTextTable
+    ui.show()
+    ui.resizeDocks([ui.chat_dock], [355], Qt.Orientation.Horizontal)
+    ui.conversation['messages'] = [
+        {'role': 'user', 'content': 'Question inventée : que travailler contre la Famille inventée A ?'},
+        {'role': 'assistant', 'content': 'Réponse inventée.\n\n- Premier point inventé.\n- Second point inventé.'},
+        {'role': 'user', 'content': 'Merci.'},
+        {'role': 'assistant', 'content': 'Une réponse inventée plus longue, qui revient à la ligne dans la bulle du coach.'},
+        {'role': 'user', 'content': 'Et ensuite ?'}]
+    ui.render_chat()
+    app.processEvents()
+    transcript = ui.transcript
+    document = transcript.document()
+    layout = document.documentLayout()
+    rects = transcript.bubble_rects()
+    tables = [f for f in document.rootFrame().childFrames() if isinstance(f, QTextTable)]
+    assert len(rects) == 5 == len(tables)
+    for (role, rect), table in zip(rects, tables):
+        assert 0 <= rect.left() and rect.right() <= document.textWidth(), (role, rect, document.textWidth())
+        assert rect.width() <= document.textWidth() * transcript.WIDTH / 100 + 1
+        label = table.cellAt(0, 1 if role == 'user' else 0).firstCursorPosition().block()
+        assert label.text() in ('Toi', 'PokeMind')
+        box = layout.blockBoundingRect(label)
+        assert box.top() - rect.top() >= transcript.PADDING - 1 and box.left() - rect.left() >= transcript.PADDING - 1
+    for (_, above), (_, below) in zip(rects, rects[1:]):
+        assert round(below.top() - above.bottom()) == transcript.GAP
+
+
+def test_every_table_has_one_style_numbers_on_the_right_and_headers_aligned_like_their_column(ui, app):
+    """Owner, 2026-11-18: Combats had stripes, the Ranking a white grid and a saturated selection."""
+    from PySide6.QtWidgets import QTableWidget
+    from pokemind.desktop.theme import colors, contrast
+    right, left = window.NUMBER, window.WORDS
+    expected = {'matchups': {1, 2, 3}, 'ranking_table': {0, 2, 3}, 'card_results': set()}
+    tables = [t for t in ui.findChildren(QTableWidget)]
+    assert {name for name in expected if getattr(ui, name) in tables} == set(expected)
+    for widget in tables:
+        assert not widget.showGrid() and not widget.alternatingRowColors(), widget.objectName()
+        assert isinstance(widget.itemDelegate(), window.RowDelegate)
+    for name, numeric in expected.items():
+        widget = getattr(ui, name)
+        assert widget.numeric_columns == numeric
+        for column in range(widget.columnCount()):
+            header = widget.horizontalHeaderItem(column)
+            assert int(header.textAlignment()) == int(right if column in numeric else left), (name, column)
+            for row in range(widget.rowCount()):
+                item = widget.item(row, column)
+                if item is not None and column != 4:  # the bar column is drawn by its delegate
+                    assert int(item.textAlignment()) == int(right if column in numeric else left), (name, row, column)
+    assert ui.matchups.rowCount() and ui.ranking_table.rowCount() >= 0
+    css = ui.styleSheet()
+    c = colors(ui.preferences['theme'])
+    assert 'QTableWidget::item:selected { background:' + c['hover'] + '; color:' + c['text'] in css
+    # The sort arrow sits above the header text (it was drawn over « D »), which keeps its alignment.
+    import re
+    assert re.search(r'QHeaderView::down-arrow \{ image:url\([^)]+\); [^}]*subcontrol-position:top center', css)
+    for name in ('dark', 'light'):
+        assert contrast(colors(name)['text'], colors(name)['hover']) >= 4.5
+    # The lit edge of the selected row, on its first cell.
+    ui.show()
+    ui.navigation.setCurrentRow(1)
+    wait_until(app, lambda: not ui.stack.transition.isVisible())
+    ui.matchups.selectRow(0)
+    app.processEvents()
+    image = ui.matchups.viewport().grab().toImage()
+    rect = ui.matchups.visualRect(ui.matchups.model().index(0, 0))
+    ratio = image.devicePixelRatio()
+    edge = image.pixelColor(round((rect.left() + 1) * ratio), round(rect.center().y() * ratio)).name()
+    assert edge == c['neon'].lower()
+
+
+def test_one_number_tile_template_and_one_date_format(ui, app):
+    """Owner, 2026-11-18: three tile templates (35 px overview, 28 px elsewhere, a date in a tile) and ISO dates."""
+    import re
+    from PySide6.QtWidgets import QFrame, QLabel
+    from pokemind.desktop.insights import long_date, period_text, _when
+    frames = [f for f in ui.findChildren(QFrame) if f.property('metricKind')]
+    assert len(frames) == 3 + 4 + 3  # overview, Combats, Apprentissage
+    for frame in frames:
+        labels = frame.findChildren(QLabel)
+        assert [label.objectName() for label in labels] in (['tileCaption', 'tileValue'], ['tileCaption', 'tileName'])
+        margins = frame.layout().contentsMargins()
+        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (14, 10, 14, 10)
+    assert not ui.findChildren(QLabel, 'metric') and 'QLabel#metric' not in ui.styleSheet()
+    assert set(ui.learning_tiles) == {'games', 'opponents', 'plans'}  # « Mise à jour » is a line, not a tile
+    assert ui.learning_updated.objectName() == 'smallCaption'
+    assert str(long_date('2026-11-16')) == '16 novembre 2026'
+    assert str(period_text('2026-10-18', '2026-11-14')) == '18 octobre 2026 → 14 novembre 2026'
+    assert str(_when('2026-11-07T14:05:00Z')) == '7 novembre 2026 · 14:05 UTC'
+    iso = re.compile(r'\b20\d\d-\d\d-\d\d\b')
+    for label in ui.findChildren(QLabel):
+        assert not (label.isVisibleTo(ui) and iso.search(label.text())), label.text()
+
+
+def test_gallery_cards_are_bare_with_a_round_count_and_a_quiet_set_code(ui, app):
+    """Owner, 2026-11-18: every card sat in a frame of its own, the « ×N » was a square box."""
+    css = ui.styleSheet()
+    assert 'QFrame#card[galleryTile="true"] { background:transparent; border:2px solid transparent;' in css
+    assert 'QFrame#card[selected="true"] { border-color:' in css  # the selected card keeps its frame and light
+    assert 'QPushButton#cardArt { background:transparent; border:0;' in css
+    assert 'QLabel#galleryStamp { color:' in css and 'font' not in css.split('QLabel#galleryStamp')[1].split('}')[0]
+    from pokemind.desktop.widgets import CardTile, CountPill
+    tile = CardTile({'name': 'Créature inventée', 'quantity': 3, 'category': 'pokemon', 'printing': 'SYN 001'},
+                           gallery=True)
+    assert isinstance(tile.badge, CountPill) and tile.badge.text() == '×3'
+    assert tile.art.property('pictured') is False
+    tile.set_image({'data': b'not an image'})
+    assert tile.art.property('pictured') is False  # still the plain frame of « Image indisponible »
+    tile.deleteLater()
+
+
+def test_tables_are_as_tall_as_their_rows_and_combat_details_wait_for_an_opponent(ui, app):
+    """Owner, 2026-11-18: an empty framed box under one row of Combats, and under two rows of the Ranking."""
+    ui.show()
+    ui.navigation.setCurrentRow(1)
+    wait_until(app, lambda: not ui.stack.transition.isVisible())
+    ui.matchups.clearSelection()
+    app.processEvents()
+    assert ui.matchup_details.isHidden()
+    table = ui.matchups
+    rows = table.verticalHeader().length()
+    chrome = table.horizontalHeader().sizeHint().height() + 2 * table.frameWidth()
+    assert table.rowCount() and table.maximumHeight() == chrome + rows
+    assert table.height() <= chrome + rows
+    table.selectRow(0)
+    app.processEvents()
+    assert ui.matchup_details.isVisible() and ui.games.count()
+    ui.matchup_filter.setText('nothing matches this')
+    app.processEvents()
+    assert ui.matchups.rowCount() == 0 and ui.matchup_details.isHidden()
+    ui.matchup_filter.clear()
+    ranking = ui.ranking_table
+    assert ranking.maximumHeight() == (ranking.horizontalHeader().sizeHint().height() + 2 * ranking.frameWidth()
+                                       + (ranking.verticalHeader().length() if ranking.rowCount()
+                                          else ranking.verticalHeader().defaultSectionSize()))
+
+
+def test_one_filled_button_per_page_36_px_buttons_and_copy_export_in_the_deck_strip(ui, app):
+    """Owner, 2026-11-18: buttons of 34 to 44 px, two filled buttons on Cartes & méta, Copy and Export far from
+    the deck they act on."""
+    from PySide6.QtWidgets import QPushButton
+    ui.show()
+    ui.resize(1500, 940)
+    for row in range(ui.navigation.count()):
+        page = ui.stack.widget(row)
+        filled = [b for b in page.findChildren(QPushButton) if b.objectName() == 'primary']
+        assert len(filled) <= 1, (row, [b.text() for b in filled])
+    ui.navigation.setCurrentRow(2)
+    wait_until(app, lambda: not ui.stack.transition.isVisible())
+    app.processEvents()
+    for button in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck):
+        assert button.height() == 36, (button.objectName(), button.height())
+    strip = ui.stack.currentWidget().findChild(window.DeckLabPage) or ui.deck_picker.parentWidget()
+    area = strip.strip.geometry()
+    for button in (ui.copy_deck, ui.save_deck):
+        assert button.parentWidget() is ui.deck_picker.parentWidget() and area.contains(button.geometry())
+    assert ui.copy_deck.toolTip() == 'Copier les 60 cartes' and ui.save_deck.accessibleName() == 'Exporter en fichier texte…'
+
+
+def test_overview_banner_is_about_90_px_and_what_to_work_on_sits_under_the_tiles(ui, app):
+    """Owner, 2026-11-18: a 155 px banner, and « À travailler » under the charts, at the bottom of the screen."""
+    from PySide6.QtWidgets import QFrame
+    ui.show()
+    ui.resize(1500, 940)
+    ui.navigation.setCurrentRow(0)
+    wait_until(app, lambda: not ui.stack.transition.isVisible())
+    app.processEvents()
+    hero = ui.stack.currentWidget().findChild(QFrame, 'hero')
+    assert 80 <= hero.height() <= 100, hero.height()
+    tiles_bottom = max(t.parentWidget().mapTo(ui, t.parentWidget().rect().bottomLeft()).y() for t in ui.metrics)
+    focus_top = ui.home_focus.mapTo(ui, ui.home_focus.rect().topLeft()).y()
+    charts_top = ui.statistics.mapTo(ui, ui.statistics.rect().topLeft()).y()
+    assert tiles_bottom < focus_top < charts_top
+
+
 def test_streaming_refresh_replaces_only_the_last_bubble_like_a_full_render(ui, app):
     ui.conversation['messages'] = [{'role':'user','content':'Question inventée'},
                                    {'role':'assistant','content':'Début **inventé**'}]
@@ -977,7 +1180,7 @@ def test_streaming_refresh_replaces_only_the_last_bubble_like_a_full_render(ui, 
         ui.conversation['messages'][-1]['content'] += ' ' + word
         ui.render_stream()
     streamed = ui.transcript.toPlainText()
-    assert streamed.count('POKEMIND') == 1 and 'Début **inventé** un deux trois' in streamed
+    assert streamed.count('PokeMind') == 1 and 'Début **inventé** un deux trois' in streamed
     ui.render_chat()
     assert 'Début inventé un deux trois' in ui.transcript.toPlainText()
     assert '**' not in ui.transcript.toPlainText()
@@ -1139,9 +1342,10 @@ def test_brand_card_reaches_every_brand_spot_and_the_windows_build(ui,app):
     root=Path(__file__).resolve().parents[1]
     ui.show()
     wait_until(app,lambda:not ui.stack.transition.isVisible())
-    assert (ui.hero_emblem.width(),ui.hero_emblem.height())==(110,124)
+    assert (ui.hero_emblem.width(),ui.hero_emblem.height())==(66,74)  # a 62 px card: a banner of ~90 px (owner, 2026-11-18)
     banner=ui.hero_emblem.grab().toImage()
-    middle=banner.pixelColor(55,62)                                               # the card's Poke Ball, mid-banner
+    ratio=banner.devicePixelRatio()
+    middle=banner.pixelColor(round(33*ratio),round(37*ratio))                     # the card's Poke Ball, mid-banner
     assert min(middle.red(),middle.green(),middle.blue())>150
     assert not ui.windowIcon().isNull() and ui.navigation.item(0).icon().availableSizes()
     cover=BinderCover();cover.resize(420,560)
@@ -1198,6 +1402,97 @@ def test_battles_page_shows_summary_tiles_and_a_record_bar_sorted_by_losses(ui,a
     ui.matchup_filter.clear()
 
 
+def test_simplified_pages_use_player_words_and_keep_cautions_behind_info_buttons(ui,app):
+    """Owner, 2026-11-16: one sentence of help per page, no jargon, cautions behind « ⓘ », nothing for an unknown value."""
+    from PySide6 import QtWidgets as Native
+    from pokemind.desktop.widgets import InfoButton
+    from pokemind.desktop.insights import long_date, games_text, opponent_name, short_kind, legality_label
+    from pokemind.desktop.i18n import T, display
+    assert ui.overview.text()=='Dernière mise à jour : 25 octobre 2026'
+    assert (long_date('2026-11-16').fr,long_date('2026-11-16').en)==('16 novembre 2026','November 16, 2026')
+    assert long_date('2026-11-01').fr=='1er novembre 2026' and long_date('inconnue')=='inconnue'
+    assert (games_text(1).fr,games_text(18).fr,games_text(1).en)==('1 partie','18 parties','1 game')
+    assert opponent_name('unknown').fr=='Adversaire non identifié' and opponent_name('Famille inventée')=='Famille inventée'
+    assert short_kind(T('Mon deck · référence personnelle enregistrée par le coach')).fr=='Mon deck'
+    assert legality_label(T('Standard / Live inconnus')).fr=='Légalité à vérifier' and legality_label('')==''
+    groups=[{'archetype':'unknown','wins':0,'losses':4,'unknown':1,'n':6},
+            {'archetype':'Famille inventée','wins':2,'losses':1,'unknown':0,'n':3}]
+    ui.services.report={**ui.services.report,'groups':groups}
+    ui.filter_matchups()
+    assert [ui.matchups.horizontalHeaderItem(i).text() for i in range(5)]==['Deck adverse','V','D','?','Parties']
+    assert [ui.matchups.horizontalHeaderItem(i).toolTip() for i in (1,2,3)]==['Victoires','Défaites','Parties sans résultat connu']
+    assert ui.matchups.item(0,0).text()=='Adversaire non identifié' and ui.matchup_key(0)=='unknown'
+    assert ui.battle_tiles['rival'].text()=='Adversaire non identifié · 4 défaites sur 6 parties'
+    ui.open_matchup('unknown')  # the row is still found by the label of the report, not by the name shown
+    assert ui.matchups.currentRow()==0 and ui.matchup_filter.text()=='Adversaire non identifié'
+    ui.matchup_filter.clear()
+    ui.update_home()
+    assert ui.home_focus.text()=='À travailler : Adversaire non identifié · 4 défaites sur 6 parties'
+    assert not ui.home_focus_info.isHidden() and 'déduit des cartes' in ui.home_focus_info.toolTip()
+    html=ui.priorities_html(ui.services.report)
+    assert 'Adversaire non identifié' in html and '4 défaites sur 6 parties' in html
+    assert ' n=' not in html and 'causalité' not in html and 'hypothèse' not in html
+    assert 'ne prouve pas' in ui.priorities_info.toolTip()
+    # No jargon is printed anywhere outside the public statistics details; the cautions are one click away.
+    jargon=('corpus','Corpus','n=','bilan descriptif','causalité','représentativité','batch','unknown')
+    texts=[w.text() for w in ui.findChildren(Native.QLabel) if not ui.public_stats.isAncestorOf(w)]
+    texts+=[w.text() for w in ui.findChildren(Native.QAbstractButton)]
+    texts+=[w.itemText(i) for w in ui.findChildren(Native.QComboBox) for i in range(w.count())]
+    assert not [text for text in texts for word in jargon if word in text]
+    tips=' '.join(button.toolTip() for button in ui.findChildren(InfoButton))
+    for caution in ('Basé seulement sur tes parties enregistrées.','ne prouve pas pourquoi tu as gagné ou perdu',
+                    'aucun modèle d’IA n’est réentraîné','Teste un seul changement à la fois','sans confirmations'):
+        assert caution in tips
+    assert all(button.toolTip()==button.accessibleDescription() and button.accessibleName() for button in ui.findChildren(InfoButton))
+    assert 'ne prouve pas une amélioration' in next(b.toolTip() for b in ui.findChildren(Native.QPushButton)
+                                                    if b.text()=='Comparer à cette référence')
+    assert ui.deck_diff.isHidden() and not ui.deck_diff.text()
+    assert [ui.terminal_buttons[k].text() for k in ('codex','claude','powershell')]==['Codex','Claude Code (sans confirmations)','PowerShell']
+    assert ui.permission_badge.text()=='Le coach peut lire tes données PokeMind'
+    ui.language.setCurrentIndex(ui.language.findData('en'));app.processEvents()
+    try:
+        assert ui.matchups.horizontalHeaderItem(2).toolTip()=='Losses'
+        assert ui.overview.text()=='Last updated: October 25, 2026'
+        assert ui.permission_badge.text()=='The coach can read your PokeMind data'
+        assert ui.terminal_buttons['claude'].text()=='Claude Code (no confirmations)'
+        assert display(opponent_name('unknown'))=='Unidentified opponent'
+        assert 'Based only on your recorded games.' in ui.statistics.info.toolTip()
+    finally:
+        ui.language.setCurrentIndex(ui.language.findData('fr'));app.processEvents()
+
+
+def test_menu_keeps_no_light_of_a_former_selection_title_bar_follows_the_theme_and_boxes_have_an_edge(ui,app,monkeypatch):
+    """Owner, 2026-11-16: « Vue d’ensemble » looked still lit on another page; white caption on the dark theme;
+    the empty check box was almost invisible."""
+    from pokemind.desktop import theme
+    ui.show()
+    def settle():
+        wait_until(app,lambda:not ui.stack.transition.isVisible())
+        QTest.qWait(120);app.processEvents()
+    def shown():  # what is on the window now, not a fresh rendering of the widgets
+        view=ui.navigation.viewport();origin=view.mapTo(ui,view.rect().topLeft())
+        return app.primaryScreen().grabWindow(ui.winId(),origin.x(),origin.y(),view.width(),view.height()).toImage()
+    ui.navigation.setCurrentRow(0);settle()
+    for row in (2,1,5,0):
+        ui.navigation.setCurrentRow(row);settle()
+        kept=shown()
+        ui.navigation.viewport().update();settle()
+        assert kept==shown(),'the menu still shows light of the previous selection after going to row %d'%row
+    schemes=[]
+    monkeypatch.setattr(window,'apply_color_scheme',schemes.append)
+    ui.theme.setCurrentIndex(ui.theme.findData('light'));app.processEvents()
+    ui.theme.setCurrentIndex(ui.theme.findData('dark'));app.processEvents()
+    assert schemes==['light','dark']
+    hints=app.styleHints()
+    if hasattr(hints,'setColorScheme'):
+        theme.apply_color_scheme('dark')  # accepted by this Qt; the platform decides what a caption looks like
+    for name in ('dark','light'):
+        sheet=theme.stylesheet(name)
+        assert 'QCheckBox::indicator { width:16px; height:16px; border:2px solid '+theme.colors(name)['field_border'] in sheet
+        assert 'QCheckBox::indicator:checked {' in sheet and 'check-' in sheet
+    assert 'QCheckBox::indicator { width:16px; height:16px; border:2px solid' in ui.styleSheet()
+
+
 def test_learning_page_reads_as_tiles_bars_and_plans_without_internal_names():
     from pokemind.desktop.insights import learning_view
     from pokemind.desktop.theme import colors
@@ -1208,9 +1503,11 @@ def test_learning_page_reads_as_tiles_bars_and_plans_without_internal_names():
             {'archetype':'Famille inventée','loss_match_refs':['M2'],'plan':{'alternatives':[{'archetypes':['Base inventée']}]}}]}}],
         'history':[{'recorded_at':'2026-10-30T09:00:00','revises':'derived_statistic'}]}
     tiles,text=learning_view(learning,colors('dark'))
-    assert tiles=={'games':'3','opponents':'1','plans':'1','updated':'2026-11-01'}
+    assert tiles=={'games':'3','opponents':'1','plans':'1','updated':'1er novembre 2026'}  # one date format (owner, 2026-11-18)
     text=str(text)
-    assert 'Famille inventée' in text and '1V · 2D · n=3' in text and 'Base inventée' in text
+    assert 'Famille inventée' in text and '1 V · 2 D · 3 parties' in text and 'Base inventée' in text
+    assert 'Bleu : victoires · Rouge : défaites' in text and 'Jaune' not in text  # no game without a result here
+    assert ' n=' not in text and 'causal' not in text  # the cautions are behind the « ⓘ » of the page
     assert 'pokemind://page/2' in text and 'Bilans par adversaire' in text
     assert 'derived_statistic' not in text and 'observed_game_event' not in text
     empty_tiles,empty=learning_view(None,colors('dark'))
@@ -1399,7 +1696,6 @@ def test_reset_notice_names_the_kinds_removed_and_where_the_copy_is(monkeypatch,
 
 def test_words_never_choose_research_or_development_only_the_mode_under_the_chat_does(ui, app, monkeypatch):
     from pokemind import batch_public_research as research
-    from pokemind.assistant.tools import RESEARCH_STARTERS, STARTERS
     collected, configured = [], []
     class Capture(Fake):
         def configure(self, **kwargs):
@@ -1428,8 +1724,9 @@ def test_words_never_choose_research_or_development_only_the_mode_under_the_chat
     ui.send_chat();wait_until(app, lambda: not ui.chat_busy)
     assert configured[-1] is True and ui.chat_mode.currentData() == 'development' and len(collected) == 1
     choose(ui, 'coach')
-    ui.pick_starter(STARTERS.index(RESEARCH_STARTERS[0]) + 1)
-    assert ui.chat_mode.currentData() == 'research' and ui.chat_input.toPlainText() == RESEARCH_STARTERS[0]
+    ui.navigation.setCurrentRow(3)
+    ui.pick_starter(len(ui.ideas))  # « Quelles cartes récentes changent la méta? »: an idea never picks the mode
+    assert ui.chat_mode.currentData() == 'coach' and ui.chat_input.toPlainText() == 'Quelles cartes récentes changent la méta?'
 
 
 def test_a_follow_up_in_the_same_engine_session_pastes_only_the_data_that_changed(ui, app, monkeypatch):
@@ -1502,7 +1799,9 @@ def test_owner_enters_a_deck_and_marks_it_main_for_the_overview_and_the_coach(ui
     key=favorite_key({'export':DECK_60})
     wait_until(app,lambda:ui.preferences['main_deck']==key and ui.deck_rows)
     assert window.Store(ui.root).preferences()['main_deck']==key                 # kept after a restart
-    assert '· ♛ Mon deck inventé' in ui.deck_picker.currentText() and ui.main_button.isChecked()
+    assert ui.deck_picker.currentText() == '♛ Mon deck inventé' and ui.main_button.isChecked()
+    assert ui.deck_pills['kind'].text() == 'Mon deck' and 'entrée par moi' in ui.deck_pills['kind'].toolTip()
+    assert ui.deck_pills['legality'].text() == 'Légalité à vérifier'
     assert any('Deck principal : Mon deck inventé' in w.text() for w in ui.findChildren(window.QPushButton) if w.isVisibleTo(ui) or True)
     assert ui.services.prepare_question('Quel est mon deck?','aggregates')['owner_main_deck']['export']==DECK_60
     assert 'owner_main_deck' not in ui.services.prepare_question('Quel est mon deck?','public')   # personal: never public-only
@@ -1577,10 +1876,11 @@ def test_013_selector_daily_refresh_reranks_preserves_selection_gallery_and_favo
     assert ui.favorite_button.isChecked() and ui.main_button.isChecked()
     for i in range(ui.deck_picker.count()):
         label = ui.deck_picker.itemText(i)
-        tip = ui.deck_picker.itemData(i, Qt.ItemDataRole.ToolTipRole)
+        assert label.endswith(ui.deck_rows[i]['label']) and not label.startswith(('#', '—'))  # the name first
+        tip = ui.ranking_table.item(i, 2).toolTip()  # rank and public rate: in the Ranking tab only
         if ui.deck_rows[i]['public_ranking']['fraction'] is not None:
-            assert label.startswith('#') and '% · ' in label
-            assert '% PUBLIC BO1' in tip and 'n=' in tip and 'Limitless' in tip
+            assert tip.startswith('#') and '% · ' in tip
+            assert '% PUBLIC BO1' in tip and ' matchs' in tip and 'n=' not in tip and 'Limitless' in tip
             assert 'https://' in tip and 'Instantané' in tip
     ui.deck_picker.setFocus()
     QTest.keyClick(ui.deck_picker, Qt.Key.Key_Home)
@@ -1625,7 +1925,9 @@ def test_013_selector_full_rate_accessibility_at_narrow_width(ui, app, width):
     ui.resize(width, 970)
     ui.loaded_decks(rows)
     wait_until(app, lambda: _settled(ui))
-    assert ui.deck_picker.currentText().startswith('#1 · 62,5 % · ') and 'n=40' in ui.deck_picker.toolTip()
+    assert ui.deck_picker.currentText() == ui.deck_rows[0]['label']
+    tip = ui.ranking_table.item(0, 2).toolTip()
+    assert tip.startswith('#1 · 62,5 % · ') and '40 matchs' in tip
     assert ui.deck_picker.accessibleName() == ui.deck_picker.currentText()
     assert ui.deck_picker.width() <= ui.stack.width()
     assert ui.gallery.horizontalScrollBar().maximum() == 0
@@ -1738,12 +2040,17 @@ def test_016_selector_prefix_and_explicit_ranking(ui, app):
     rows = ranking_016()
     ui.loaded_decks(rows)
     wait_until(app, lambda: _settled(ui))
-    assert ui.deck_picker.currentText().startswith('#1 · 48,7 % · ')
-    assert ui.deck_picker.itemText(1).startswith('#2 · 42,0 % · ')
-    assert all(ui.deck_picker.itemText(i).startswith('— · ') for i in (2, 3, 4))
+    # The selector shows the name of each deck; its rank and public rate are read in the Ranking tab only.
+    assert [ui.deck_picker.itemText(i) for i in range(5)] == [row['label'] for row in ui.deck_rows]
+    assert [ui.compare_picker.itemText(i) for i in range(5)] == [row['label'] for row in ui.deck_rows]
+    assert ui.deck_picker.toolTip() == ui.deck_picker.currentText()
     assert ui.deck_views.count() == 4 and ui.deck_views.tabText(3) == 'Classement'
     assert [ui.ranking_table.item(i, 0).text() for i in range(5)] == ['#1', '#2', '—', '—', '—']
-    assert 'PUBLIC BO1' in ui.deck_picker.toolTip() and '117' in ui.deck_picker.accessibleDescription()
+    tips = [ui.ranking_table.item(i, 1).toolTip() for i in range(5)]
+    assert tips[0].startswith('#1 · 48,7 % · ') and tips[1].startswith('#2 · 42,0 % · ')
+    assert all(tip.startswith('— · ') for tip in tips[2:])
+    assert 'PUBLIC BO1' in tips[0] and '117 matchs' in tips[0]
+    assert '117' in ui.ranking_table.item(0, 1).data(Qt.ItemDataRole.AccessibleDescriptionRole)
 
 
 def test_016_stats_details_closed_and_short_legend(ui, app, monkeypatch):
@@ -1814,7 +2121,7 @@ def test_016_ranking_mouse_keyboard_refresh_preserves_deck_and_readonly_selectio
     changed = [changed[1], changed[0], *changed[2:]]  # worker's new descending order
     ui.loaded_decks(changed)
     assert ui.deck_picker.currentIndex() == 0 and ui.ranking_table.currentRow() == 0
-    assert ui.deck_picker.currentText().startswith('#1 · 70,0 % · ♛ ')
+    assert ui.deck_picker.currentText().startswith('♛ ') and ui.ranking_table.item(0, 2).text() == '70,0 %'
     assert favorite_key(ui.deck_rows[ui.compare_picker.currentIndex()]) == compared
     assert key in ui.preferences['favorite_decks'] and ui.preferences['main_deck'] == key
     assert ui.gallery.generation == generation and ui.gallery.verticalScrollBar().value() == scroll
@@ -1884,12 +2191,15 @@ def test_016_native_visual_ranking_and_statistics(ui, app, monkeypatch, width, d
     try:
         QTest.qWait(300)
         picker = ui.deck_picker
-        prefix = '#1 · ' + ('48,7 %' if language == 'fr' else '48.7 %')
-        assert picker.currentText().startswith(prefix)
+        prefix = picker.currentText()[:14]  # the beginning of the deck's name: the strip's title shows the name first
+        assert prefix and not prefix.startswith('#')
+        # Owner, 2026-11-18: the deck's name is the title of the strip; the selector is a button « Changer de deck »
+        # whose painting does not depend on the name (checked below: same pixels with another name).
+        assert ui.deck_heading.name.text() == picker.currentText()
         option = QStyleOptionComboBox(); picker.initStyleOption(option)
         field = picker.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
             QStyle.SubControl.SC_ComboBoxEditField, picker)
-        assert field.width() > picker.fontMetrics().horizontalAdvance(prefix) + 20
+        assert field.width() >= picker.fontMetrics().horizontalAdvance(window.display(picker.LABEL))
         scale = picker.devicePixelRatioF()
         crop = QRect(round(field.x()*scale), 0,
                      round(picker.fontMetrics().horizontalAdvance(prefix)*scale), round(picker.height()*scale))
@@ -1898,7 +2208,7 @@ def test_016_native_visual_ranking_and_statistics(ui, app, monkeypatch, width, d
         picker.setItemText(0, prefix + ' · QA')
         app.processEvents()
         short = picker.grab().toImage().copy(crop)
-        assert long == short, 'Real native closed selector must paint the entire leading rank/rate'
+        assert long == short, 'Real native closed selector must paint the entire beginning of the name'
         picker.setItemText(0, original)
         output = Path(os.environ.get('POKEMIND_016_CAPTURE_DIR') or Path(__file__).resolve().parents[1] / 'build/qa-016')
         output.mkdir(parents=True, exist_ok=True)
@@ -1923,7 +2233,7 @@ def test_016_native_visual_ranking_and_statistics(ui, app, monkeypatch, width, d
         long_popup = popup.viewport().grab().toImage().copy(popup_crop)
         picker.setItemText(0, prefix + ' · QA'); app.processEvents()
         short_popup = popup.viewport().grab().toImage().copy(popup_crop)
-        assert long_popup == short_popup, 'Real open popup must retain the same visible rank/rate prefix'
+        assert long_popup == short_popup, 'Real open popup must retain the same visible beginning of the name'
         picker.setItemText(0, original)
         assert popup.grab().save(str(output / ('popup-' + tag + '.png')))
         picker.hidePopup()
@@ -1980,3 +2290,222 @@ def test_016_native_visual_ranking_and_statistics(ui, app, monkeypatch, width, d
         if ui.deck_picker.view().isVisible(): ui.deck_picker.hidePopup()
         ui.language.setCurrentIndex(ui.language.findData('fr'))
         set_language('fr')
+
+
+def test_binder_pages_show_a_silhouette_then_fade_in_and_neighbours_are_ready_from_the_disk_cache(ui,app,monkeypatch):
+    """Owner, 2026-11-18: on a page turn the cards stayed red rectangles for a moment."""
+    image=QImage(60,84,QImage.Format.Format_RGB32);image.fill(Qt.GlobalColor.darkGreen)
+    buffer=QBuffer();buffer.open(QIODevice.OpenModeFlag.WriteOnly);image.save(buffer,'PNG');raw=bytes(buffer.data())
+    def browse(language='fr',offset=0,limit=18):
+        cards=[{'tcgdex_id':'inv-%d'%i,'language':'fr','name':'Carte inventée %d'%i,'category':'pokemon'}
+               for i in range(offset,min(offset+limit,60))]
+        return {'language':language,'offset':offset,'total':60,'cards':cards}
+    fetched,release=[],threading.Event()
+    def fetch(identity,language='fr',cached_only=False):
+        fetched.append((identity,cached_only))
+        if not cached_only:
+            assert release.wait(5)
+        return {'data':raw,'source_url':'https://example.invalid/'+identity}
+    monkeypatch.setattr(ui.services,'browse_cards',browse)
+    monkeypatch.setattr(ui.images,'fetch',fetch)
+    ui.preferences['card_images']=True
+    ui.binder.set_motion_enabled(True)
+    ui.navigation.setCurrentRow(3)
+    wait_until(app,lambda:ui.binder.slots[0].card is not None)
+    per=ui.binder.per_spread()
+    slot=ui.binder.slots[0]
+    assert slot.pending and slot.picture is None  # a dark silhouette while the picture is on its way, not the red card
+    release.set()
+    wait_until(app,lambda:all(s.picture is not None for s in ui.binder.slots[:per]) and not ui.jobs)
+    assert not slot.pending
+    # The next spread was read ahead from the disk cache only: never a download for a page not in sight.
+    ahead=[identity for identity,cached in fetched if cached]
+    assert ahead==['inv-%d'%i for i in range(per,2*per)]
+    assert all(cached for identity,cached in fetched if identity in ahead)
+    fetched.clear()
+    ui.binder.next.click()
+    assert all(s.picture is not None for s in ui.binder.slots[:per])  # at once: decoded, in memory
+    assert ui.binder.slots[0].card['tcgdex_id']=='inv-%d'%per and ui.binder.slots[0].fade.value==1
+    wait_until(app,lambda:not ui.jobs)
+    assert not [i for i,cached in fetched if not cached]
+    ui.binder.previous.click()  # a page already seen: no new read at all
+    assert all(s.picture is not None for s in ui.binder.slots[:per]) and ui.binder.offset==0
+    # A picture that arrives fades in over 150 ms; with « Réduire les animations », at once.
+    slot.set_card({'tcgdex_id':'inv-x','name':'X','category':'pokemon'},True)
+    slot.set_image({'data':raw},'inv-x',fade=True)
+    assert slot.fade.animation.duration()==150 and slot.fade.value<1
+    ui.binder.set_motion_enabled(False)
+    slot.set_card({'tcgdex_id':'inv-y','name':'Y','category':'pokemon'},True)
+    slot.set_image({'data':raw},'inv-y',fade=True)
+    assert slot.fade.value==1 and slot.picture is not None
+    slot.set_card({'tcgdex_id':'inv-z','name':'Z','category':'pokemon'},True)
+    slot.set_image({'status':'UNAVAILABLE'},'inv-z')
+    assert not slot.pending and slot.picture is None  # no picture: the coloured legend card with its name
+
+
+def test_binder_reads_nothing_ahead_when_illustrations_are_off(ui,app,monkeypatch):
+    def browse(language='fr',offset=0,limit=18):
+        return {'language':language,'offset':offset,'total':60,'cards':[
+            {'tcgdex_id':'inv-%d'%i,'language':'fr','name':'Carte %d'%i,'category':'pokemon'} for i in range(offset,offset+limit)]}
+    monkeypatch.setattr(ui.services,'browse_cards',browse)
+    monkeypatch.setattr(ui.images,'fetch',lambda *a,**k:pytest.fail('illustrations are off: no picture is read'))
+    ui.preferences['card_images']=False
+    ui.navigation.setCurrentRow(3)
+    wait_until(app,lambda:ui.binder.slots[0].card is not None and not ui.jobs)
+    assert not any(s.pending for s in ui.binder.slots)
+
+
+def test_gallery_tile_waits_under_a_silhouette_and_reuses_a_decoded_picture(ui,app,monkeypatch):
+    from pokemind.desktop.widgets import CardTile
+    image=QImage(50,70,QImage.Format.Format_RGB32);image.fill(Qt.GlobalColor.blue)
+    buffer=QBuffer();buffer.open(QIODevice.OpenModeFlag.WriteOnly);image.save(buffer,'PNG');raw=bytes(buffer.data())
+    tile=CardTile({'name':'Créature inventée','quantity':2,'category':'pokemon','printing':'SYN 1'},gallery=True)
+    tile.set_pending(True)
+    assert tile.art.pending and tile.art.property('pictured') is True  # a bare silhouette, not « Image indisponible »
+    tile.set_image({'status':'UNAVAILABLE'})
+    assert not tile.art.pending and tile.art.property('pictured') is False
+    tile.set_image({'data':raw,'source_url':'https://example.invalid/a'},fade=True)
+    assert not tile.picture.isNull() and tile.provenance.endswith('/a')
+    tile.deleteLater()
+    calls=[]
+    cards=[{'name':'Invented Creature','quantity':60,'category':'pokemon','printing':'SYN 1','identity':'invented-1'}]
+    monkeypatch.setattr(ui.services,'gallery_cards',lambda value:cards)
+    monkeypatch.setattr(ui.images,'fetch',lambda *a,**k:calls.append(a) or {'data':raw,'source_url':'https://example.invalid/i'})
+    rows=[dict(label=name,selector=name,export=name,kind='Synthetic QA',legality='unknown',source={},total=60) for name in ('A','B')]
+    ui.loaded_decks(rows)
+    wait_until(app,lambda:len(ui.gallery.tiles)==1 and not ui.gallery.tiles[0].picture.isNull() and not ui.jobs)
+    assert len(calls)==1
+    ui.deck_picker.setCurrentIndex(1)
+    wait_until(app,lambda:not ui.jobs and len(ui.gallery.tiles)==1 and not ui.gallery.tiles[0].picture.isNull())
+    assert len(calls)==1 and ui.gallery.tiles[0].provenance.endswith('/i')  # from memory, with its source
+
+
+def test_sidebar_active_deck_shows_the_main_or_newest_own_deck_and_says_what_its_ring_counts(ui,app):
+    from pokemind.desktop.insights import favorite_key
+    def deck(label, **extra):
+        return {'label':label,'export':label+'\n','kind':'Mon deck · référence personnelle','total':60,'source':{},
+                'legality':'unknown'} | extra
+    public=deck('Modèle public inventé',kind='Référence PUBLIC',selector='public-1')
+    rebuilt=deck('Deck adverse inventé',kind='Deck adverse reconstruit · hypothèse PUBLIC',selector='deck adverse · 2026-11-17',opponent_rebuild=True)
+    mine=deck('Mon deck inventé',selector='mon deck · 2026-11-10',opponent_rebuild=False)
+    ui.loaded_decks([public,rebuilt,mine])
+    wait_until(app,lambda:not ui.jobs)
+    assert ui.deck_picker.currentIndex()==0 and ui.deck_heading.name.text()=='Modèle public inventé'  # Deck Lab unchanged
+    assert ui.active_deck.name.text()=='Mon deck inventé'
+    assert 'Toutes mes parties, tous decks' in ui.active_deck.caption.text() and not ui.active_deck.this_deck
+    ui.set_main_deck(favorite_key(rebuilt))
+    assert ui.active_deck.name.text()=='Mon deck inventé'  # never an opponent's deck
+    ui.set_main_deck(favorite_key(public))
+    assert ui.active_deck.name.text()=='♛ Modèle public inventé'
+    ui.set_main_deck('')
+    report=dict(ui.services.report,matches=[
+        {'match':'M1','outcome':'wins','personal_deck_version':{'export_sha256':favorite_key(mine)},'evidence':[]},
+        {'match':'M2','outcome':'losses','personal_deck_version':'unknown','evidence':[]}])
+    ui.record_report=report
+    ui.show_sidebar_deck()
+    assert ui.active_deck.this_deck and ui.active_deck.ring.values==(1,0,0)
+    assert 'Parties avec ce deck' in ui.active_deck.caption.text()
+    ui.navigation.setCurrentRow(0)
+    ui.active_deck.activated.emit()
+    assert ui.navigation.currentRow()==2 and ui.deck_picker.currentText()=='Mon deck inventé'
+
+
+def test_coach_ideas_follow_the_page_fill_their_slots_and_never_send(ui,app):
+    """Owner, 2026-11-18: the question ideas change with the page shown."""
+    from pokemind.desktop.prompts import IDEAS, page_ideas, COMBATS, CARDS, DECK_LAB
+    assert len(page_ideas(COMBATS))==5 and len(page_ideas(COMBATS,{'match':True}))==6
+    assert str(page_ideas(COMBATS)[0])=='Pourquoi je perds contre mes adversaires les plus difficiles?'
+    assert page_ideas(COMBATS,{'adversaire':'Famille inventée'})[2].en=='What game plan should I use against Famille inventée?'
+    assert str(page_ideas(DECK_LAB)[0])=='Comment améliorer mon deck sans changer son plan de jeu?'
+    assert [str(i) for i in page_ideas(CARDS)][:2]==['Explique-moi une carte que je devrais connaître et quand la jouer.',
+                                                      'Quels sont les decks les plus joués dans la méta datée?']
+    assert len(page_ideas(CARDS,{'carte':'Carte inventée'}))==6
+    assert all(item['en'] and item['fr'] for items in IDEAS.values() for item in items)
+    sent=[]
+    ui.send_chat=lambda *a,**k:sent.append(a)
+    for page in range(6):
+        ui.navigation.setCurrentRow(page)
+        assert [b.text() for b in ui.idea_buttons]==[str(i) for i in page_ideas(page,ui.idea_state())[:3]]
+        assert ui.starters.count()==1+len(ui.ideas) and ui.starters.itemText(0)=='Idées de questions'
+    settings=list(ui.ideas)
+    ui.advanced_mode.setChecked(True)
+    ui.navigation.setCurrentRow(6)  # the Terminal keeps the ideas of the page before it
+    assert [str(i) for i in ui.ideas]==[str(i) for i in settings]
+    ui.navigation.setCurrentRow(1)
+    row=next(r for r in range(ui.matchups.rowCount()) if ui.matchup_key(r)=='Invented Family')
+    ui.matchups.selectRow(row);ui.matchup_selected()
+    assert str(ui.ideas[0])=='Pourquoi je perds contre Invented Family?'
+    ui.filter_matchups()  # a rebuild of the table (reload, season) keeps the opponent chosen
+    assert ui.idea_state().get('adversaire')=='Invented Family' and ui.games.count()
+    ui.open_match('M0001')
+    assert str(ui.ideas[-1])=='Qu’est-ce que j’aurais dû faire autrement dans cette partie?'
+    ui.pick_starter(3)
+    assert ui.chat_input.toPlainText()==str(ui.ideas[2]) and not sent and not ui.conversation['messages']
+    ui.language.setCurrentIndex(ui.language.findData('en'));app.processEvents()
+    assert ui.idea_buttons[0].text()=='Why do I lose against Invented Family?'
+    ui.language.setCurrentIndex(ui.language.findData('fr'));app.processEvents()
+
+
+def test_probable_opponent_reads_probably_with_its_cards_in_the_tip_and_in_the_coach(ui, app):
+    """Pipeline 023, phase 6: a guessed opponent is never shown as a fact."""
+    from test_opponent_archetype import KNOWN, ALIASES, match
+    from pokemind import opponent_archetype as oa
+    report = dict(ui.services.report, matches=[match('M0009', ['Synthwing Rex', 'Rexling', 'Invented Rod', 'Synthwing Rex'])])
+    ui.services.report = oa.with_probable_opponents(report, oa.Classifier(KNOWN, ALIASES))
+    ui.navigation.setCurrentRow(1)
+    ui.filter_matchups()
+    row = next(r for r in range(ui.matchups.rowCount()) if ui.matchup_key(r) == 'probable:Synthwing Rex')
+    assert ui.matchups.item(row, 0).text() == 'Probablement : Synthwing Rex'
+    tip = ui.matchups.item(row, 0).toolTip()
+    assert 'Synthwing Rex' in tip and 'Confiance : moyenne' in tip and 'pas une certitude' in tip
+    ui.matchups.selectRow(row); ui.matchup_selected()
+    assert str(ui.ideas[0]) == 'Pourquoi je perds contre Synthwing Rex (probable)?'
+    assert ui.games.currentData()['match'] == 'M0009'
+    ui.language.setCurrentIndex(ui.language.findData('en')); app.processEvents()
+    row = next(r for r in range(ui.matchups.rowCount()) if ui.matchup_key(r) == 'probable:Synthwing Rex')
+    assert ui.matchups.item(row, 0).text() == 'Probably: Synthwing Rex'
+    assert 'Confidence: medium' in ui.matchups.item(row, 0).toolTip()
+    assert ui.matchups.selectedItems() and ui.idea_buttons[0].text() == 'Why do I lose against Synthwing Rex (probable)?'
+
+
+def test_overview_combats_and_learning_tell_the_season_in_words(ui, app):
+    """Pipeline 023, phase 7: summaries from the real games, cautions in the ⓘ."""
+    from test_desktop_stories import season
+    from pokemind import battle_batch
+    report = dict(ui.services.report, as_of='2026-11-18')
+    report['matches'] = [dict(m, evidence=[], explicit_prize_totals={'self': None, 'opponent': None}) for m in season()['matches']]
+    report['groups'] = battle_batch.group_matches(report['matches'])
+    ui.services.report = report
+    ui.show_stories(report)
+    assert ui.overview.text().startswith('Tu es sur une série de 2 victoires; tes 5 dernières parties : D, V, D, V, V.')
+    assert ui.overview.text().endswith('Dernière mise à jour : 18 novembre 2026')
+    assert not ui.overview_info.isHidden()
+    # Owner, 2026-11-18: a box under the title, one sentence per line, the V/D/N legend in the ⓘ.
+    lines = ui.overview.text().split('\n')
+    assert len(lines) == 4 and lines[1].endswith('(calculé sur 4 victoires et 2 défaites dont la durée est connue).')
+    box = ui.overview.parentWidget()
+    # Owner, 2026-11-19: framed and set like the Coach's idea buttons.
+    assert box.objectName() == 'textBubble' and box.property('role') == 'summary'
+    page_layout = box.parentWidget().layout()
+    assert page_layout.indexOf(box) == 2  # right after the title and its sentence, before the banner
+    ui.overview.ensurePolished()
+    assert ui.overview.font().pixelSize() == 14 and ui.overview.font().families()[0] == 'Segoe UI'
+    assert ui.overview.font().weight() == QFont.Weight.DemiBold
+    assert ui.overview.text().count('\n') == 3 and ui.overview.textFormat() == Qt.TextFormat.RichText
+    assert 'N = nul ou sans résultat' in ui.overview_info.toolTip()
+    assert 'Ce que tes parties montrent' in ui.learning_story.text() and not ui.learning_story_box.isHidden()
+    assert 'Ce que tes parties montrent' not in ui.memory_text.toPlainText()
+    ui.navigation.setCurrentRow(1)
+    ui.filter_matchups()
+    row = next(r for r in range(ui.matchups.rowCount()) if ui.matchup_key(r) == 'Famille inventée A')
+    ui.matchups.selectRow(row); ui.matchup_selected()
+    assert ui.matchup_story.text().startswith('Contre Famille inventée A : 1 victoire, 2 défaites en 3 parties.')
+    # A season with fewer games: the opponent stays chosen and its summary follows the season shown.
+    ui.services.report = dict(report, matches=report['matches'][:3], groups=battle_batch.group_matches(report['matches'][:3]))
+    ui.loaded_season()
+    assert ui.matchups.selectedItems()
+    assert ui.matchup_story.text().startswith('Contre Famille inventée A : 0 victoire, 2 défaites en 2 parties.')
+    assert ui.games.count() == 2
+    ui.language.setCurrentIndex(ui.language.findData('en')); app.processEvents()
+    assert ui.matchup_story.text().startswith('Against Famille inventée A: 0 wins, 2 losses in 2 games.')
+    assert ui.overview.text().startswith('Your most frequent opponent: Famille inventée A, 0 wins and 2 losses in 2 games.')

@@ -29,15 +29,17 @@ GRAPHIC = 3.0   # large text and essential non-text elements
 
 
 def pairs(c):
-    surfaces = ('background', 'surface', 'sidebar', 'alternate', 'input')
+    surfaces = ('background', 'surface', 'sidebar', 'alternate', 'input', 'panel_start', 'panel_end')
     for fg in ('text', 'muted'):
         for bg in surfaces:
             yield fg, bg, TEXT
     for fg in ('accent', 'link', 'red', 'blue', 'yellow', 'success'):  # labels, legends, tiles, dock titles
-        for bg in ('background', 'surface', 'sidebar'):
+        for bg in ('background', 'surface', 'sidebar', 'panel_start', 'panel_end'):  # panels are a gradient
             yield fg, bg, TEXT
-    for bg in ('primary', 'primary_hover', 'primary_pressed'):
+    for bg in ('primary', 'primary_hover', 'primary_pressed', 'primary_glow'):
         yield 'on_primary', bg, TEXT
+    for bg in ('background', 'surface', 'panel_start', 'panel_end'):  # selected tab, hovered outline
+        yield 'neon', bg, GRAPHIC
     for bg in ('hero_start', 'hero_end'):
         for fg in ('hero_text', 'hero_muted', 'hero_kicker'):
             yield fg, bg, TEXT
@@ -89,7 +91,47 @@ def test_drop_down_choices_are_drawn_by_the_theme_in_every_state(name):
         rule = re.search(r'QComboBox QAbstractItemView::item' + re.escape(state) + r' \{([^}]*)\}', css).group(1)
         assert 'color:' + c[fg] in rule and 'background:' + c[bg] in rule
         assert contrast(c[fg], c[bg]) >= TEXT, state
-    assert re.search(r'QLabel#settingHint \{[^}]*font-size:13px', css)
+    assert not re.search(r'QLabel#settingHint \{[^}]*font-size', css)  # the idea buttons' size (owner, 2026-11-19)
+
+
+@pytest.mark.parametrize('name', THEMES)
+def test_frames_inside_a_panel_have_a_quiet_line_and_only_panels_and_the_active_element_are_lit(name):
+    """Owner, 2026-11-18: one lit outline per panel; the frames inside are the surface with a line at about 30 %."""
+    c, css = colors(name), stylesheet(name)
+    line = QColor(c['inner_line'])
+    expected = [round(a * .3 + b * .7) for a, b in zip(QColor(c['neon']).getRgb()[:3], QColor(c['surface']).getRgb()[:3])]
+    assert [abs(x - y) <= 1 for x, y in zip(line.getRgb()[:3], expected)] == [True] * 3
+    # Decorative, yet seen: distinct from the surfaces it sits on, quieter than the lit outline.
+    for ground in ('surface', 'panel_start', 'panel_end', 'background'):
+        assert 1.3 <= contrast(c['inner_line'], c[ground]) < contrast(c['neon'], c[ground]), ground
+    for rule in ('QFrame#card', 'QFrame#settingRow', 'QFrame#chatEmpty', 'QLabel#battleBadge', 'QFrame#hero'):
+        body = re.search(re.escape(rule) + r' \{([^}]*)\}', css).group(1)
+        assert 'border:1px solid ' + c['inner_line'] in body and c['neon_soft'] not in body, rule
+    assert re.search(r'QTextBrowser,QTableWidget \{ border-color:' + c['inner_line'], css)
+    # Fields keep an outline of at least 3:1, and focus still shows.
+    assert re.search(r'QTextEdit,QLineEdit,QComboBox \{ border-color:' + c['field_border'], css)
+    assert re.search(r'QTextBrowser:focus[^{]*\{ border:1px solid ' + c['focus'], css)
+
+
+@pytest.mark.parametrize('name', THEMES)
+def test_one_type_scale_and_no_spaced_capitals(name):
+    """Owner, 2026-11-19: every text is the idea buttons' (14 px, 600, from the QWidget rule); only the titles and
+    the large numbers keep a size and a weight of their own; the grey notes keep their grey, at the same size."""
+    from pokemind.desktop.theme import TITLE_NAMES
+    css = stylesheet(name)
+    def size(rule):
+        return int(re.search(re.escape(rule) + r' \{[^}]*font-size:(\d+)px', css).group(1))
+    assert size('QLabel#title') == 28 and size('QWidget') == 14
+    assert 'font-weight:600' in re.search(r'(?m)^QWidget \{([^}]*)\}', css).group(1)
+    assert 17 <= size('QLabel#sectionTitle') <= 18 and 17 <= size('QLabel#gallerySection') <= 18
+    for note in ('QLabel#smallCaption', 'QLabel#settingHint', 'QLabel#loadingDetail'):
+        body = re.search(re.escape(note) + r' \{([^}]*)\}', css).group(1)
+        assert 'font' not in body and 'color:' + colors(name)['muted'] in body
+    # Any other size or weight belongs to a title or a large number, by name.
+    for selector, body in re.findall(r'(?m)^([^{\n]+?) \{([^}]*)\}', css):
+        if selector.strip() != 'QWidget' and re.search(r'font-(size|weight|family)', body):
+            assert any('#' + name in selector for name in TITLE_NAMES), selector
+    assert 'letter-spacing' not in css
 
 
 def test_both_themes_share_the_result_meaning():

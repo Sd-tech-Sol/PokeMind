@@ -13,6 +13,8 @@ from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QGuiApplication, QPainter
 from PySide6.QtWidgets import QWidget
 
+from pokemind.desktop.theme import IDEA_SIZE
+
 try:
     import pyte
 except ImportError:  # pragma: no cover - the desktop extra installs it
@@ -25,6 +27,7 @@ PALETTE = {'black': '#0b1d42', 'red': '#c50f1f', 'green': '#13a10e', 'brown': '#
     'brightcyan': '#61d6d6', 'brightwhite': '#f2f2f2'}
 # Dark in both themes (console programs choose ANSI colours for a dark background), in the BrainBall navy.
 FOREGROUND, BACKGROUND, SELECTION = '#f7faff', '#081c3e', '#0054c7'
+MONO_FAMILIES = ('Cascadia Mono', 'Consolas', 'Courier New')  # the console grid only
 BYPASS = {'codex': '--dangerously-bypass-approvals-and-sandbox', 'claude': '--dangerously-skip-permissions'}
 KEYS = {Qt.Key.Key_Return: '\r', Qt.Key.Key_Enter: '\r', Qt.Key.Key_Backspace: '\x7f', Qt.Key.Key_Tab: '\t',
     Qt.Key.Key_Backtab: '\x1b[Z', Qt.Key.Key_Escape: '\x1b', Qt.Key.Key_PageUp: '\x1b[5~',
@@ -169,15 +172,18 @@ class TerminalView(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled)
         self.setCursor(Qt.CursorShape.IBeamCursor)
         self.setMinimumSize(320, 160)
+        # The idea buttons' size and weight (owner, 2026-11-19); the face stays a fixed-width one, the only one of
+        # the application: console programs line up their columns on a grid of equal cells.
         font = QFont()
-        font.setFamilies(['Cascadia Mono', 'Consolas', 'Courier New'])
-        font.setPointSize(11)
+        font.setFamilies(list(MONO_FAMILIES))
+        font.setPixelSize(IDEA_SIZE)
+        font.setWeight(QFont.Weight.DemiBold)
         font.setStyleHint(QFont.StyleHint.Monospace)
         font.setFixedPitch(True)
         font.setKerning(False)
         # Kept apart from self.font(): the app stylesheet would impose its proportional font.
         self.regular, self.bold = font, QFont(font)
-        self.bold.setBold(True)
+        self.bold.setWeight(QFont.Weight.Bold)
         metrics = QFontMetricsF(font)
         self.cell_w, self.cell_h, self.ascent = metrics.horizontalAdvance('M'), metrics.height(), metrics.ascent()
         self.screen = Screen(100, 30, self.send)

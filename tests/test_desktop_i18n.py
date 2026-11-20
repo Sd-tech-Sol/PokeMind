@@ -45,12 +45,13 @@ def test_live_language_covers_pages_settings_headers_and_late_status(ui,app):
     assert 'Show public TCGdex' in ui.card_images.text()
     labels=[label.text() for label in ui.findChildren(Native.QLabel)]
     assert any('Verified external isolation' in text for text in labels)
-    assert ui.matchups.horizontalHeaderItem(0).text()=='Family / signature'
-    assert ui.matchups.horizontalHeaderItem(1).text()=='W'
+    assert ui.matchups.horizontalHeaderItem(0).text()=='Opponent deck'
+    assert ui.matchups.horizontalHeaderItem(1).text()=='W' and ui.matchups.horizontalHeaderItem(1).toolTip()=='Wins'
+    assert ui.matchups.horizontalHeaderItem(4).text()=='Games'
     assert ui.statistics.tabs.tabText(0)=='Summary'
     assert [ui.card_results.horizontalHeaderItem(i).text() for i in range(3)]==['Printing','Language','Name']
     assert ui.language.accessibleName()=='Application language'
-    assert 'Analysis saved as of' in ui.overview.text()
+    assert ui.overview.text().startswith('Last updated: ')
     ui.failed('SYNTHETIC_CODE')
     assert ui.statusBar().currentMessage()=='Service unavailable · SYNTHETIC_CODE'
     select(ui,'fr')

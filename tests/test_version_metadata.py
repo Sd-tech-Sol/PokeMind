@@ -1,4 +1,4 @@
-"""One version everywhere: app, package metadata, EXE resource, installer, notes (0.9.4 release gate, 0.9.5 candidate)."""
+"""One version everywhere: app, package metadata, EXE resource, installer, notes (0.9.4 release gate, 0.9.5 published, 0.9.6 current)."""
 import importlib.util
 import re
 import tomllib
@@ -42,7 +42,7 @@ def test_the_unpublished_094_candidate_is_folded_into_095_and_never_presented_as
         assert match is not None
         assert date.fromisoformat(match[1]).isoformat() == match[1]
     assert '## [0.9.4] — never published' in changelog
-    assert changelog.index('## [0.9.5]') < changelog.index('## [0.9.4]') < changelog.index('## [0.9.3]')
+    assert changelog.index('## [0.9.6]') < changelog.index('## [0.9.5]') < changelog.index('## [0.9.4]') < changelog.index('## [0.9.3]')
     notes = (ROOT / 'docs/RELEASE_NOTES_0.9.5.md').read_text(encoding='utf-8')
     assert 'never published' in notes and "jamais été publié" in notes
     assert 'Deck Lab › Statistics' in notes and 'Deck Lab › Statistiques' in notes

@@ -1,3 +1,135 @@
+# D-320 — Réception OWNER_GUI_ACCEPTED_096 et GO explicite : publier 0.9.6 en préversion (PM-RELEASE-096-PUBLIC-025)
+
+**2026-11-20, Québec.** Le propriétaire déclare avoir ouvert PokeMind 0.9.6 installé (version 0.9.6 dans À propos,
+données présentes, toutes les pages dont Deck Lab › Statistiques, Coach qui répond) : **OWNER_GUI_ACCEPTED_096**.
+Il donne le GO explicite de **publier 0.9.6 en préversion** sur le dépôt public existant `Sd-tech-Sol/PokeMind`,
+même procédure que 0.9.5 (prompt 019 archivé, `docs/release-checklist.md`, mandat 018 archivé) : prévol (source =
+`8d2bd62`, public `main` = `295db53`, aucun v0.9.6), notes de version datées, porte complète verte, réutilisation
+du Setup D-319 (SHA256 `688d8651…d137`, scan CLEAN), export par `scripts/export_public.py` scanné entièrement,
+porte sur l'export, push fast-forward, release prerelease avec les deux assets vérifiés. Toute porte rouge = STOP
+sans export ni push public. Interdits : données personnelles, sauvegarde, installation, désinstallation,
+restauration, dossier de protection 096, 0.9.6 installée.
+**Résultat : STOP à l'étape 4** (deux captures `style-global/06-reglages-4-data-*` affichent un chemin absolu avec
+le nom du compte Windows). Rien de public. GO D-320 consommé par ce STOP; une nouvelle tentative exige un nouvel
+ordre.
+
+# D-319 — GO explicite du propriétaire : version 0.9.6, fusion, build, sauvegarde et UNE installation locale (PM-RELEASE-096-LOCAL-INSTALL-024)
+
+**2026-11-19, Québec.** Le propriétaire donne directement, dans la session Claude Code, un GO explicite en 6 phases :
+**0** inscrire ce mandat; **1** fusionner `work/ui-premium-look` dans `work/pm-v1-lotj-final-readiness-windows`
+(`git merge --no-ff`; conflits permis seulement dans `.orchestrator/` et `AGENTS.md`, en gardant l'historique D-315
+« audit 019 clos » ET l'état D-318/D-319; tout conflit de code ou de test = STOP) et retirer de `RESULT.md` le nom
+du deck signalé; **2** passer l'application en **0.9.6** (pyproject, `__init__`, installateur, docs de la version
+courante; identifiants de format, de rapport ou de schéma laissés et listés), section `CHANGELOG.md` 0.9.6 pour un
+joueur, tests qui verrouillent la version, porte locale complète verte, push de la branche fusionnée vers
+`origin` (PokeMind-dev, privé) seulement; **3** build et QA comme 017 phases A et B (QA Qt native synthétique,
+dossiers inédits, `PokeMind-Setup-0.9.6.exe` au même AppId de production, non signé, SHA256, scan CLEAN, fumée de
+l'EXE figé sur racines synthétiques, QA Inno avec un installateur QA séparé à AppId inédit); **4** protection des
+données comme 017 phase C (PokeMind fermé, jamais de kill; UNE nouvelle sauvegarde complète vérifiée avec
+`data_archive` dans un dossier neuf — **GO explicite malgré l'ancienne règle « aucune nouvelle sauvegarde »** — et
+une copie complète vérifiée de l'installation 0.9.5; rien d'ancien supprimé ou remplacé); **5** UNE seule
+installation du Setup de production (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`, sans `/RELAUNCH`, sans
+élévation), tentative notée localement avant lancement, vérifications après, aucun retry ni restauration
+automatique; **6** rapport assaini, orchestration, push du rapport, arrêt.
+**Toute porte rouge = STOP immédiat avec rapport**, jamais de contournement ni de deuxième tentative.
+**Publication NON autorisée** : aucun tag, aucune release, rien vers le dépôt public `Sd-tech-Sol/PokeMind`.
+Procédure de référence : `archive/2026-11/NEXT_PROMPT_CONSUMED_017_2026-11-14.md` (phases A à E), adaptée à 0.9.6
+et au source fusionné.
+**Extension du 2026-11-19 (option a, GO explicite du propriétaire)** après le STOP en phase 3 (Vue d'ensemble qui
+déborde à 1100 × 700 en français, Coach ancré) : **étape 1**, correction de mise en page seulement (sans réduire la
+police ni le demi-gras : passages à la ligne, largeurs minimales réduites, rangée Saison sur deux lignes si besoin),
+vérification des 6 autres pages, test Qt qui échoue sur une barre horizontale ou un widget coupé à 1100 × 700 (FR et
+EN, Coach ancré, vraie police Segoe UI si disponible), porte complète verte, push privé; **étape 2**, reprise du
+mandat à la phase 3 avec les mêmes règles (QA Qt native complète entièrement verte, sinon STOP sans nouvelle
+correction). L'EXE embarque le SHA source corrigé.
+**Seconde extension du 2026-11-19 (GO explicite du propriétaire)** après le STOP à la reprise de la phase 3
+(plantage natif à 100 %, Deck Lab › Statistiques, violation d'accès pendant le ramasse-miettes) : **étape 1**,
+reproduire avec faulthandler, tester la piste `Job` (`QRunnable` détruit par le pool à la fin de `run()` alors que
+Python le garde : `setAutoDelete(False)`, Job libéré seulement dans `job_finished`), revoir les autres objets Qt
+réellement dangereux, sinon STOP sans correction à l'aveugle; preuve : QA native complète sans plantage 5 fois de
+suite à 100 % et à 125 %, et un test qui soumet et termine des centaines de Jobs dans les deux pools en changeant de
+page puis appelle `gc.collect()`; porte complète verte, push privé; **étape 2**, reprise de la phase 3, mêmes règles.
+
+# D-318 — GO direct du propriétaire : pipeline autonome en 8 phases (PM-UI-PIPELINE-023)
+
+**2026-11-18, Québec.** Le propriétaire donne directement, dans la session Claude Code, un GO explicite pour un
+**pipeline autonome** sur `work/ui-premium-look`, sans question pendant son absence; en cas d'ambiguïté, l'option la
+plus prudente et la plus simple, notée dans `RESULT.md`. Il nomme ce mandat « D-317 »; ce numéro étant déjà pris par
+022, il est inscrit sous **D-318** (choix prudent). Le propriétaire déclare aussi que **l'audit de 019 est passé et
+clos** (il cite D-315) : `STATE.json`, `NEXT_ACTION.md` et `AGENTS.md` sont corrigés en ce sens.
+**Phases :** 1 onglet fermable (bouton ×); 2 images de cartes (préchargement depuis le cache disque existant, cache
+mémoire borné, silhouette et fondu); 3 beigne et anneau; 4 Deck actif (jamais un deck adverse); 5 amorces du Coach
+par page; 6 identification probable de l'archétype adverse (hors ligne, déterministe, calcul à la lecture, aucune
+écriture; diagnostic en lecture seule de la base locale ne sortant que des comptes agrégés); 7 textes plus riches
+construits sur les vraies données; 8 relecture indépendante par un sous-agent, contrôle de confidentialité,
+orchestration, puis `git push -u origin work/ui-premium-look` (PokeMind-dev, privé) **et rien d'autre**.
+**Règles :** commits ciblés et porte locale complète par phase; trois échecs → `git revert` de la phase. Interdits :
+dépendance, téléchargement supplémentaire, écriture dans la base personnelle, sauvegarde, fusion, tag, publication,
+version, dépôt public. Données synthétiques seulement. Règles de l'app conservées (aucun taux global inféré, n pour
+toute statistique, aucune causalité, mises en garde dans ⓘ, thème clair, 1100 × 700, 125 %, mouvement réduit).
+
+# D-317 — GO direct du propriétaire : appliquer les 10 points de la critique du look premium (PM-UI-CRITIQUE-022)
+
+**2026-11-18, Québec.** Après une critique en lecture seule de `work/ui-premium-look` comparée à la maquette
+`references/decklab-premium-target.png` (10 points, plus une liste de ce qui n'est pas faisable proprement en Qt
+Widgets), le propriétaire donne directement, dans la session Claude Code, un GO explicite pour appliquer les 10
+points sur la même branche. **Apparence et mise en page seulement** : aucune logique, aucun service, aucune
+donnée. Les éléments « pas faisables proprement en Qt Widgets » restent hors périmètre.
+**Lot A** (un commit par point) : bulles du Coach; un seul contour lumineux par panneau; échelle typographique et
+casse normale; un seul style de tableau; un seul gabarit de tuile et un seul format de date. **Lot B** (un commit
+par point) : titre du deck et bouton « Changer de deck » dans Deck Lab (le sélecteur garde toutes ses fonctions);
+galerie à cartes nues; tableaux à la hauteur de leur contenu et détails de Combats masqués sans adversaire choisi;
+un seul bouton plein par page, 36 px, Copier et Exporter dans le bandeau **si cela tient à 1100 px, sinon les
+laisser et le dire**; bannière d'environ 90 px et « À travailler » sous les tuiles.
+**Vérifications exigées :** thème clair, 1100 × 700 et 125 % sans régression; contraste (bordures à 30 %, notes
+atténuées); mouvement réduit inchangé. Porte locale complète verte, planches avant/après, orchestration, puis
+arrêt. **Rien n'est poussé.**
+**Leçons retenues :** une flèche de tri Qt stylée et placée à droite efface le titre de la colonne triée; la
+placer au-dessus du titre garde l'alignement. Le `border-radius` d'un QLabel enfant ne s'est pas dessiné ici :
+une pastille arrondie se peint. Un carreau dont la hauteur d'image change doit activer sa mise en page tout de
+suite, sinon son nom reste mal placé un tour de boucle d'événements.
+
+# D-316 — GO direct du propriétaire : simplification des textes et de la mise en page, mode avancé (PM-UI-SIMPLIFICATION-021)
+
+**2026-11-16, Québec.** Après les étapes 3 et 4 de D-315, le propriétaire regarde l'application avec ses vraies
+cartes : « le look est bon, mais c'est trop chargé pour quelqu'un qui l'ouvre la première fois ». Il donne
+directement, dans la session Claude Code, un GO explicite pour une nouvelle étape sur `work/ui-premium-look`.
+**Périmètre élargi :** `translations.py` (FR et EN) et les tests qui verrouillent ces textes, en plus de D-315.
+**Règles :** une seule phrase d'aide visible par page; mots de joueur, pas de jargon (corpus, n=, bilan
+descriptif, causalité, représentativité, batch); les mises en garde ne sont pas supprimées, elles vont dans une
+infobulle derrière un bouton ⓘ à côté du titre concerné; rien n'est affiché pour une valeur vide ou inconnue;
+l'avis de confidentialité du Coach reste visible, en clair.
+**Seul changement de comportement autorisé : le « Mode avancé »** (Réglages › Général, décoché par défaut) qui
+affiche ou retire la page Terminal du menu, enregistré comme les autres préférences; un terminal en cours n'est
+jamais arrêté quand on décoche l'option. À part cela : aucune logique, aucun service, aucune donnée modifiés.
+**Livraison :** un commit pour les textes, un pour la mise en page, un pour le mode avancé; porte locale complète
+verte; planches avant/après; mise à jour de l'orchestration; puis arrêt. **Rien n'est poussé.**
+**Leçon retenue (bogue du menu) :** un délégué qui peint hors du rectangle de son élément laisse des traces,
+parce que Qt ne repeint que les éléments modifiés; peindre limité à l'élément, ou repeindre toute la vue.
+
+# D-315 — GO direct du propriétaire : refonte visuelle « look premium » (PM-UI-PREMIUM-LOOK-020)
+
+**2026-11-16, Québec.** Le propriétaire donne directement, dans la session Claude Code, un GO explicite pour une
+**refonte visuelle seulement** de l'interface vers la maquette `decklab-premium-target.png`, sur la nouvelle branche
+`work/ui-premium-look` (la branche de base n'est pas touchée). Ce GO direct tient lieu de mandat : il n'y a pas de
+`NEXT_PROMPT.md`, et il ne remet pas en cause l'audit ChatGPT de 019, toujours attendu.
+**Périmètre :** `theme.py`, `widgets.py`, mise en page de `window.py`, dans la vraie `MainWindow`; un commit par
+étape avec captures avant/après synthétiques. Le propriétaire autorise aussi (même jour) l'assombrissement des
+jetons du **thème sombre** de `palette.json`; le thème clair ne change pas.
+**Interdits :** services, base de données, Coach, logique; fonctions ou chiffres inventés de la maquette;
+illustration Pokémon dessinée; lecture de données personnelles; installation, build, publication, push sans ordre.
+**Preuve :** porte locale verte sur la suite complète avant tout push. Arrêt après l'étape 4 pour le propriétaire.
+
+# D-315 (branche de publication) — Audit indépendant 019 favorable et clôture de publication PokeMind v0.9.5
+
+**2026-11-15, Québec.** ChatGPT vérifie directement les objets GitHub (branch `main`, tag `v0.9.5`, release `prerelease=true/draft=false`, assets et digest GitHub, commit public parent `5629ae2`, arbre public identique au commit de préparation privé `f223aaa44f058afd32163a5d57d59b9a74ae70b4`, unique correction ciblée du test de métadonnées; `src/`, `scripts/`, `packaging/` inchangés depuis la source 016). Rapport privé 019 au commit `8084a91fdd2d9f84d7e0bd8dfc8a6ff5bcbd5c90` conforme, prompt consommé. Évidence complète : `.orchestrator/VERIFICATION_PM-V1-PUBLIC-RELEASE-019_2026-11-15.md`.
+
+**Verdict : `VERIFIED_GITHUB_RELEASE_095_AND_SOURCE_SCOPE`**, version 0.9.5 effectivement publiée en **préversion**, installateur Windows non signé, SHA API GitHub identique à celui rapporté depuis le candidat 017. **Limites** : 1885/0/3 ×2, analyse confidentialité et archives/intégrité Windows proviennent du rapport Codex; ChatGPT n'a ni réexécuté Windows/tests ni retéléchargé le binaire/checksum; 0 GitHub CI. Pas de constat de défaut restant nécessitant un nouveau mandat.
+
+V1 fonctionnelle **acceptée par déclaration propriétaire** et publication v0.9.5 terminée. **AUCUNE tâche suivante par défaut**, `NEXT_PROMPT` consommé; pas de v1.0.0, V2, nouveau build/Setup, backup, hotfix, release ou accès données par inférence. Nouveau problème = nouvelle décision et GO précis.
+
+*Note de fusion (D-319, 2026-11-19) : ce numéro D-315 a aussi été attribué, sur `work/ui-premium-look`, à la refonte « look premium » (PM-UI-PREMIUM-LOOK-020). Les deux décisions sont conservées.*
+
 # D-314 — Arbitrage indépendant STOP 018 et nouveau mandat borné 019
 
 **2026-11-15, Québec.** ChatGPT a vérifié directement sur GitHub le rapport `529f764`, le diff des deux commits après activation 018, le test `tests/test_version_metadata.py`, le CHANGELOG et la release publique `v0.9.3`. **Le STOP de Codex 018 est justifié** : échec d'une assertion littérale de métadonnées devenu incompatible avec l'en-tête daté de préversion préparé dans le commit documentaire 018 `2eff8ca`. Codex rapporte **1884 tests réussis / 1 échoué / 3 ignorés** dans une porte complète isolée; ChatGPT n'a pas rejoué pytest ni inspecté le PC Windows. Aucun code applicatif changé, aucun export ni push public tenté, aucune donnée personnelle touchée selon agent. Audit détaillé : `.orchestrator/VERIFICATION_PM-V1-PUBLIC-RELEASE-018_STOP_2026-11-15.md`.

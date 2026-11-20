@@ -4,8 +4,10 @@ from PySide6.QtCore import Qt, Signal, QRectF, Property, QPropertyAnimation, QEa
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 from PySide6.QtWidgets import (QWidget, QFrame, QLabel, QVBoxLayout, QHBoxLayout,
                               QComboBox, QTabWidget, QSizePolicy, QToolButton)
-from pokemind.desktop.theme import colors
-from pokemind.desktop.insights import project_statistics, project_public_stats, PUBLIC_REFRESH
+from pokemind.desktop.theme import colors, idea_font
+from pokemind.desktop.insights import (project_statistics, project_public_stats, PUBLIC_REFRESH, RECORD_CAVEAT,
+                                       OPPONENT_CAVEAT, games_text, opponent_name, long_date, period_text)
+from pokemind.desktop.widgets import BAR_HEIGHT, BAR_ROLES, InfoButton, paint_bar, title_row
 from pokemind.desktop.i18n import QWidget, QFrame, QLabel, QComboBox, QTabWidget, QPushButton, Painter as QPainter
 
 
@@ -56,7 +58,8 @@ class CountChart(QWidget):
         if row.get('description'):
             return row['description']
         if self.grouped:
-            return row['label'] + ' : ' + J(', ',(str(v) + ' ' + label for v, label in zip(values, self.series))) + '; n=' + str(sum(values))
+            return (opponent_name(row['label']) + ' : ' + J(', ', (str(v) + ' ' + label for v, label in zip(values, self.series) if v))
+                    + ' · ' + games_text(sum(values)))
         return row['label'] + ' : ' + str(sum(values))
 
     def set_theme(self, theme):
@@ -84,6 +87,7 @@ class CountChart(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor(c['surface']))
         self.regions = []
+        p.setFont(idea_font(self.font()))  # every word and number of the chart (owner, 2026-11-19)
         if not self.rows:
             p.setPen(QColor(c['muted']))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, display(self.empty))
@@ -99,24 +103,23 @@ class CountChart(QWidget):
             p.drawLine(round(x), top, round(x), bottom)
             p.setPen(QColor(c['muted']))
             p.drawText(QRectF(x - 16, bottom + 5, 32, 19), Qt.AlignmentFlag.AlignCenter, str(tick))
-        series = [c['blue'], c['red'], c['yellow']] if self.grouped else [c['blue']]
+        # The one bar of the application (paint_bar, as in Combats), its labels like the Coach's idea buttons.
+        roles = BAR_ROLES if self.grouped else ('blue',)
+        numbers = words = idea_font(self.font())
         for index, row in enumerate(self.rows):
             y = top + index * height
             hit = QRectF(0, y, self.width(), height)
             self.regions.append(hit)
             if index == self.hovered:
                 p.fillRect(hit, QColor(c['alternate']))
+            p.setFont(words)
             p.setPen(QColor(c['text']))
-            label = display(T('Famille inconnue') if row['label'] == 'unknown' else row['label'])
+            label = display(opponent_name(row['label']))
             label = p.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, left - 17)
             p.drawText(QRectF(8, y, left - 14, height), Qt.AlignmentFlag.AlignVCenter, label)
-            x = float(left)
-            for value, color in zip(row['values'], series):
-                length = width * value / maximum * self._reveal
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(color))
-                p.drawRoundedRect(QRectF(x, y + height * .26, length, height * .48), 3, 3)
-                x += length
+            paint_bar(p, QRectF(left, y + (height - BAR_HEIGHT) / 2, width, BAR_HEIGHT), row['values'], self.theme,
+                      scale=maximum, reveal=self._reveal, roles=roles)
+            p.setFont(numbers)
             p.setPen(QColor(c['text']))
             p.drawText(QRectF(left + width + 7, y, right - 7, height), Qt.AlignmentFlag.AlignVCenter, str(sum(row['values'])))
         if self.hasFocus():
@@ -165,7 +168,8 @@ class StatisticsPanel(QFrame):
         layout = QVBoxLayout(self)
         heading = QLabel(T('Tes statistiques, en images'))
         heading.setObjectName('sectionTitle')
-        layout.addWidget(heading)
+        self.info = InfoButton(RECORD_CAVEAT)  # the cautions of the tab shown, instead of a printed note
+        layout.addLayout(title_row(heading, self.info))
         controls = QHBoxLayout()
         controls.addWidget(QLabel(T('Vues détaillées')))
         self.scope_filter = QComboBox()
@@ -190,10 +194,6 @@ class StatisticsPanel(QFrame):
         self.legend = QLabel()
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
-        self.note = QLabel()
-        self.note.setWordWrap(True)
-        self.note.setObjectName('muted')
-        layout.addWidget(self.note)
         self.refresh()
 
     def set_report(self, report):
@@ -210,18 +210,24 @@ class StatisticsPanel(QFrame):
     def describe(self, *args):
         index, model = self.tabs.currentIndex(), self.model
         self.scope_filter.setEnabled(index != 0)
-        self.summary.setText(T('Corpus conservé : n=') + str(model['total']) +
-            (T(' · vue sélectionnée : n=') + str(model['scope_n']) + T(' · détails disponibles : ') + str(model['details_n']) if index else T(' · bilan descriptif, taux global inconnu')))
+        # The donut already says how many games there are; the other tabs say how many they can detail.
+        self.summary.setText(games_text(model['scope_n']) + ' · ' + str(model['details_n'])
+                             + T(' avec détails', en=' with details') if index else '')
         if not self.report:
             self.summary.setText(T('Aucun rapport conservé disponible; aucun résultat calculé.'))
-        notes = (T('Résultats du corpus enregistré; représentativité non établie.'),
-                 T('Jusqu’à 8 familles affichées. Classification hypothétique; cliquer une barre pour ouvrir les combats.'),
-                 T('Dernier tour visible dans chaque trace, pas la durée complète. Les tours inconnus restent séparés.'),
-                 T('Occurrences consignées dans les traces disponibles, pas toutes les actions jouées. Une prise peut concerner plusieurs Récompenses.'))
-        self.note.setText(notes[index])
+        self.summary.setVisible(bool(self.summary.text()))
+        notes = (T('Ce n’est pas ton taux de victoire global : seules les parties ajoutées à PokeMind comptent.'),
+                 OPPONENT_CAVEAT + ' ' + T('Jusqu’à 8 decks adverses affichés; clique une barre pour ouvrir ses combats.'),
+                 T('Dernier tour visible dans chaque journal, pas la durée complète de la partie.'),
+                 T('Actions notées dans les journaux, pas toutes les actions jouées. '
+                   'Une prise peut concerner plusieurs Récompenses.'))
+        self.info.set_tip(RECORD_CAVEAT + '\n' + notes[index])
         c = colors(self.theme)
+        unknown = bool((self.report or {}).get('outcomes', {}).get('unknown'))  # no yellow in the key without such a game
         self.legend.setText(J(' · ',('<span style="color:' + c[color] + '">● ' + label + '</span>'
-            for color, label in (('blue',T('Victoires')), ('red',T('Défaites')), ('yellow',T('Issues inconnues'))))) if index in (0, 1) else T('Effectifs absolus · survoler pour le détail'))
+            for color, label in (('blue',T('Victoires')), ('red',T('Défaites')), ('yellow',T('Sans résultat', en='No result')))
+            if color != 'yellow' or unknown)) if index in (0, 1) else '')
+        self.legend.setVisible(index in (0, 1))
 
     def set_theme(self, theme):
         self.theme = theme
@@ -283,11 +289,7 @@ class PublicStatsPanel(QFrame):
         layout.addWidget(self.rate_title)
         kpi = QHBoxLayout()
         self.value = QLabel('—')
-        font = QFont(self.font())
-        font.setPointSize(28)
-        font.setBold(True)
-        self.value.setFont(font)
-        self.value.setStyleSheet('font-size: 32px; font-weight: 700;')
+        self.value.setObjectName('statValue')  # a large number: its size is in the style sheet
         self.value.setTextInteractionFlags(selectable)
         kpi.addWidget(self.value)
         self.sample = QLabel()
@@ -381,7 +383,7 @@ class PublicStatsPanel(QFrame):
         self.mode.blockSignals(True)
         self.mode.clear()
         for key, n in model['modes']:
-            self.mode.addItem(key + ' · n=' + str(n), key)
+            self.mode.addItem(key + ' · ' + str(n) + T(' matchs', en=' matches'), key)
         index = self.mode.findData(model['mode'])
         self.mode.setCurrentIndex(index if index >= 0 else 0)
         self.mode.setEnabled(self.mode.count() > 1)
@@ -414,12 +416,12 @@ class PublicStatsPanel(QFrame):
         number = f'{fraction * 100:.1f}' if fraction is not None else None
         self.rate_title.setText(T('Taux de victoire PUBLIC ', en='PUBLIC win rate ') + (model['mode'] or 'BO1 / BO3'))
         self.value.setText(T(number.replace('.', ',') + ' %', en=number + '%') if number is not None else '—')
-        self.sample.setText('n=' + str(data['n']) + T(' matchs', en=' matches') if 'n' in data else T('n inconnu', en='n unknown'))
+        self.sample.setText(str(data['n']) + T(' matchs', en=' matches') if 'n' in data else '')
         self.availability.setText(T('Données insuffisantes', en='Insufficient data') if fraction is None
                                   else T('Taux de l’archétype, pas de tes 60 cartes ni de tes résultats.',
                                          en='Archetype rate, not your exact 60 cards or your results.'))
         window = (self.view or {}).get('window') or {}
-        self.period.setText('Limitless · ' + str(window.get('since', '—')) + ' → ' + str(window.get('until', '—')))
+        self.period.setText('Limitless · ' + period_text(window.get('since'), window.get('until')))
         self.matchups.set_rows(model['matchup_rows'])
         self.meta.set_rows(model['meta_rows'])
         self.history.setText(model['history'])
@@ -427,7 +429,7 @@ class PublicStatsPanel(QFrame):
         outcome = ((self.view or {}).get('refresh_outcome') or refresh.get('last_outcome') or {}).get('status')
         message = model['refresh'] or (PUBLIC_REFRESH.get(outcome, str(outcome)) if outcome else '')
         stamp = (self.view or {}).get('last_success_at')
-        self.status.setText(self._status_message or message or (T('Instantané : ', en='Snapshot: ') + str(stamp)[:10] if stamp
+        self.status.setText(self._status_message or message or (T('Instantané : ', en='Snapshot: ') + long_date(stamp) if stamp
                                        else T('Aucun instantané public', en='No public snapshot')))
         c = colors(self.theme)
         if self.tabs.currentIndex() == 1:

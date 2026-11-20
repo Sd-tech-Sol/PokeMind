@@ -164,7 +164,8 @@ def launch(root=None):
     set_language(system_language())  # dialogs before the window; the window then applies the saved choice
     app.setApplicationName('PokeMind')
     app.setOrganizationName('PokeMind Local')
-    from pokemind.desktop.theme import logo_icon
+    from pokemind.desktop.theme import apply_application_font, logo_icon
+    apply_application_font(app)  # the idea buttons' text, from the first dialog on (owner, 2026-11-19)
     app.setWindowIcon(logo_icon())
     selected = Path(root).absolute() if root else Path.cwd()
     frozen = getattr(sys, 'frozen', False)

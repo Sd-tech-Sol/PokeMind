@@ -15,11 +15,11 @@
   },
   "themes": {
     "dark": {
-      "background": "#07142F",
-      "sidebar": "#081E4A",
-      "surface": "#102652",
-      "alternate": "#16356D",
-      "input": "#081C3E",
+      "background": "#030A1F",
+      "sidebar": "#06163A",
+      "surface": "#0A1B41",
+      "alternate": "#12305F",
+      "input": "#050F2A",
       "text": "#F7FAFF",
       "muted": "#C3D8F4",
       "border": "#335A8E",
@@ -84,6 +84,7 @@
     "Utiliser la même sémantique couleurs dans les deux thèmes: victoire=bleu, défaite=rouge, inconnu=or.",
     "Bouton primaire bleu; rouge réservé aux erreurs et actions destructives.",
     "Tous les composants et dialogues, HTML de chat, tableaux et graphiques suivent le thème.",
-    "Tester la lisibilité des contrastes avec les fonds réels; ajustements documentés autorisés."
+    "Tester la lisibilité des contrastes avec les fonds réels; ajustements documentés autorisés.",
+    "2026-11-16 (propriétaire) : fonds du thème foncé assombris vers la maquette Deck Lab premium (bleu nuit presque noir); thème clair inchangé."
   ]
 }

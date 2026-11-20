@@ -25,8 +25,8 @@ La liste enfreint une règle de construction : {problems}.|||The list breaks a d
 Liste refusée ({code}).|||List refused ({code}).
 Mon deck · référence personnelle entrée par moi|||My deck · personal reference I entered
 Mon deck · référence personnelle|||My deck · personal reference
-TON COMPAGNON TCG|||YOUR TCG COMPANION
-TON COACH POKEMIND|||YOUR POKEMIND COACH
+Ton compagnon TCG|||Your TCG companion
+Ton coach PokeMind|||Your PokeMind coach
 TON AVENTURE, EN MÉMOIRE|||YOUR JOURNEY, REMEMBERED
 Mémoire locale · conseils sourcés\nV1 · audit requis|||Local memory · sourced advice\nV1 · audit required
 Replier le menu|||Collapse menu
@@ -60,7 +60,7 @@ date d’effet annoncée :|||announced effective date:
  à ||| to\u0020
 Ton tableau de bord|||Your dashboard
 Une partie à la fois. Un peu plus loin à chaque combat.|||One game at a time. A little further with every battle.
-CENTRE D’ENTRAÎNEMENT|||TRAINING CENTER
+Centre d’entraînement|||Training center
 À toi de jouer.|||Your turn to grow.
 Ton équipe. Tes combats. Ta progression.|||Your team. Your battles. Your progress.
 Parties analysées|||Games analyzed
@@ -79,18 +79,11 @@ Limite de 100 favoris atteinte.|||The limit of 100 favorites has been reached.
 Favori|||Favorite
 Priorités de travail|||Learning priorities
 Choisis une famille pour retrouver les parties et distinguer les observations des hypothèses.|||Choose a family to find its games and separate observations from hypotheses.
-CORPUS ENREGISTRÉ · Statistiques des parties conservées. Les défaites guident l’apprentissage; le taux de victoire global reste inconnu tant que la représentativité n’est pas établie.|||RECORDED CORPUS · Statistics for saved games. Losses guide learning; the overall win rate remains unknown until representativeness is established.
 Actualiser les combats locaux|||Refresh local battles
 Arrêter la consultation / analyse|||Stop lookup / analysis
 Classement descriptif des défaites enregistrées · familles hypothétiques · n toujours visible.|||Descriptive ranking of recorded losses · hypothetical families · sample size always visible.
-Filtrer les familles adverses…|||Filter opponent families…
-Famille / signature|||Family / signature
-Choisis une famille et une partie pour voir sa fiche.|||Choose a family and a game to see its details.
 Discuter de ce matchup avec PokeMind|||Discuss this matchup with PokeMind
 Dans mes combats, quelles situations travailler contre|||In my battles, which situations should I work on against
-? Cite n, les sources et ce qui reste inconnu.|||? Include sample size, sources, and what remains unknown.
-Aucune partie sélectionnée.|||No game selected.
-Versions exactes et modèles PUBLIC · collection, crédits et légalité distincts.|||Exact versions and PUBLIC references · collection, credits, and legality are separate.
 Ajouter ou retirer ce deck des favoris|||Add or remove this deck from favorites
 Chargement des références…|||Loading references…
 Galerie · 60/60|||Gallery · 60/60
@@ -130,8 +123,6 @@ Image absente ou non autorisée; texte local conservé.|||Image missing or not a
 TCGdex · illustration Pokémon · cache local|||TCGdex · Pokémon artwork · local cache
 Usage personnel local, aucune redistribution.|||Local personal use, no redistribution.
 Énergies|||Energy
-ÉNERGIE|||ENERGY
-DRESSEUR|||TRAINER
 Dresseurs|||Trainers
 cartes|||cards
 Agrandir|||Enlarge
@@ -153,7 +144,6 @@ placements|||placements
 compositions distinctes. Popularité et placements ne prouvent pas un matchup.|||distinct compositions. Popularity and placements do not prove a matchup advantage.
 Familles publiées|||Published families
 Observations, statistiques et hypothèses|||Observations, statistics, and hypotheses
-Les observations sont conservées. Les hypothèses se révisent. Aucun réentraînement de modèle.|||Observations are saved. Hypotheses can be revised. No model retraining.
 Journal Learning Loop absent ou indisponible; rapport conservé consultable.|||Learning Loop journal missing or unavailable; the saved report can be viewed.
 Événements observés :|||Observed events:
 parties; faits préservés.|||games; facts preserved.
@@ -161,7 +151,6 @@ Bilan descriptif du corpus sélectionné; aucune causalité.|||Descriptive summa
 Base à tester :|||Reference to test:
 référence60 dans Deck Lab|||60-card reference in Deck Lab
 Avantage de matchup inconnu.|||Matchup advantage unknown.
-Un changement à la fois; aucune amélioration causale démontrée.|||One change at a time; no causal improvement demonstrated.
 Plan de test ou classification révisable. Version jouée et effet causal inconnus.|||Revisable test plan or classification. Played version and causal effect unknown.
 Révision datée|||Revision dated
 préservée dans l’historique.|||preserved in history.
@@ -195,11 +184,9 @@ Codex · session CLI|||Codex · CLI session
 Claude Code · session CLI|||Claude Code · CLI session
 Ollama · local|||Ollama · local
 Modèle Ollama installé|||Installed Ollama model
-Connexion au premier message · outils selon ta demande|||Connects on first message · tools according to your request
 Contexte cloud : connaissances publiques; statistiques sur opt-in dans Réglages.|||Cloud context: public knowledge; statistics require opt-in in Settings.
 Contexte cloud :|||Cloud context:
 statistiques anonymisées et connaissances publiques|||anonymized statistics and public knowledge
-Historique des discussions|||Conversation history
 Historique|||History
 Sources regroupées|||Grouped sources
 Sources de la discussion|||Conversation sources
@@ -225,9 +212,6 @@ Les copies gardées par Codex ou Claude dans leurs propres dossiers ne sont pas 
 Suppression impossible; discussion conservée.|||Could not delete; conversation kept.
 Discussion supprimée.|||Conversation deleted.
 Discussion supprimée; index des discussions non enregistré.|||Conversation deleted; conversation index not saved.
-PokeMind · questions, sources et hypothèses.|||PokeMind · questions, sources, and hypotheses.
-Choisis une discussion ou pose une question.|||Choose a conversation or ask a question.
-TOI|||YOU
 Journal TCG Live fourni pour traitement local.|||TCG Live log provided for local processing.
 Joindre des journaux TCG Live|||Attach TCG Live logs
 Journaux texte (*.txt *.log)|||Text logs (*.txt *.log)
@@ -249,9 +233,6 @@ Journal refusé : fichier inaccessible, modifié, redirigé ou import déjà occ
 Journal trop volumineux : maximum 2 Mo par fichier.|||Log too large: maximum 2 MB per file.
 Le fichier est encore en cours d’écriture; réessaie une fois terminé.|||The file is still being written; try again when finished.
 Résultat reconnu :|||Recognized result:
-Statistiques actualisées : n=|||Statistics updated: n=
-Nouvelles parties uniques dans le corpus :|||New unique games in the corpus:
-défaites. Taux global inconnu.|||losses. Overall rate unknown.
 validation locale en cours. Aucun envoi au moteur IA.|||local validation in progress. Nothing sent to the AI engine.
 Analyse locale en cours; ton message partira tout seul dès qu’elle sera finie.|||Local analysis in progress; your message will be sent as soon as it ends.
 Outils PokeMind · consultation|||PokeMind tools · lookup
@@ -265,9 +246,6 @@ Pour que le coach analyse cette partie : Réglages › Coach IA, coche l’envoi
 Deck adverse reconstruit · référence personnelle, ancien enregistrement du coach|||Rebuilt opponent deck · personal reference, older coach save
 Deck ajouté à Mes decks :|||Deck added to My decks:
 Codex et Claude Code tels quels, comme dans une fenêtre PowerShell, dans le dossier du projet. Plusieurs onglets possibles.|||Codex and Claude Code as they are, like in a PowerShell window, in the project folder. Several tabs allowed.
-Accès complet : Codex (yolo) et Claude (toutes permissions) lisent et modifient tous les fichiers du projet, y compris data/local, sans demander d’approbation. Ctrl+V colle · Ctrl+C copie la sélection (sinon interrompt) · clic droit copie ou colle · Maj+Pg↑ remonte.|||Full access: Codex (yolo) and Claude (all permissions) read and modify every project file, including data/local, without asking for approval. Ctrl+V pastes · Ctrl+C copies the selection (otherwise interrupts) · right-click copies or pastes · Shift+PgUp scrolls back.
-Codex · yolo|||Codex · yolo
-Claude Code · toutes permissions|||Claude Code · all permissions
 Terminal indisponible : pywinpty et pyte sont requis (Windows).|||Terminal unavailable: pywinpty and pyte are required (Windows).
 Terminal non démarré :|||Terminal not started:
 Terminal ouvert :|||Terminal opened:
@@ -311,12 +289,10 @@ Chargement du rapport conservé…|||Loading saved report…
 Analyse des journaux locaux…|||Analyzing local logs…
 Lecture du rapport conservé…|||Reading saved report…
 fichiers traités · analyse locale en cours|||files processed · local analysis in progress
-Analyse conservée au|||Analysis saved as of
 mémoire locale|||local memory
 Aucun rapport conservé. Ajoute tes journaux dans data/local/battle_logs, puis utilise Actualiser.|||No saved report. Add your logs to data/local/battle_logs, then use Refresh.
 Tes données apparaîtront ici après la première analyse locale. Aucun résultat inventé.|||Your data will appear here after the first local analysis. No invented results.
 Aucun rapport disponible|||No report available
-Rapport local prêt · aucun taux de victoire global inféré|||Local report ready · no overall win rate inferred
 Combats actualisés automatiquement|||Battles refreshed automatically
 nouvelles parties uniques.|||new unique games.
 Service indisponible|||Service unavailable
@@ -356,9 +332,6 @@ Terminé|||Done
 arrêt demandé|||stop requested
 Refus ou analyse en attente|||Refused or analysis pending
 Activité du coach et temps écoulé|||Coach activity and elapsed time
-Répartition du corpus enregistré et priorités par défaites; taux global inconnu|||Recorded corpus distribution and loss priorities; overall rate unknown
-Corpus enregistré · taux global inconnu|||Recorded corpus · overall rate unknown
-Défaites par famille|||Losses by family
 Victoires|||Wins
 victoires|||wins
 Victoire|||Win
@@ -387,20 +360,13 @@ défaites et|||losses and
 causalité inconnue.|||causality unknown.
 causalité non prouvée.|||causality not proven.
 Tes statistiques, en images|||Your statistics, visualized
-Résultats du corpus enregistré; représentativité non établie.|||Recorded corpus results; representativeness not established.
-Jusqu’à 8 familles affichées. Classification hypothétique; cliquer une barre pour ouvrir les combats.|||Up to 8 families shown. Hypothetical classification; click a bar to open battles.
-Dernier tour visible dans chaque trace, pas la durée complète. Les tours inconnus restent séparés.|||Last visible turn in each trace, not the full game length. Unknown turns remain separate.
-Occurrences consignées dans les traces disponibles, pas toutes les actions jouées. Une prise peut concerner plusieurs Récompenses.|||Occurrences recorded in available traces, not every action played. One prize-taking event may involve several Prize cards.
 Effectifs observés par famille|||Observed counts by family
 Effectifs des traces disponibles|||Available trace counts
 Aucune donnée disponible|||No data available
 Aucune trace disponible pour cette vue.|||No traces available for this view.
-Famille inconnue|||Unknown family
 Vues détaillées|||Detailed views
 Tous les résultats|||All outcomes
 Aucun rapport conservé disponible; aucun résultat calculé.|||No saved report available; no result calculated.
-Effectifs absolus · survoler pour le détail|||Absolute counts · hover for details
-Corpus conservé : n=|||Saved corpus: n=
 bilan descriptif, taux global inconnu|||descriptive summary, overall rate unknown
 détails disponibles :|||details available:
 vue sélectionnée : n=|||selected view: n=
@@ -421,9 +387,7 @@ K.O. observé|||Observed Knock Out
 Récompense prise|||Prize taken
 Aucun événement détaillé disponible dans ce rapport.|||No detailed events available in this report.
 Traces disponibles seulement. Les intervalles et les informations cachées ne sont pas reconstruits.|||Available traces only. Gaps and hidden information are not reconstructed.
-Rôle inconnu|||Unknown role
 Tour inconnu|||Unknown turn
-Tour ?|||Turn ?
 Tour 13 et +|||Turn 13 and up
 Tours 1–4|||Turns 1–4
 Tours 5–8|||Turns 5–8
@@ -596,8 +560,6 @@ Ramener|||Dock
 Remettre la discussion à droite|||Put the conversation back on the right
 Écris ta question ou colle ton journal TCG Live…|||Type your question or paste your TCG Live log…
 Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne|||Enter to send · Shift+Enter for a new line
-Accès complet · données privées accessibles|||Full access · private data reachable
-Standard · données privées accessibles|||Standard · private data reachable
 Le coach répond encore; ton message reste prêt ici.|||The coach is still answering; your message stays ready here.
 Actualiser mes combats au démarrage|||Refresh my battles at startup
 Afficher les illustrations publiques TCGdex|||Show public TCGdex artwork
@@ -642,19 +604,16 @@ Vérifier|||Check
 Connaissances publiques|||Public knowledge
 + mes statistiques anonymes|||+ my anonymous statistics
 Accès complet (--yolo)|||Full access (--yolo)
-Tes adversaires, classés par défaites. Clique sur un adversaire pour revoir tes parties.|||Your opponents, ranked by losses. Click an opponent to review your games.
 Parties|||Games
 Adversaire le plus coriace|||Toughest opponent
 Barre : victoires en bleu, défaites en rouge, issues inconnues en jaune|||Bar: wins in blue, losses in red, unknown results in yellow
 Parties contre cet adversaire|||Games against this opponent
-Choisis un adversaire dans la liste, puis une partie : sa frise apparaîtra ici.|||Pick an opponent in the list, then a game: its timeline will show here.
 Ce que PokeMind retient de tes parties, et quoi tester ensuite.|||What PokeMind remembers from your games, and what to test next.
 Parties observées|||Observed games
 Adversaires suivis|||Tracked opponents
 Plans à tester|||Plans to test
 Mise à jour|||Updated
 <h3>Tes bilans par adversaire</h3>|||<h3>Your record by opponent</h3>
-Bleu : victoires · rouge : défaites · jaune : issues inconnues. Bilan descriptif; aucune causalité.|||Blue: wins · red: losses · yellow: unknown results. Descriptive record; no causality.
 <h3>À tester ensuite</h3>|||<h3>To test next</h3>
 <b>Contre |||<b>Against\u0020
 Défaites : |||Losses:\u0020
@@ -679,7 +638,6 @@ Pochette vide|||Empty sleeve
 Couverture du classeur|||Binder cover
 Catalogue local absent : synchronise d’abord le catalogue public.|||Local catalogue missing: sync the public catalogue first.
 Codex, Claude Code ou PowerShell, dans le dossier PokeMind.|||Codex, Claude Code or PowerShell, in the PokeMind folder.
-Accès complet · Ctrl+V colle · Ctrl+C copie|||Full access · Ctrl+V pastes · Ctrl+C copies
 Ton compte OpenAI, en ligne|||Your OpenAI account, online
 Ton compte Anthropic, en ligne|||Your Anthropic account, online
 Un modèle local, rien ne quitte ton PC|||A local model, nothing leaves your PC
@@ -739,7 +697,6 @@ Tu peux continuer à utiliser PokeMind.|||You can keep using PokeMind.
 journaux lus.|||logs read.
 Ensuite viennent les familles et les plans; tu peux continuer à utiliser PokeMind.|||Families and plans come next; you can keep using PokeMind.
 Tout supprimer|||Delete all
-Supprimer toutes les discussions de l’historique|||Delete every discussion in the history
 Aucune discussion à supprimer.|||No discussion to delete.
 Supprimer toutes les discussions?|||Delete all discussions?
 Effacer définitivement toutes les discussions de PokeMind?|||Permanently erase every PokeMind discussion?
@@ -870,17 +827,14 @@ Saison|||Season
 Nouvelle saison…|||New season…
 Nouvelle saison|||New season
 Commencer une saison aujourd’hui si PokeMind ne connaît pas encore sa date. |||Start a season today when PokeMind does not know its date yet. 
-Les parties d’avant restent dans leur saison et dans le cumul.|||Earlier games stay in their season and in the total.
 Saison affichée|||Season shown
 Une partie compte dans la saison du jour où son journal a été ajouté à PokeMind. |||A game counts in the season of the day its log was added to PokeMind. 
-Les saisons passées restent consultables; le cumul compte toutes les parties.|||Past seasons stay available; the total counts every game.
 Saison actuelle · |||Current season · 
 Cumul · toutes les saisons|||Total · every season
 Saison affichée : |||Season shown: 
 Nom de la saison qui commence aujourd’hui (les parties d’avant restent dans leur saison) :|||Name of the season starting today (earlier games stay in their season):
 Saison du |||Season of 
 Nouvelle saison non enregistrée; rien n’a changé.|||New season not saved; nothing changed.
-<p>Aucune partie dans cette saison pour l’instant. Les saisons passées et le cumul restent dans le choix de saison.</p>|||<p>No game in this season yet. Past seasons and the total stay in the season choice.</p>
 Recommandations et apprentissage : calculés sur toutes les parties, toutes saisons.|||Recommendations and learning: computed on every game, every season.
 Avant le |||Before 
 Toutes les parties|||Every game
@@ -890,6 +844,44 @@ Une copie de tes anciennes données est gardée ici :|||A copy of your previous 
 Les anciennes données ont été effacées.|||The previous data was erased.
 La réinitialisation n’a pas pu se faire : un fichier était encore utilisé. Rien n’a été effacé; recommence depuis Réglages, Données.|||The reset could not be done: a file was still in use. Nothing was erased; try again from Settings, Data.
 Une partie des données est restée ici :|||Part of the data stayed here:
+Codex et Claude Code démarrent ici sans confirmations : ils lisent et modifient tous les fichiers du projet, y compris data/local, sans demander d’approbation. Ctrl+V colle · Ctrl+C copie la sélection (sinon interrompt) · clic droit copie ou colle · Maj+Pg↑ remonte.|||Codex and Claude Code start here without confirmations: they read and modify every project file, including data/local, without asking for approval. Ctrl+V pastes · Ctrl+C copies the selection (otherwise interrupts) · right-click copies or pastes · Shift+PgUp scrolls back.
+Claude Code (sans confirmations)|||Claude Code (no confirmations)
+Les parties d’avant restent dans leur saison.|||Earlier games stay in their season.
+Les saisons passées restent consultables.|||Past seasons stay available.
+Toutes les saisons|||All seasons
+<p>Aucune partie dans cette saison pour l’instant. Les saisons passées restent dans le choix de saison.</p>|||<p>No game in this season yet. Past seasons stay in the season choice.</p>
+Clique sur un adversaire pour revoir tes parties contre lui.|||Click an opponent to review your games against them.
+Filtrer les decks adverses…|||Filter opponent decks…
+Tes decks et des modèles publics à comparer.|||Your decks and public lists to compare.
+Tes decks, classés selon le taux de victoire public de leur archétype.|||Your decks, ranked by the public win rate of their archetype.
+Ce n’est pas un classement mondial, ni le taux de ta liste exacte ou de tes propres parties.|||This is not a world ranking, nor the rate of your exact list or of your own games.
+Tes statistiques sont à jour.|||Your statistics are up to date.
+Mise à jour : |||Updated:
+Dernière mise à jour :|||Last updated:
+Le coach peut lire tes données PokeMind|||The coach can read your PokeMind data
+Nouvelles parties ajoutées :|||New games added:
+? Indique le nombre de parties, les sources et ce qui reste inconnu.|||? Include the number of games, the sources, and what remains unknown.
+Répartition de tes parties enregistrées et défaites par deck adverse|||Breakdown of your recorded games and losses by opponent deck
+Défaites par deck adverse|||Losses by opponent deck
+Ce n’est pas ton taux de victoire global : seules les parties ajoutées à PokeMind comptent.|||This is not your overall win rate: only the games added to PokeMind count.
+Jusqu’à 8 decks adverses affichés; clique une barre pour ouvrir ses combats.|||Up to 8 opponent decks shown; click a bar to open its battles.
+Dernier tour visible dans chaque journal, pas la durée complète de la partie.|||Last visible turn in each log, not the full game length.
+Actions notées dans les journaux, pas toutes les actions jouées. Une prise peut concerner plusieurs Récompenses.|||Actions noted in the logs, not every action played. One prize-taking event may involve several Prize cards.
+Le deck adverse est déduit des cartes vues pendant la partie; sa liste exacte n’est pas connue.|||The opponent deck is inferred from the cards seen during the game; its exact list is not known.
+Basé seulement sur tes parties enregistrées.|||Based only on your recorded games.
+Ce que PokeMind observe dans tes parties ne prouve pas pourquoi tu as gagné ou perdu.|||What PokeMind observes in your games does not prove why you won or lost.
+La frise montre seulement ce que le journal contient : les cartes cachées et la cause du résultat ne sont pas reconstruites.|||The timeline only shows what the log contains: hidden cards and the cause of the result are not reconstructed.
+Adversaire non identifié|||Unidentified opponent
+Légalité à vérifier|||Legality to check
+PokeMind garde ce qu’il observe dans tes parties et révise ses idées quand de nouvelles parties arrivent; aucun modèle d’IA n’est réentraîné.|||PokeMind keeps what it observes in your games and revises its ideas when new games arrive; no AI model is retrained.
+Teste un seul changement à la fois : rien ne prouve encore qu’un plan améliore tes résultats.|||Test one change at a time: nothing proves yet that a plan improves your results.
+Bleu : victoires · Rouge : défaites|||Blue: wins · Red: losses
+Historique, copier, supprimer|||History, copy, delete
+Mode avancé|||Advanced mode
+Affiche le terminal pour Codex, Claude Code et PowerShell|||Shows the terminal for Codex, Claude Code and PowerShell
+Un terminal est encore ouvert. Ferme-le d’abord dans la page Terminal, puis décoche le mode avancé.|||A terminal is still open. Close it first on the Terminal page, then untick advanced mode.
+Autres actions de la discussion|||More conversation actions
+Pose ta question au coach, ou commence par une de ces idées :|||Ask the coach your question, or start with one of these ideas:
 '''
 
 CATALOG = {}

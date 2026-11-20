@@ -1,67 +1,61 @@
-# PM-V1-PUBLIC-RELEASE-018 — STOP / AWAITING_AUDIT / NOT PUBLISHED
+# PM-RELEASE-096-PUBLIC-025 — STOP PUBLICATION 0.9.6 À L'ÉTAPE 4 / RIEN DE PUBLIC (D-320)
 
-2026-11-15 (Québec). D-313, déclenchement manuel; fast-forward privé `bea56af` →
-`79006578d9db62b0454fe62fa8273820b234c423`, arbre initial propre. Source applicative exacte
-`66a1ce0a2f974a480485110bbc10e8d7c086368b`, inchangée dans src/tests/scripts/packaging/dépendances/version.
-Réception 017 **OWNER_GUI_ACCEPTED_017**, déclaration du propriétaire, non rejouée.
+2026-11-20, Québec. Réception du propriétaire **OWNER_GUI_ACCEPTED_096** (déclaration directe), puis GO explicite
+de publier 0.9.6 en préversion (D-320). Exécutant : Claude Code, sur le PC Windows du propriétaire; **aucun audit
+indépendant**. Rapport 024 archivé : `archive/2026-11/RESULT_avant_025_f6f9809_2026-11-19.md`.
 
-## Résultat bloquant réel
+**Verdict : STOP à l'étape 4 (export public), porte de confidentialité ROUGE.** Aucun push public, aucun tag, aucune
+release, aucun asset. Le dépôt public est inchangé : `main` = `295db53d24e67fa656c3cb4b2f2fb1f12d6ef5ac`, pas de
+`v0.9.6`.
 
-**Porte privée complète ROUGE**, une seule exécution de `python scripts/local_gate.py --keep`,
-copie isolée sans données personnelles. Compilation/hygiène OK; **191 Qt passés** (149 s),
-**1693 cœur passés / 1 échec / 3 ignorés** (653 s), total **1884 passés / 1 échec / 3 ignorés**, exit 1.
+## Bilan par étape
 
-Échec : `tests/test_version_metadata.py::test_the_unpublished_094_candidate_is_folded_into_095_and_never_presented_as_released`.
-Ce test impose littéralement `## [0.9.5] — unreleased (release candidate)` dans CHANGELOG.
-La préparation documentaire autorisée l'a remplacé par une date de préversion :
-2026-11-14 dans la copie testée, devenue 2026-11-15 dans le commit documentaire final.
-Les deux formes datées échouent à cette même exigence. **Échec introduit par la préparation
-documentaire de Codex**, pas un défaut découvert dans le binaire 017 ni un changement de version.
-Test et titre conservés pour audit; **aucune réparation, relance de test ni poursuite de publication**.
+| Étape | Résultat |
+|---|---|
+| 1 — prévol | **vert** : arbre propre, `git pull --ff-only` à jour, HEAD `f6f9809`; `src/`, `scripts/`, `packaging/` identiques à `8d2bd62`; public `main` = `295db53`, aucun tag/release/asset v0.9.6 |
+| 2 — notes de version | **vert** : commit privé `81580b0` (4 fichiers, documentation seulement); porte locale complète **VERTE : 1946 réussis / 0 échec / 3 ignorés** (Qt 207, cœur 1739) |
+| 3 — binaire | **vert** : Setup D-319 réutilisé, 39 961 292 octets, SHA256 `688d865144b2bff064778fbfe90ffbd599ce0ccc3c8bf9843d4b961f54bad137` = son `.sha256`, version 0.9.6; scan `--require-archive` CLEAN (797 fichiers, 331 modules); aucune reconstruction |
+| 4 — export public | **ROUGE** : voir ci-dessous. Arrêt avant tout push |
+| 5 — release | non exécutée |
 
-Commit documentaire privé préparatoire **`2eff8ca23314b9ffdd1239a81e9d189a04b1ffb6`**, quatre fichiers seulement :
-README FR/EN, CHANGELOG, notes FR/EN 0.9.5. Rang/taux avant nom, onglet Classement,
-statistiques repliables, chat arrondi et reconstruction adverse conditionnelle documentés;
-ancienne affirmation « aucun import ne peut ajouter de référence adverse » rectifiée.
-La date du CHANGELOG est une **préparation privée non publiée**, pas une preuve de release.
+## Étape 2 — contenu du commit privé `81580b0`
 
-## Contrôles réalisés avant le STOP
+- `CHANGELOG.md` : `## [0.9.6] — 2026-11-20 (pre-release)`, même format que 0.9.5.
+- `docs/RELEASE_NOTES_0.9.6.md` : bloc « Not published yet / Pas encore publiée » remplacé par « Unsigned installer /
+  Installateur non signé » et le SHA256 du Setup.
+- `README.md` et `README.fr.md`, ligne « Status » : « the latest public one is 0.9.5 » remplacé par « public
+  pre-release », comme à la publication 0.9.5 (checklist A5). **Écart par rapport à la liste du mandat**, signalé au
+  propriétaire.
+- Aucun test ne verrouillait l'ancien libellé « pas encore publiée » : aucun test modifié.
+- Ce commit **prépare** la publication; 0.9.6 n'est **pas** publiée.
 
-- Dépôts/branche/authentification/droits de push conformes. Auteur public et adresse noreply
-  vérifiés sur le commit public existant, aucune identité inventée.
-- Public `main` vérifié à **`5629ae220ad996e290b971b31c323102ef258b27`**, v0.9.0–v0.9.3 présents,
-  dernière préversion **v0.9.3**; v0.9.5 absente au prévol. `main` et releases reconsultés après échec,
-  inchangés. Aucune mutation publique effectuée.
-- Artefact immuable 017 réutilisable, **aucun nouveau build ni Setup exécuté** :
-  `dist/installer-candidate-0.9.5-66a1ce0-fa8e4877/PokeMind-Setup-0.9.5.exe`, **39854926 octets**,
-  SHA256 **`e31bb4ce40886616cfc4f68a92a4da96fbda3e50a71fc75b2e2349c5b95390a7`**.
-  EXE staging **`c180d58daca4d9142506c3dfdfe036c56a7261b1635fb361eb7a1607d28f21a8`**.
-  Distribution **797 fichiers / 128830300 octets**, manifeste égal à 017, **328 modules PYZ**;
-  scans distribution/Setup **CLEAN**, modules contrôlés égaux aux sources, PE x64/0.9.5,
-  icônes 9/9, branding/9 licences conformes, AppId source inchangé. **Non signé**.
-  Copie d'upload et checksum générés localement, concordants; **aucun upload**.
-- Scan préalable des **770 fichiers suivis**, dont **34 binaires**, sans constat de secret,
-  adresse privée ou identifiant machine interdit; `.orchestrator/`, AGENTS et archives inclus.
-  24 nouveaux PNG inspectés visuellement, marque/maquette/fixtures; 30 PNG sans champ texte
-  de métadonnées, 4 PDF inchangés par rapport au public. Contextes SHA examinés : binaires/ressources,
-  aucun manifeste personnel publié. Ce contrôle préalable **n'est pas un export réussi**.
-- Inventaire comparatif préalable : 127 nouveaux chemins, 55 modifiés, zéro suppression
-  par rapport au `main` public, avant les quatre corrections documentaires.
+## Étape 4 — pourquoi la porte est rouge
 
-## Opérations NON effectuées et état final
+- `scripts/export_public.py` : EXPORTED, 974 fichiers, arbre `aa1a8bfcd53b00167190900b9829460ea1a95b29` = HEAD
+  `81580b0`, un commit local, jamais poussé (dossier temporaire de session, hors dépôt).
+- Scan texte de tout l'export (octets ASCII et UTF-16LE, blocs texte des PNG) : nom de compte, profil, chemin du
+  dépôt, courriel personnel, jetons, clés, bases SQLite, nom de deck retiré en D-319, dossier de protection 096.
+  **Rien de personnel** : les seuls chemins `C:\Users\…` sont des noms inventés dans les tests.
+- Revue visuelle des images ajoutées depuis le public (176 nouvelles, 87 vues en planches, une par page et par
+  dossier). Toutes montrent des données inventées (« Famille inventée », « Synthétique N », « Deck inventé du
+  joueur »), **sauf la page Réglages › Données de `style-global/`** :
+  - `docs/design/pokemind-brainball/captures/style-global/06-reglages-4-data-clair.jpg` et
+    `06-reglages-4-data-sombre.jpg` affichent en clair, dans le champ « Dossier de données », un chemin absolu du
+    dossier temporaire de la porte, **qui contient le nom du compte Windows** du PC. **Confirmé à l'agrandissement.**
+  - Les variantes `-1100x700` de la même page montrent le même champ, coupé; non confirmé à l'image.
+  - Le scan texte ne pouvait pas le voir : le texte est dessiné dans l'image.
+- Le mandat interdit tout nom d'utilisateur et tout chemin absolu dans l'export : **STOP**, sans export, sans push,
+  sans correction improvisée. La porte locale de l'export, lancée en parallèle, a été arrêtée sans résultat.
 
-**Export public : NON EXÉCUTÉ. Porte dans l'export : NON EXÉCUTÉE.**
-**Commit/push public : 0. Tag/release v0.9.5 : 0. Assets publiés : 0.**
-Aucune URL de release 0.9.5 n'est revendiquée. La préversion publique vérifiée reste
-[v0.9.3](https://github.com/Sd-tech-Sol/PokeMind/releases/tag/v0.9.3).
+## Ce qui n'a pas été fait ni touché
 
-**Aucun accès au stockage personnel, aux decks/journaux/archives, à l'ancien programme installé
-ou à un compte Coach.** Aucune sauvegarde, installation, restauration, migration ou suppression.
-Les 480 fichiers personnels et l'installation 017 ne sont ni inventoriés ni revalidés par 018.
-Les fumées et QA native 017 restent historiques; pas présentées comme rejouées dans 018.
+Données personnelles non lues; aucune sauvegarde, installation, désinstallation ou restauration; dossier de
+protection 096 et 0.9.6 installée non touchés; aucune reconstruction du Setup. Rien de privé dans Git.
 
-RESULT 017 et mandat 018 original archivés; prompt actif **CONSUMED / STOP**,
-états **AWAITING_AUDIT / STOP_PRIVATE_GATE_FAILED**. Un commit documentaire préparatoire,
-puis **un seul commit de rapport assaini privé**. Contrôle HEAD/statuts/checks/runs exacts après push;
-aucune CI verte revendiquée. **STOP pour audit ChatGPT** et arbitrage de la contradiction
-entre métadonnées de publication et test « unreleased ». Aucun 019 ni reprise automatique.
+## Prochaine action
+
+**Décision du propriétaire.** Piste proposée (nouvel ordre requis) : refaire ou retirer les captures
+`style-global/06-reglages-4-data-*` avec un dossier de données inventé (sans chemin du profil), vérifier que la page
+Données n'apparaît nulle part ailleurs avec un vrai chemin, porte verte, puis nouveau GO de publication (le Setup
+`688d8651…d137` reste valable : les captures ne sont pas dans le binaire). Option : faire lire le texte des images
+par le scan avant chaque export.

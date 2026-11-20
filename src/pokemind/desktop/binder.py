@@ -6,7 +6,8 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout
 
 from pokemind.desktop.i18n import QFrame, QLabel, QPushButton, QWidget, T
-from pokemind.desktop.theme import OBJECTS, card_pixmap
+from pokemind.desktop.theme import OBJECTS, card_pixmap, idea_font
+from pokemind.desktop.card_art import Fade, paint_silhouette
 
 # A legend for cards without art, in the brand red, blue and gold: the same in both themes,
 # since the binder pages stay navy (theme.OBJECTS).
@@ -16,28 +17,57 @@ SLOTS_PER_PAGE = 9
 
 
 class BinderSlot(QWidget):
-    """One plastic sleeve: the card art when cached, else a coloured card with its name."""
+    """One plastic sleeve: the card art when cached; a dark silhouette while it is on its way; else a coloured
+    card with its name."""
     activated = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.card, self.picture, self.hover = None, None, False
+        self.card, self.picture, self.hover, self.pending = None, None, False, False
+        self.motion_enabled, self._scaled = True, None
+        self.fade = Fade(self)
         self.setMinimumSize(QSize(70, 98))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMouseTracking(True)
 
-    def set_card(self, card):
-        self.card, self.picture = card, None
+    def set_card(self, card, expect_art=False):
+        """`expect_art`: its picture is being looked for, so a silhouette stands in rather than the legend card."""
+        self.card, self.picture, self._scaled = card, None, None
+        self.pending = bool(card and expect_art and card.get('tcgdex_id'))
+        self.fade.stop()
         self.setToolTip(str(card.get('name') or '') + ' · ' + str(card.get('tcgdex_id') or '') if card else '')
         self.setAccessibleName(str(card.get('name') or '') if card else T('Pochette vide'))
         self.update()
 
-    def set_image(self, result, identity):
-        picture = QPixmap()
-        if self.card and self.card.get('tcgdex_id') == identity and result.get('data') and picture.loadFromData(result['data']):
-            self.picture = picture
-            self.update()
+    def set_image(self, result, identity, fade=False):
+        """`result` holds a decoded `picture` (QPixmap) or raw PNG `data`; nothing usable: the legend card."""
+        if not self.card or self.card.get('tcgdex_id') != identity:
+            return
+        picture = result.get('picture') if isinstance(result.get('picture'), QPixmap) else QPixmap()
+        if picture.isNull() and result.get('data'):
+            picture.loadFromData(result['data'])
+        self.pending = False
+        if not picture.isNull():
+            self.picture, self._scaled = picture, None
+            if fade:
+                self.fade.start(self.motion_enabled)
+        self.update()
+
+    def clear_picture(self):
+        self.picture, self._scaled, self.pending = None, None, False
+        self.fade.stop()
+        self.update()
+
+    def scaled_picture(self, card):
+        """The picture at this sleeve's size, made once per size instead of on every paint."""
+        ratio = self.devicePixelRatioF()
+        size = (card.size() * ratio).toSize()
+        if self._scaled is None or self._scaled.size() != size:
+            self._scaled = self.picture.scaled(size, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation)
+            self._scaled.setDevicePixelRatio(ratio)
+        return self._scaled
 
     def card_rect(self):
         area = QRectF(self.rect()).adjusted(4, 4, -4, -4)
@@ -55,10 +85,16 @@ class BinderSlot(QWidget):
         p.drawRoundedRect(sleeve, 7, 7)
         card = self.card_rect()
         if self.card and self.picture is not None:
+            if self.fade.value < 1:
+                paint_silhouette(p, card, 6)
+                p.setOpacity(self.fade.value)
             p.save()
             p.setClipRect(card)
-            p.drawPixmap(card.toRect(), self.picture)
+            p.drawPixmap(card.topLeft(), self.scaled_picture(card))
             p.restore()
+            p.setOpacity(1)
+        elif self.card and self.pending:
+            paint_silhouette(p, card, 6)
         elif self.card:
             top, bottom = CATEGORY_COLORS.get(self.card.get('category'), CATEGORY_COLORS['pokemon'])
             fill = QLinearGradient(card.topLeft(), card.bottomRight())
@@ -68,15 +104,9 @@ class BinderSlot(QWidget):
             p.setBrush(fill)
             p.drawRoundedRect(card, 6, 6)
             p.setPen(QColor('white'))
-            font = p.font()
-            font.setPointSizeF(max(7.0, card.width() / 12))
-            font.setBold(True)
-            p.setFont(font)
+            p.setFont(idea_font(self.font()))  # the text of the application (owner, 2026-11-19)
             p.drawText(card.adjusted(6, 6, -6, -6).toRect(), int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter),
                        str(self.card.get('name') or ''))
-            font.setBold(False)
-            font.setPointSizeF(max(6.0, card.width() / 16))
-            p.setFont(font)
             p.drawText(card.adjusted(4, 4, -4, -4).toRect(), int(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter),
                        str(self.card.get('tcgdex_id') or ''))
         else:
@@ -216,6 +246,10 @@ class CardBinder(QWidget):
 
     def set_motion_enabled(self, enabled):
         self.motion_enabled = enabled
+        for slot in self.slots:
+            slot.motion_enabled = enabled
+            if not enabled:
+                slot.fade.stop()
 
     def two_pages(self):
         return self.width() >= 760
@@ -228,11 +262,11 @@ class CardBinder(QWidget):
         self.pages[1].setVisible(two)
         self.spine.setVisible(two)
 
-    def set_cards(self, cards, offset, total):
+    def set_cards(self, cards, offset, total, expect_art=False):
         self.offset, self.total = offset, total
         visible = self.per_spread()
         for index, slot in enumerate(self.slots):
-            slot.set_card(cards[index] if index < len(cards) and index < visible else None)
+            slot.set_card(cards[index] if index < len(cards) and index < visible else None, expect_art)
         pages = max(1, -(-total // visible))
         self.page_label.setText(T('Page ') + str(offset // visible + 1) + ' / ' + str(pages) + ' · ' + str(total)
                                 + T(' cartes'))

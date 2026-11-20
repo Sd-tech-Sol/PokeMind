@@ -63,7 +63,8 @@ def test_timeline_escapes_untrusted_trace_and_keeps_unknowns():
     match['evidence'][0]['text']='<img src="file:///invented"><script>bad</script>'
     rendered=timeline_html(match,colors('light'))
     assert '<img src=' not in rendered and '&lt;img' in rendered
-    assert 'Tour ?' in rendered and 'Cause de la défaite inconnue' in rendered
+    assert 'Tour ?' not in rendered and 'Adversaire non identifié' in rendered
+    assert 'unknown' not in rendered and 'Dernier tour observé' not in rendered  # nothing shown for an unknown value
     assert 'dernière victoire' not in rendered
 
 
@@ -90,7 +91,8 @@ def test_chart_filter_and_click_open_matching_battles(ui,app):
     panel.scope_filter.setCurrentIndex(panel.scope_filter.findData('losses'))
     app.processEvents()
     assert panel.model['scope_n']==4 and panel.model['details_n']==1
-    assert 'détails disponibles : 1' in panel.summary.text()
+    assert panel.summary.text() == '4 parties · 1 avec détails'
+    assert 'Basé seulement sur tes parties enregistrées.' in panel.info.toolTip()
     wait_until(app,lambda:bool(panel.matchups.regions))
     QTest.mouseClick(panel.matchups,Qt.MouseButton.LeftButton,pos=panel.matchups.regions[0].center().toPoint())
     assert ui.stack.currentIndex()==1 and ui.matchup_filter.text()=='Invented Family'
@@ -143,7 +145,7 @@ def test_home_match_opens_factual_timeline_without_provider(ui,app):
     ui.open_match('M0001')
     assert 'Défaite' in ui.battle_badge.text()
     assert 'Frise des événements connus' in ui.battle_details.toPlainText()
-    assert 'Cause de la défaite inconnue' in ui.battle_details.toPlainText()
+    assert 'Invented Family' in ui.battle_details.toPlainText() and 'inconnu' not in ui.battle_details.toPlainText()
     assert ui.adapter is None
 
 
@@ -172,3 +174,43 @@ def test_card_holographic_hover_zoom_and_reduced_motion(ui,app):
     assert proof==[True]
     ui.reduced_motion.setChecked(True)
     assert tile.art.hover==0 and not tile.art.motion_enabled
+
+
+def _deck(label, saved='', **extra):
+    row = {'label': label, 'export': label + '\n60 cards', 'kind': 'Mon deck · référence personnelle', 'total': 60}
+    if saved:
+        row.update(selector='mon deck · ' + saved, opponent_rebuild=False)
+    return row | extra
+
+
+def test_active_deck_is_the_main_deck_else_the_newest_own_deck_never_an_opponent_rebuild():
+    """Owner, 2026-11-18: the Active deck showed a rebuilt opponent deck while their main deck existed."""
+    from pokemind.desktop.insights import active_deck_row, favorite_key
+    public = _deck('Public reference', kind='Référence PUBLIC')
+    rebuilt = _deck('Rebuilt opponent', selector='deck adverse · 2026-11-17', opponent_rebuild=True)
+    older, newer = _deck('Old own deck', '2026-10-01'), _deck('New own deck', '2026-11-10')
+    registered = _deck('Registered deck', selector='deck-7', version=3)
+    rows = [public, rebuilt, older, newer, registered]  # ranked by public rate, not by owner
+    assert active_deck_row(rows) is newer
+    assert active_deck_row(rows, favorite_key(older)) is older
+    assert active_deck_row(rows, favorite_key(public)) is public  # a public reference marked main by the owner
+    assert active_deck_row(rows, favorite_key(rebuilt)) is newer  # never an opponent rebuild, even marked main
+    assert active_deck_row(rows, 'gone') is newer
+    assert active_deck_row([public, rebuilt, registered]) is registered
+    assert active_deck_row([public, rebuilt]) is None
+    assert active_deck_row([public, _deck('Candidate', kind='Référence personnelle · candidat non joué')]) is None
+
+
+def test_deck_record_counts_only_games_that_name_this_exact_deck():
+    from pokemind.desktop.insights import deck_record, favorite_key
+    own, registered = _deck('Own deck', '2026-11-10'), _deck('Registered', selector='deck-7', version=3)
+    report = {'matches': [
+        {'match': 'M1', 'outcome': 'wins', 'personal_deck_version': {'export_sha256': favorite_key(own)}},
+        {'match': 'M2', 'outcome': 'losses', 'personal_deck_version': {'export_sha256': favorite_key(own)}},
+        {'match': 'M3', 'outcome': 'losses', 'personal_deck_version': 'unknown'},
+        {'match': 'M4', 'outcome': 'wins', 'personal_deck_version': {'deck_id': 'deck-7', 'version': 3}},
+        {'match': 'M5', 'outcome': 'wins', 'personal_deck_version': {'deck_id': 'deck-7', 'version': 2}}]}
+    assert deck_record(report, own) == {'wins': 1, 'losses': 1, 'unknown': 0}
+    assert deck_record(report, registered) == {'wins': 1, 'losses': 0, 'unknown': 0}
+    assert deck_record({'matches': [{'outcome': 'wins', 'personal_deck_version': 'unknown'}]}, own) is None
+    assert deck_record(report, None) is None

@@ -7,29 +7,35 @@ import json
 import os
 import queue
 import re
+import sqlite3
 import threading
 import time
+import uuid
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, QUrl, QSize, QRect
+import shiboken6  # ships with PySide6 (not a new dependency): frees finished Jobs in job_finished
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTimer, Signal, QUrl, QSize, QRect, QItemSelectionModel
 from PySide6.QtGui import QDesktopServices, QFont, QTextCursor, QTextCharFormat, QColor, QPalette
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget, QFileDialog,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget, QFileDialog, QMenu,
     QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
     QProgressBar, QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem,
     QTabWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QLayout,
     QStyle, QStyleOptionComboBox, QStylePainter)
 
-from pokemind import diagnostics, seasons
+from pokemind import diagnostics, opponent_archetype, seasons
 from pokemind.assistant.codex_app_server import CodexAppServer
 from pokemind.assistant.provider import ClaudeCode, LocalOllama, ProviderError, SYSTEM
 from pokemind.assistant.sessions import Store
-from pokemind.assistant.tools import RESEARCH_STARTERS, STARTERS, slash
+from pokemind.assistant.tools import slash
 from pokemind.desktop.services import SHARING_HINT, Services, context_delta
 from pokemind.desktop import ingestion, terminal
 from pokemind.desktop.images import ImageCache
-from pokemind.desktop.widgets import ChatInput, Activity, RoundedTranscript, CorpusChart, DeckGallery, CardTile, WrapCheckBox, WrapPushButton, wrap_popup, RecordBarDelegate
+from pokemind.desktop.widgets import (ChatInput, Activity, RoundedTranscript, CorpusChart, DeckGallery, CardTile,
+    WrapCheckBox, WrapPushButton, wrap_popup, RecordBarDelegate, GlowPanel, GlowFrame, NavigationDelegate,
+    ActiveDeckCard, DeckHeading, DeckLabPage, Pill, FlowLayout, WrapRow, StackRow, InfoButton, ClampLabel, RowDelegate, title_row,
+    closable_tabs, PageBrowser, ReadingLabel, text_bubble)
 
 # Sent for the owner after a pasted log without a question of their own.
 # The coach's automatic question after a pasted log, by result from the owner's side (PM-COACH-LOSS-PRIORITY-001).
@@ -42,13 +48,19 @@ LOG_QUESTIONS = {
 LOG_NOTES = {'loss': 'Défaite ajoutée au suivi des matchups difficiles.',
              'win': 'Victoire comptée dans tes statistiques.',
              'unknown': 'Résultat inconnu : partie comptée, aucun suivi créé ni deck enregistré.'}
-from pokemind.desktop.theme import logo_icon, logo_pixmap, card_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon, setting_icon, setting_tab_icon
+from pokemind.desktop.theme import (logo_icon, logo_pixmap, card_pixmap, colors, palette, stylesheet, navigation_icon, expand_icon,
+    setting_icon, setting_tab_icon, apply_color_scheme, apply_application_font)
 from pokemind import __version__
 from PySide6 import QtWidgets as W
 from pokemind.desktop.motion import AnimatedStack, MotionEffects, EmblemWidget
 from pokemind.desktop.charts import StatisticsPanel, PublicStatsPanel
 from pokemind.desktop.binder import CardBinder
-from pokemind.desktop.insights import favorite_key, recent_matches, timeline_html, learning_view, OUTCOME_LABELS
+from pokemind.desktop.prompts import TERMINAL, page_ideas
+from pokemind.desktop.stories import OVERVIEW_CAVEAT, STORY_CAVEAT, learning_html, matchup_story, overview_story
+from pokemind.desktop.card_art import cached_picture, decode_picture, forget_pictures, picture_key, remember_picture
+from pokemind.desktop.insights import (favorite_key, active_deck_row, deck_record, recent_matches, timeline_html, learning_view, OUTCOME_LABELS,
+    long_date, period_text, games_text, losses_text, opponent_name, opponent_words, probable_tip, short_kind, legality_label,
+    OPPONENT_CAVEAT, CAUSE_CAVEAT, TIMELINE_CAVEAT, LEARNING_CAVEAT)
 from pokemind.desktop.i18n import QCheckBox, QComboBox, QDockWidget, QFileDialog, QFrame, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTextEdit, QWidget, QStatusBar, Text, set_language, retranslate
 
 DARK, LIGHT = stylesheet('dark'), stylesheet('light')
@@ -85,18 +97,62 @@ class Job(QRunnable):
             self.events.finished.emit(self)
 
 
-def page(title, description):
-    widget = QWidget()
+def page_scroll(widget):
+    """A whole page that scrolls. Its bar stands inside the lit frame, in what was the right margin of the
+    page: that room is always kept (the handle shows only when there is something to scroll), so the page is
+    exactly as wide as it was without a bar and never jumps."""
+    margins = widget.layout().contentsMargins()
+    margins.setRight(0)
+    widget.layout().setContentsMargins(margins)
+    scroll = QScrollArea()
+    scroll.setObjectName('pageScroll')
+    scroll.setWidgetResizable(True)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    scroll.setWidget(widget)
+    bar = scroll.verticalScrollBar()
+
+    def idle(minimum, maximum):
+        if bar.property('idle') != (maximum <= minimum):
+            bar.setProperty('idle', maximum <= minimum)
+            bar.style().unpolish(bar)
+            bar.style().polish(bar)
+    bar.rangeChanged.connect(idle)
+    idle(bar.minimum(), bar.maximum())
+    return scroll
+
+
+def page(title, description, widget=None, info=None):
+    """A page: its title, then the one sentence of help it shows. `info` is the text of an « ⓘ » beside the title,
+    for the cautions that are not printed on the page."""
+    if widget is None:
+        widget = QWidget()
     layout = QVBoxLayout(widget)
-    layout.setContentsMargins(24, 22, 24, 20)
+    layout.setContentsMargins(24, 22, 24, 20)  # the lit frame of the page area is drawn in this margin
     header = QLabel(title)
     header.setObjectName('title')
-    layout.addWidget(header)
+    widget.title_label = header
+    if info is None:
+        layout.addWidget(header)
+    else:
+        widget.title_info = InfoButton(info)
+        layout.addLayout(title_row(header, widget.title_info))
     sub = QLabel(description)
     sub.setObjectName('muted')
+    sub.setProperty('role', 'subtitle')  # one step above the body text, below the title (owner, 2026-11-18)
     sub.setWordWrap(True)
     layout.addWidget(sub)
     return widget, layout
+
+
+class StatusLine(QLabel):
+    """A line of status that takes no room while it has nothing to say."""
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.setVisible(bool(self.text()))
+
+    def setText(self, text):
+        super().setText(text)
+        self.setVisible(bool(text))
 
 
 class _DeckRankDelegate(W.QStyledItemDelegate):
@@ -107,13 +163,28 @@ class _DeckRankDelegate(W.QStyledItemDelegate):
 
 
 class _DeckPicker(QComboBox):
+    """The deck selector, shown as a button « Changer de deck »: the deck shown is the title of the strip
+    (owner, 2026-11-18). Its list, the ♛ of the main deck, its tooltips and accessible names are unchanged."""
+    LABEL = T('Changer de deck', en='Change deck')
+
     def __init__(self):
         super().__init__()
+        self.setObjectName('deckSwitch')
         self.setItemDelegate(_DeckRankDelegate(self))
         self.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self):
+        # The words, plus what the style keeps around its text field: 14 px of padding on the left, the drop-down
+        # area of the chevron on the right, the frame (measured: 66 px), and a little air.
+        return QSize(self.fontMetrics().horizontalAdvance(display(self.LABEL)) + 76, super().sizeHint().height())
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
 
     def _retranslate(self):
         super()._retranslate()
+        self.updateGeometry()  # « Changer de deck » / « Change deck »: not the same width
         for index, tip in getattr(self, '_deck_tips', {}).items():
             self.setItemData(index, display(tip), Qt.ItemDataRole.ToolTipRole)
             self.setItemData(index, display(tip), Qt.ItemDataRole.AccessibleTextRole)
@@ -122,14 +193,14 @@ class _DeckPicker(QComboBox):
         self.setAccessibleDescription(self.toolTip())
 
     def paintEvent(self, event):
-        # The native label clips both ends of a long title. Keep its beginning
-        # identifiable; full text stays in the model, tooltip and accessible name.
+        # A button's words, not the deck's name (the title of the strip says it); the full name stays in the
+        # model, the tooltip and the accessible name.
         option = QStyleOptionComboBox()
         self.initStyleOption(option)
         field = self.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
                                            QStyle.SubControl.SC_ComboBoxEditField, self)
-        option.currentText = self.fontMetrics().elidedText(option.currentText, Qt.TextElideMode.ElideRight,
-                                                         max(0, field.width() - 6))
+        option.currentText = self.fontMetrics().elidedText(display(self.LABEL), Qt.TextElideMode.ElideRight,
+                                                         max(0, field.width() - 2))
         painter = QStylePainter(self)
         painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, option)
         painter.drawItemText(field, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -177,9 +248,13 @@ class _DeckControlsLayout(QLayout):
             metrics = control.fontMetrics()
             # Native Qt sizeHint may omit stylesheet padding. Match the existing
             # BrainBall 14px horizontal/10px vertical button padding + 1px border.
-            content = (QSize(metrics.horizontalAdvance('M' * 12) + 44, metrics.height() + 20)
-                       if index == 0 else QSize(metrics.horizontalAdvance(control.text()) + 30,
-                                                metrics.height() + 22))
+            if index == 0:  # the title of the strip: room for a short name at least
+                content = QSize(metrics.horizontalAdvance('M' * 12) + 44, metrics.height() + 20)
+            elif isinstance(control, QComboBox):
+                content = control.sizeHint()
+            else:
+                # 36 px: 6 px of padding above and below, a 1 px border (owner, 2026-11-18); more for a big font
+                content = QSize(metrics.horizontalAdvance(control.text()) + 30, max(36, metrics.height() + 14))
             sizes.append(item.sizeHint().expandedTo(content))
         return sizes
 
@@ -217,43 +292,119 @@ class _DeckControlsLayout(QLayout):
             height = max(sizes[i].height() for i in row)
             x = rect.x()
             for index in row:
-                width = sizes[index].width()
+                width, own = sizes[index].width(), height
+                if isinstance(self.items[index].widget(), QComboBox):  # a very narrow page: it elides its words
+                    width = min(width, rect.width())
                 if index == 0:
                     width = rect.width() - sum(s.width() + gap for s in sizes[1:]) if wide else rect.width()
+                else:  # a button keeps its own height, centred on the row (the title is taller)
+                    own = sizes[index].height()
                 if apply:
-                    self.items[index].setGeometry(QRect(x, y, width, height))
+                    self.items[index].setGeometry(QRect(x, y + (height - own) // 2, width, own))
                 x += width + gap
             y += height + gap
         return y - rect.y() - gap
 
 
-def browser():
-    value = QTextBrowser()
+def browser(reading=False):
+    """A page's rich text. `reading`: the running text of Overview, Combats and Learning, set like the Coach's
+    idea buttons (owner, 2026-11-19): their face, weight and colour, in a box like theirs; the headings keep
+    their size."""
+    value = PageBrowser()
     value.setOpenLinks(False)
     value.setOpenExternalLinks(False)
-    value.document().setDefaultStyleSheet('a {color:' + colors('dark')['link'] + ';} h2 {font-size:21px;} h3 {font-size:16px;}')
+    if reading:
+        value.setObjectName('readingText')
+    value.document().setDefaultStyleSheet(browser_style(value, colors('dark')['link']))
     return value
 
 
-def table(headers):
+def browser_style(view, link):
+    """The document style of a page's rich text: links in the theme's colour, headings sized; the reading text
+    keeps the headings bold and spaces its list lines a little. Words in bold and table headers keep the idea
+    buttons' weight, as the rest of the text (owner, 2026-11-19): only the headings stand out. In the Coach's
+    answers only, the words in bold stand out at 700 over the 600 of the text (owner, 2026-11-19)."""
+    bold = '700' if view.objectName() == 'chatTranscript' else '600'
+    style = ('a {color:' + link + ';} h2 {font-size:21px;} h3 {font-size:16px;} b, strong, th {font-weight:' + bold
+             + ';} code, pre, tt {font-family:"Segoe UI";}')
+    if view.objectName() == 'readingText':
+        style += ' h2, h3 {font-weight:700;} li {margin-bottom:4px;}'
+    return style
+
+
+NUMBER = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+WORDS = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+
+def metric_tile(kind, name, words=False):
+    """The one number tile (owner, 2026-11-18): a coloured top edge for its meaning (grey games, blue wins, red
+    losses, yellow what to work on), a small muted caption, then the number, or a name for the toughest rival."""
+    frame = QFrame()
+    frame.setObjectName('card')
+    frame.setProperty('metricKind', kind)
+    box = QVBoxLayout(frame)
+    box.setContentsMargins(14, 10, 14, 10)
+    box.setSpacing(2)
+    caption = QLabel(name)
+    caption.setObjectName('tileCaption')  # set like the rest of the text (owner, 2026-11-19)
+    caption.setWordWrap(True)  # on two lines rather than cut when the page is narrow (1100 × 700, owner, 2026-11-19)
+    box.addWidget(caption)
+    value = QLabel('—')
+    value.setObjectName('tileName' if words else 'tileValue')
+    value.setTextFormat(Qt.TextFormat.PlainText)
+    value.setWordWrap(True)
+    box.addWidget(value)
+    return frame, value
+
+
+def style_table(widget, numeric=()):
+    """The one table style (owner, 2026-11-18): no grid nor stripes, a quiet line under each row, the selected row
+    in a soft fill with a lit edge on its left; numbers on the right, every header aligned like its column."""
+    widget.numeric_columns = frozenset(numeric)
+    widget.setShowGrid(False)
+    widget.setAlternatingRowColors(False)
+    widget.setItemDelegate(RowDelegate(widget))
+    widget.horizontalHeader().setDefaultAlignment(WORDS)
+    for column in range(widget.columnCount()):
+        item = widget.horizontalHeaderItem(column)
+        if item is not None:
+            item.setTextAlignment(NUMBER if column in widget.numeric_columns else WORDS)
+
+
+def fit_table(widget, least=3):
+    """A table as tall as its rows (owner, 2026-11-18), no taller: the free space under it stays free, without
+    a frame. It may shrink to a few rows when the page is short; it scrolls then."""
+    rows = widget.verticalHeader().length() if widget.rowCount() else widget.verticalHeader().defaultSectionSize()
+    chrome = widget.horizontalHeader().sizeHint().height() + 2 * widget.frameWidth()
+    if widget.horizontalScrollBar().isVisible():
+        chrome += widget.horizontalScrollBar().sizeHint().height()
+    widget.setMaximumHeight(chrome + rows)
+    widget.setMinimumHeight(chrome + min(rows, least * widget.verticalHeader().defaultSectionSize()))
+
+
+def table(headers, numeric=()):
     value = QTableWidget(0, len(headers))
     value.setHorizontalHeaderLabels(headers)
     value.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     value.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    value.setAlternatingRowColors(True)
     value.setSortingEnabled(True)
     value.horizontalHeader().setStretchLastSection(True)
     value.verticalHeader().hide()
+    style_table(value, numeric)
     return value
 
 
-def fill_table(widget, rows):
+def fill_table(widget, rows, keys=None):
+    """`keys`: for each row, the value its first cell stands for when the text shown is only a display name."""
     widget.setSortingEnabled(False)
     widget.setRowCount(len(rows))
     for row, values in enumerate(rows):
         for column, value in enumerate(values):
             item = QTableWidgetItem()
             item.setData(Qt.ItemDataRole.DisplayRole, value)
+            item.setTextAlignment(NUMBER if column in getattr(widget, 'numeric_columns', ()) else WORDS)
+            if keys is not None and column == 0:
+                item.setData(Qt.ItemDataRole.UserRole, keys[row])
             widget.setItem(row, column, item)
     widget.resizeColumnsToContents()
     widget.setSortingEnabled(True)
@@ -304,7 +455,7 @@ POKEMIND_TOOLS = {'pokemind_read': ('mémoire PokeMind', 'PokeMind memory'), 'po
 NATIVE_TOOL_LABELS = {'Bash': ('commande', 'command'), 'PowerShell': ('commande', 'command'), 'Read': ('lecture', 'read'),
     'Grep': ('recherche', 'search'), 'Glob': ('recherche', 'search'), 'Edit': ('modification', 'edit'),
     'Write': ('écriture', 'write'), 'WebFetch': ('page web', 'web page'), 'WebSearch': ('recherche web', 'web search')}
-CODE_STYLE = 'background-color:rgba(127,127,127,0.14); font-family:Consolas,monospace; font-size:12px;'
+CODE_STYLE = 'background-color:rgba(127,127,127,0.14); font-family:"Segoe UI";'  # the application's text, quiet ground
 
 
 TOOL_COLOR = 'color:#8a94a6;'  # placeholder, replaced by the theme's muted colour when a bubble is drawn
@@ -325,7 +476,7 @@ def tool_chip(specs):
             continue
         counted[label] = counted.get(label, 0) + 1
     parts = [rich(T(fr, en=en)) + (' ×' + str(n) if n > 1 else '') for (fr, en), n in counted.items()] + details
-    return ('<p style="' + TOOL_COLOR + ' font-size:12px; margin-top:4px; margin-bottom:4px;">⚙ ' + rich(T('Outils', en='Tools'))
+    return ('<p style="' + TOOL_COLOR + ' margin-top:4px; margin-bottom:4px;">⚙ ' + rich(T('Outils', en='Tools'))
             + ' · ' + J(' · ', parts) + '</p>')
 
 
@@ -377,9 +528,10 @@ def message_html(text):
         number = re.match(r'^(\d{1,3})[.)]\s+(.+)$', stripped)
         if heading:
             flush()
-            size = {1: '18px', 2: '16px', 3: '15px', 4: '14px'}[len(heading[1])]
-            out.append('<p style="font-size:' + size + '; font-weight:700; margin-top:12px; margin-bottom:4px;">'
-                       + inline_html(heading[2]) + '</p>')
+            level = len(heading[1])  # a heading of the answer: a title, the one text that keeps its own size
+            size = {1: '18px', 2: '16px', 3: '15px', 4: '14px'}[level]
+            out.append('<h%d style="font-size:%s; font-weight:700; margin-top:12px; margin-bottom:4px;">' % (level, size)
+                       + inline_html(heading[2]) + '</h%d>' % level)
         elif bullet or number:
             flush()
             marker = '•' if bullet else number[1] + '.'
@@ -451,6 +603,7 @@ class MainWindow(QMainWindow):
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(4)
         self.image_pool = QThreadPool(self)
+        self.picture_scope = uuid.uuid4().hex[:12]  # this window's decoded pictures in the shared memory cache
         self.image_pool.setMaxThreadCount(2)
         self.images = ImageCache(root)
         self.jobs, self.deck_rows, self.adapter = [], [], None
@@ -496,9 +649,11 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName('sidebar')
         sidebar.setFixedWidth(224)
         side = QVBoxLayout(sidebar)
-        side.setContentsMargins(16, 23, 16, 18)
-        side.setSpacing(16)
+        # 8 px at the sides: the menu rows and the deck card keep that room for their outer glow.
+        side.setContentsMargins(8, 23, 8, 14)
+        side.setSpacing(12)
         identity = QHBoxLayout()
+        identity.setContentsMargins(8, 0, 8, 0)
         emblem = QLabel()
         emblem.setPixmap(logo_pixmap(34))
         emblem.setFixedSize(34, 34)
@@ -508,15 +663,19 @@ class MainWindow(QMainWindow):
         brand.setObjectName('brand')
         identity.addWidget(brand, 1)
         side.addLayout(identity)
-        caption = QLabel(T('TON COMPAGNON TCG'))
+        caption = QLabel(T('Ton compagnon TCG'))
         self.brand_caption = caption
         caption.setObjectName('brandCaption')
+        caption.setContentsMargins(8, 0, 8, 0)
         side.addWidget(caption)
         self.sidebar_toggle = QPushButton(T('‹  Replier le menu'))
         self.sidebar_toggle.setObjectName('sidebarToggle')
         self.sidebar_toggle.setAccessibleName(T('Replier ou déplier la navigation'))
         self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
-        side.addWidget(self.sidebar_toggle)
+        toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(8, 0, 8, 0)
+        toggle_row.addWidget(self.sidebar_toggle)
+        side.addLayout(toggle_row)
         self.navigation = QListWidget()
         self.navigation.setAccessibleName(T('Navigation principale'))
         self.navigation.addItems([T('Vue d’ensemble'), T('Combats'), 'Deck Lab', T('Cartes & méta'), T('Apprentissage'), T('Réglages'), 'Terminal'])
@@ -524,7 +683,13 @@ class MainWindow(QMainWindow):
         self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for index in range(7):
             self.navigation.item(index).setIcon(navigation_icon(index))
-        side.addWidget(self.navigation)
+        self.navigation.setItemDelegate(NavigationDelegate(self.navigation))
+        self.navigation.setMouseTracking(True)
+        side.addWidget(self.navigation, 1)
+        self.active_deck = ActiveDeckCard()
+        self.active_deck.activated.connect(self.open_active_deck)
+        self.active_row, self.record_report = None, None
+        side.addWidget(self.active_deck)
         outer.addWidget(sidebar)
         self.stack = AnimatedStack()
         content = QWidget()
@@ -534,6 +699,7 @@ class MainWindow(QMainWindow):
         column.addWidget(self._loading_banner())
         column.addWidget(self._update_banner())
         column.addWidget(self.stack, 1)
+        self.page_frame = GlowFrame(self.stack)  # over the pages, which keep their geometry
         outer.addWidget(content, 1)
         self.setCentralWidget(central)
         self._dashboard()
@@ -547,6 +713,9 @@ class MainWindow(QMainWindow):
         self.motion = MotionEffects(self)
         self.apply_motion()
         self.navigation.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.apply_advanced_mode()
+        # The rows beside the old and the new selection carry part of their light: repaint the whole menu.
+        self.navigation.currentRowChanged.connect(lambda row: self.navigation.viewport().update())
         self.navigation.itemClicked.connect(self.navigation_clicked)
         self.navigation.currentRowChanged.connect(self.page_shown)
         self.navigation.setCurrentRow(0)
@@ -555,6 +724,7 @@ class MainWindow(QMainWindow):
         self.apply_language()
         self.apply_sidebar()
         self.render_chat()
+        self.refresh_ideas()
         for control in (self.chat_project, self.project_relative):  # no PokeMind folder in an installed copy
             control.parentWidget().setVisible(not self.standalone)
         self.show_catalog_state()
@@ -575,12 +745,107 @@ class MainWindow(QMainWindow):
     def apply_sidebar(self):
         collapsed = self.preferences.get('sidebar_collapsed', False)
         self.sidebar.setFixedWidth(76 if collapsed else 224)
-        self.sidebar.layout().setContentsMargins(10 if collapsed else 16, 23, 10 if collapsed else 16, 18)
+        self.sidebar.layout().setContentsMargins(2 if collapsed else 8, 23, 2 if collapsed else 8, 14)
+        self.fit_sidebar()
         for widget in (self.brand_label, self.brand_caption):
             widget.setVisible(not collapsed)
         self.sidebar_toggle.setText('›' if collapsed else T('‹  Replier le menu'))
         self.sidebar_toggle.setToolTip(T('Déplier la navigation') if collapsed else T('Replier la navigation'))
         self.apply_language()
+
+    def fit_sidebar(self):
+        """The « Deck actif » card takes its short form when the menu is too low for the ring under the deck,
+        and leaves with the labels when the menu is folded."""
+        if hasattr(self, 'active_deck'):
+            self.active_deck.setVisible(not self.preferences.get('sidebar_collapsed', False))
+            compact = self.height() - self.statusBar().height() < self.sidebar_height_tall()
+            self.active_deck.set_compact(compact)
+            delegate = self.navigation.itemDelegate()
+            row = delegate.SHORT if compact else delegate.ROW
+            if getattr(delegate, 'row', row) != row:
+                delegate.row = row
+                self.navigation.doItemsLayout()
+
+    def sidebar_height_tall(self):
+        """The height the menu needs with the tall « Deck actif » card, measured on what it holds: the semibold
+        text of the whole application takes more room than a fixed threshold allowed (owner, 2026-11-19)."""
+        side = self.sidebar.layout()
+        margins = side.contentsMargins()
+        used, shown = margins.top() + margins.bottom(), 0
+        for index in range(side.count()):
+            item = side.itemAt(index)
+            widget = item.widget()
+            if widget is self.active_deck:
+                continue
+            if widget is self.navigation:
+                delegate = self.navigation.itemDelegate()
+                rows = sum(not self.navigation.item(i).isHidden() for i in range(self.navigation.count()))
+                used += rows * delegate.ROW + 2 * self.navigation.frameWidth()
+            elif widget is not None and widget.isHidden():
+                continue
+            else:
+                used += item.sizeHint().height()
+            shown += 1
+        width = self.sidebar.width() - margins.left() - margins.right()
+        return used + side.spacing() * shown + self.active_deck.tall_height(width)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit_sidebar()
+
+    def show_deck_pills(self, row=None):
+        """Deck strip: what is known of the deck shown, as pills. Display only, straight from its row."""
+        values = {} if not row else {'kind': short_kind(row['kind']), 'count': '60/60' + T(' cartes'),
+                                     'legality': legality_label(row.get('legality'))}
+        # A pill says the short name; what it used to spell out stays in its tooltip. Nothing for an empty value.
+        details = {} if not row else {'kind': row['kind'], 'legality': row.get('legality')}
+        for key, pill in self.deck_pills.items():
+            pill.setText(values.get(key, ''))
+            if details.get(key):
+                pill.setToolTip(details[key])
+            pill.setVisible(bool(values.get(key)))
+
+    def show_active_deck(self, row=None):
+        """Title of the Deck Lab strip: the deck open in Deck Lab. The sidebar card: the Active deck. Display only."""
+        main_key = self.preferences.get('main_deck', '')
+        self.deck_heading.set_deck((('♛ ' if favorite_key(row) == main_key else '') + row['label']) if row else None)
+        self.show_sidebar_deck()
+
+    def show_sidebar_deck(self):
+        """The Active deck: the owner's main deck, else their newest own deck; never an opponent rebuild nor the
+        public deck merely open in Deck Lab. Its ring counts the games known to be played with it, else all."""
+        main_key = self.preferences.get('main_deck', '')
+        active = active_deck_row(self.deck_rows, main_key)
+        self.active_row = active
+        if not active:
+            self.active_deck.set_deck(None)
+        else:
+            count = (str(active['total']) + T(' cartes') + ' · ') if active.get('total') else ''
+            main = favorite_key(active) == main_key
+            self.active_deck.set_deck(('♛ ' if main else '') + active['label'], count + short_kind(active['kind']))
+        own = deck_record(self.record_report, active)
+        self.active_deck.set_record(own if own is not None else (self.record_report or {}).get('outcomes'),
+                                    this_deck=own is not None)
+        if not self.showing_active_deck():
+            self.active_deck.set_cover(None)  # the gallery's picture belongs to another deck
+        self.fit_sidebar()  # a longer name may need the short form of the card
+
+    def showing_active_deck(self):
+        index = self.deck_picker.currentIndex() if hasattr(self, 'deck_picker') else -1
+        return (self.active_row is not None and 0 <= index < len(self.deck_rows)
+                and favorite_key(self.deck_rows[index]) == favorite_key(self.active_row))
+
+    def gallery_cover(self, picture):
+        self.deck_heading.set_cover(picture)
+        self.active_deck.set_cover(picture if self.showing_active_deck() else None)
+
+    def open_active_deck(self):
+        index = next((i for i, row in enumerate(self.deck_rows)
+                      if self.active_row is not None and favorite_key(row) == favorite_key(self.active_row)), -1)
+        if index >= 0:
+            self.open_deck(index)
+        else:
+            self.navigation.setCurrentRow(2)
 
     def toggle_sidebar(self):
         self.preferences['sidebar_collapsed'] = not self.preferences.get('sidebar_collapsed', False)
@@ -617,26 +882,34 @@ class MainWindow(QMainWindow):
         if not available and principal is None:
             message = QLabel(T('Marque un deck d’une étoile dans Deck Lab pour le retrouver ici.') if not favorites else T('Favoris conservés; leurs références ne sont pas disponibles dans le rapport chargé.'))
             message.setWordWrap(True)
-            message.setObjectName('muted')
+            message.setProperty('reading', 'text')  # like the Coach's idea buttons (owner, 2026-11-19)
             self.home_favorites.addWidget(message)
         report = self.services.report or {}
         matches, basis = recent_matches(report)
-        note = QLabel(basis if matches else T('Les parties détaillées apparaîtront ici avec le rapport.'))
-        note.setWordWrap(True)
-        note.setObjectName('smallCaption')
-        self.home_matches.addWidget(note)
+        self.home_matches_info.set_tip(basis)  # in which order they are listed, and how sure that order is
+        self.home_matches_info.setVisible(bool(matches))
+        if not matches:
+            note = QLabel(T('Les parties détaillées apparaîtront ici avec le rapport.'))
+            note.setWordWrap(True)
+            note.setProperty('reading', 'text')
+            self.home_matches.addWidget(note)
         for match in matches:
             label = str(match.get('match', 'Partie')) + ' · ' + OUTCOME_LABELS.get(match.get('outcome'), T('Issue inconnue'))
-            label += ' · ' + str(match.get('opponent', {}).get('label', 'unknown'))
+            label += ' · ' + opponent_name(match.get('opponent', {}).get('label'))
             button = QPushButton(label)
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             button.setObjectName('homeLink')
-            button.setToolTip(label)
+            tip = probable_tip([match])
+            button.setToolTip(label + (chr(10) * 2 + tip if tip else ''))
             button.clicked.connect(lambda checked=False, ref=match.get('match'): self.open_match(ref))
             self.home_matches.addWidget(button)
         groups = report.get('groups', [])
         focus = max(groups, key=lambda g: g.get('losses', 0), default=None)
-        self.home_focus.setText(T('À travailler : ') + str(focus['archetype']) + ' · ' + str(focus['losses']) + T(' défaites · n=') + str(focus['n']) + T(' · famille hypothétique') if focus and focus.get('losses') else T('Prochain objectif : conserver des observations et comparer un changement à la fois.'))
+        worked = bool(focus and focus.get('losses'))
+        self.home_focus.setText(T('À travailler : ') + opponent_name(focus['archetype']) + ' · '
+                                + losses_text(focus['losses'], focus['n']) if worked
+                                else T('Prochain objectif : conserver des observations et comparer un changement à la fois.'))
+        self.home_focus_info.setVisible(worked)
 
     def open_deck(self, index):
         if 0 <= index < len(self.deck_rows):
@@ -702,27 +975,43 @@ class MainWindow(QMainWindow):
                 self.deck_picker.setCurrentIndex(index)
         self.submit(lambda e: self.services.deck_options(), show)
 
+    def matchup_key(self, row):
+        """The opponent label of the report behind a row; the cell may show a display name instead."""
+        item = self.matchups.item(row, 0)
+        return item.data(Qt.ItemDataRole.UserRole) or item.text() if item else None
+
+    def choose_matchup_row(self, row):
+        """Select one opponent row. Not selectRow: with extended selection it toggles a row already selected and
+        follows the keys held down."""
+        if 0 <= row < self.matchups.rowCount():
+            flags = QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows
+            self.matchups.selectionModel().setCurrentIndex(self.matchups.model().index(row, 0), flags)
+
     def open_matchup(self, label):
         self.navigation.setCurrentRow(1)
-        self.matchup_filter.setText(label)
+        self.matchup_filter.setText(display(opponent_name(label)))
         for row in range(self.matchups.rowCount()):
-            if self.matchups.item(row, 0).text() == label:
-                self.matchups.selectRow(row)
+            if self.matchup_key(row) == label:
+                self.choose_matchup_row(row)
                 self.matchup_selected()
                 break
 
     def open_match(self, reference):
         match = next((m for m in (self.services.report or {}).get('matches', []) if m.get('match') == reference), None)
         if match:
-            self.open_matchup(match.get('opponent', {}).get('label', 'unknown'))
+            self.open_matchup(match.get('opponent', {}).get('label') or 'unknown')
             for index in range(self.games.count()):
                 if self.games.itemData(index).get('match') == reference:
                     self.games.setCurrentIndex(index)
                     self.game_selected(explicit=True)
                     break
 
-    def submit(self, fn, done, error=None, delta=None, progress=None, phase=None, pool=None, detached=False):
+    def submit(self, fn, done, error=None, delta=None, progress=None, phase=None, pool=None, detached=False, priority=0):
         job = Job(fn)
+        # The pool must not delete the Job at the end of run(): Python still holds it (self.jobs, then the finished
+        # signal), and that wrapper on a destroyed object crashed the window in the garbage collector (access
+        # violation, D-319). job_finished frees it instead.
+        job.setAutoDelete(False)
         job.events.setParent(self)
         self.jobs.append(job)
         job.events.approval.connect(self.request_approval)
@@ -738,12 +1027,18 @@ class MainWindow(QMainWindow):
         if detached:  # long public download: never holds the window open when the owner quits
             threading.Thread(target=job.run, name='pokemind-detached', daemon=True).start()
             return
-        (pool or self.pool).start(job)
+        (pool or self.pool).start(job, priority)
 
     def job_finished(self, job):
         if job in self.jobs:
             self.jobs.remove(job)
         job.events.deleteLater()
+        # The pool took the C++ object and no longer deletes it: free it here, after its last signal (otherwise
+        # every Job and its closure would stay). Qt reads autoDelete before run() and never touches a kept runnable
+        # afterwards, and nothing after this signal in run() touches the C++ object. A deferred QTimer instead
+        # aborted QApplication.shutdown() in the Qt tests.
+        if shiboken6.isValid(job):
+            shiboken6.delete(job)
 
     def failed(self, code):
         self.statusBar().showMessage(T('Service indisponible · ') + code)
@@ -763,13 +1058,22 @@ class MainWindow(QMainWindow):
 
     def _dashboard(self):
         widget, layout = page(T('Ton tableau de bord'), T('Une partie à la fois. Un peu plus loin à chaque combat.'))
+        # The summary under the title, one sentence per line (owner, 2026-11-18), set and framed like the Coach's
+        # idea buttons, on the left (owner, 2026-11-19).
+        self.overview = ReadingLabel(T('Chargement du rapport conservé…'))
+        self.overview_info = InfoButton(OVERVIEW_CAVEAT)  # the summary's cautions and the V/D/N legend
+        self.overview_info.hide()
+        summary = text_bubble(title_row(self.overview, self.overview_info, wrap=True))
+        summary.setProperty('role', 'summary')
+        layout.addWidget(summary)
+        # A banner of about 90 px (owner, 2026-11-18): it welcomes, the numbers and what to work on come first.
         hero = QFrame()
         hero.setObjectName('hero')
-        hero.setMinimumHeight(128)
         hero_row = QHBoxLayout(hero)
-        hero_row.setContentsMargins(22, 14, 18, 14)
+        hero_row.setContentsMargins(20, 8, 16, 8)
         hero_text = QVBoxLayout()
-        for name, text in (('heroKicker', T('CENTRE D’ENTRAÎNEMENT')),
+        hero_text.setSpacing(1)
+        for name, text in (('heroKicker', T('Centre d’entraînement')),
                            ('heroTitle', T('À toi de jouer.')),
                            ('heroDescription', T('Ton équipe. Tes combats. Ta progression.'))):
             label = QLabel(text)
@@ -777,63 +1081,59 @@ class MainWindow(QMainWindow):
             label.setWordWrap(True)
             hero_text.addWidget(label)
         hero_row.addLayout(hero_text, 1)
-        self.hero_emblem = EmblemWidget()
+        self.hero_emblem = EmblemWidget(card=62)
         hero_row.addWidget(self.hero_emblem)
         layout.addWidget(hero)
-        self.overview = QLabel(T('Chargement du rapport conservé…'))
-        self.overview.setWordWrap(True)
-        layout.addWidget(self.overview)
-        row = QHBoxLayout()
-        row.addWidget(QLabel(T('Saison')))
-        row.addWidget(self.season_picker(), 1)
         self.new_season_button = QPushButton(T('Nouvelle saison…'))
         self.new_season_button.setToolTip(T('Commencer une saison aujourd’hui si PokeMind ne connaît pas encore sa date. '
-                                            'Les parties d’avant restent dans leur saison et dans le cumul.'))
+                                            'Les parties d’avant restent dans leur saison.'))
         self.new_season_button.clicked.connect(self.new_season)
-        row.addWidget(self.new_season_button)
-        layout.addLayout(row)
+        # « Nouvelle saison… » goes under the season when the page is narrow (owner, 2026-11-19).
+        self.season_row = StackRow([(QLabel(T('Saison')), 0), (self.season_picker(), 1)], [(self.new_season_button, 0)])
+        layout.addWidget(self.season_row)
         cards_row = QHBoxLayout()
         self.metrics = []
         for kind, name in (('games', T('Parties analysées')), ('wins', T('Victoires enregistrées')), ('losses', T('Défaites à travailler'))):
-            frame = QFrame()
-            frame.setObjectName('card')
-            frame.setProperty('metricKind', kind)
-            box = QVBoxLayout(frame)
-            box.addWidget(QLabel(name))
-            value = QLabel('—')
-            value.setObjectName('metric')
-            box.addWidget(value)
+            frame, value = metric_tile(kind, name)
             self.metrics.append(value)
             cards_row.addWidget(frame)
         layout.addLayout(cards_row)
+        # What to work on, right under the numbers it comes from (owner, 2026-11-18); the charts follow.
+        self.home_focus = QLabel(T('Ton prochain point à travailler apparaîtra ici avec le rapport.'))
+        self.home_focus.setProperty('reading', 'text')  # set like the Coach's idea buttons (owner, 2026-11-19)
+        self.home_focus.setTextFormat(Qt.TextFormat.PlainText)
+        self.home_focus.setWordWrap(True)
+        self.home_focus_info = InfoButton(OPPONENT_CAVEAT)
+        self.home_focus_info.hide()
+        layout.addLayout(title_row(self.home_focus, self.home_focus_info, wrap=True))
         self.corpus_chart = CorpusChart()
         self.statistics = StatisticsPanel(self.corpus_chart)
         self.statistics.group_selected.connect(self.open_matchup)
         layout.addWidget(self.statistics)
-        bias = QLabel(T('CORPUS ENREGISTRÉ · Statistiques des parties conservées. Les défaites guident l’apprentissage; le taux de victoire global reste inconnu tant que la représentativité n’est pas établie.'))
-        bias.setWordWrap(True)
-        bias.setObjectName('corpusNote')
-        layout.addWidget(bias)
-        self.home_focus = QLabel(T('Ton prochain point à travailler apparaîtra ici avec le rapport.'))
-        self.home_focus.setObjectName('sectionTitle')
-        self.home_focus.setTextFormat(Qt.TextFormat.PlainText)
-        self.home_focus.setWordWrap(True)
-        layout.addWidget(self.home_focus)
+        self.home_matches_info = InfoButton()
+        self.home_matches_info.hide()
         for title, attr in ((T('Tes decks favoris'), 'home_favorites'), (T('Parties à reprendre'), 'home_matches')):
             frame = QFrame()
             frame.setObjectName('card')
             box = QVBoxLayout(frame)
             heading = QLabel(title)
             heading.setObjectName('sectionTitle')
-            box.addWidget(heading)
+            if attr == 'home_matches':
+                box.addLayout(title_row(heading, self.home_matches_info))
+            else:
+                box.addWidget(heading)
             body = QWidget()
             items = QVBoxLayout(body)
             items.setContentsMargins(0, 0, 0, 0)
             box.addWidget(body)
             setattr(self, attr, items)
             layout.addWidget(frame)
-        self.dashboard_text = browser()
-        self.dashboard_text.setMinimumHeight(150)
+        priorities = QLabel(T('Priorités de travail'))
+        priorities.setObjectName('sectionTitle')
+        self.priorities_info = InfoButton(CAUSE_CAVEAT + '\n' + OPPONENT_CAVEAT)
+        layout.addLayout(title_row(priorities, self.priorities_info))
+        self.dashboard_text = browser(reading=True)
+        self.dashboard_text.setMinimumHeight(210)  # three opponents without scrolling
         self.dashboard_text.anchorClicked.connect(self.internal_link)
         layout.addWidget(self.dashboard_text, 1)
         self.refresh_button = QPushButton(T('Actualiser les combats locaux'))
@@ -845,13 +1145,10 @@ class MainWindow(QMainWindow):
         self.cancel_data_button.hide()
         layout.addWidget(self.cancel_data_button)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(widget)
-        self.stack.addWidget(scroll)
+        self.stack.addWidget(page_scroll(widget))
 
     def _battles(self):
-        widget, layout = page(T('Combats & adversaires'), T('Tes adversaires, classés par défaites. Clique sur un adversaire pour revoir tes parties.'))
+        widget, layout = page(T('Combats & adversaires'), T('Clique sur un adversaire pour revoir tes parties contre lui.'))
         row = QHBoxLayout()
         row.addWidget(QLabel(T('Saison')))
         row.addWidget(self.season_picker(), 1)
@@ -860,68 +1157,80 @@ class MainWindow(QMainWindow):
         self.battle_tiles = {}
         for kind, name in (('games', T('Parties')), ('wins', T('Victoires')), ('losses', T('Défaites')),
                            ('rival', T('Adversaire le plus coriace'))):
-            frame = QFrame()
-            frame.setObjectName('card')
-            frame.setProperty('metricKind', kind)
-            box = QVBoxLayout(frame)
-            box.setContentsMargins(14, 10, 14, 10)
-            caption = QLabel(name)
-            caption.setObjectName('smallCaption')
-            box.addWidget(caption)
-            value = QLabel('—')
-            value.setObjectName('tileName' if kind == 'rival' else 'tileValue')
-            value.setTextFormat(Qt.TextFormat.PlainText)
-            value.setWordWrap(True)
-            box.addWidget(value)
+            frame, value = metric_tile(kind, name, words=kind == 'rival')
             self.battle_tiles[kind] = value
             tiles.addWidget(frame, 2 if kind == 'rival' else 1)
         layout.addLayout(tiles)
         self.matchup_filter = QLineEdit()
-        self.matchup_filter.setPlaceholderText(T('Filtrer les familles adverses…'))
+        self.matchup_filter.setPlaceholderText(T('Filtrer les decks adverses…'))
         self.matchup_filter.textChanged.connect(self.filter_matchups)
         layout.addWidget(self.matchup_filter)
-        split = QSplitter(Qt.Orientation.Vertical)
-        self.matchups = table([T('Famille / signature'), T('V', en='W'), T('D', en='L'), '?', 'n'])
+        self.matchups = table([T('Deck adverse', en='Opponent deck'), T('V', en='W'), T('D', en='L'), '?',
+                               T('Parties', en='Games')], numeric=(1, 2, 3))
+        self.matchup_header_tips = (OPPONENT_CAVEAT, T('Victoires'), T('Défaites'),
+                                    T('Parties sans résultat connu', en='Games without a known result'),
+                                    T('Nombre de parties contre ce deck', en='Number of games against this deck'))
         self.matchups.setItemDelegateForColumn(4, RecordBarDelegate(self.matchups))
-        self.matchups.setShowGrid(False)
         self.matchups.horizontalHeader().setSortIndicator(2, Qt.SortOrder.DescendingOrder)
         self.matchups.verticalHeader().setDefaultSectionSize(36)
         self.matchups.setToolTip(T('Barre : victoires en bleu, défaites en rouge, issues inconnues en jaune'))
         self.matchups.itemSelectionChanged.connect(self.matchup_selected)
-        split.addWidget(self.matchups)
-        lower = QWidget()
+        layout.addWidget(self.matchups)
+        # The games against the opponent chosen, its timeline and the Coach button: hidden while none is chosen,
+        # and the space under the table stays free, without a frame (owner, 2026-11-18).
+        lower = self.matchup_details = QWidget()
+        lower.hide()
         row = QVBoxLayout(lower)
+        row.setContentsMargins(0, 4, 0, 0)
         self.games = QComboBox()
         self.games.setPlaceholderText(T('Parties contre cet adversaire'))
         self.games.currentIndexChanged.connect(self.game_selected)
         self.games.activated.connect(lambda index: self.game_selected(index, explicit=True))
-        row.addWidget(self.games)
-        self.battle_badge = QLabel(T('Choisis une famille et une partie pour voir sa fiche.'))
+        # The record against the opponent chosen, in words (pipeline 023, phase 7), in a box like the Coach's idea
+        # buttons (owner, 2026-11-19).
+        self.matchup_story = ReadingLabel()
+        self.matchup_story_box = text_bubble(title_row(self.matchup_story, InfoButton(STORY_CAVEAT), wrap=True))
+        row.addWidget(self.matchup_story_box)
+        chooser = QHBoxLayout()
+        chooser.addWidget(self.games, 1)
+        chooser.addWidget(InfoButton(OPPONENT_CAVEAT + '\n' + TIMELINE_CAVEAT))
+        row.addLayout(chooser)
+        self.battle_badge = QLabel()  # the game shown; takes no room while none is chosen
         self.battle_badge.setObjectName('battleBadge')
         self.battle_badge.setTextFormat(Qt.TextFormat.PlainText)
         self.battle_badge.setWordWrap(True)
+        self.battle_badge.hide()
         row.addWidget(self.battle_badge)
-        self.battle_details = browser()
-        self.battle_details.setPlaceholderText(T('Choisis un adversaire dans la liste, puis une partie : sa frise apparaîtra ici.'))
+        self.battle_details = browser(reading=True)
         row.addWidget(self.battle_details)
         ask = QPushButton(T('Discuter de ce matchup avec PokeMind'))
         ask.setObjectName('primary')
         ask.clicked.connect(self.ask_matchup)
         row.addWidget(ask)
-        split.addWidget(lower)
-        layout.addWidget(split, 1)
-        self.stack.addWidget(widget)
+        layout.addWidget(lower, 1)
+        layout.addStretch()  # takes the free space only while the details are hidden (they have the stretch)
+        # The page scrolls when the window is low (1100 × 700): the semibold text takes more room, and the record
+        # in words was cut to the height that was left (owner, 2026-11-19).
+        self.stack.addWidget(page_scroll(widget))
 
     def _decks(self):
-        widget, layout = page('Deck Lab', T('Versions exactes et modèles PUBLIC · collection, crédits et légalité distincts.'))
+        widget, layout = page('Deck Lab', T('Tes decks et des modèles publics à comparer.'), DeckLabPage())
+        widget.heading = (layout.itemAt(0).widget(), layout.itemAt(1).widget())  # behind them: the energy banner
+        layout.addSpacing(6)
         self.deck_picker = _DeckPicker()
-        self.deck_picker.setMinimumContentsLength(12)
-        self.deck_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.deck_picker.currentIndexChanged.connect(self.deck_selected)
         self.deck_picker.currentTextChanged.connect(lambda _: self.deck_picker.setToolTip(
             self.deck_picker.currentData(Qt.ItemDataRole.ToolTipRole) or self.deck_picker.currentText()))
         self.deck_picker.currentTextChanged.connect(self.deck_picker.setAccessibleName)
+        self.deck_pills = {'kind': Pill('accent'), 'count': Pill('text'), 'legality': Pill('text')}
+        pills = FlowLayout(drop_below=300)
+        pills.optional.append(self.deck_pills['count'])  # the gallery tab says « 60/60 » too
+        for pill in self.deck_pills.values():
+            pill.hide()
+            pills.addWidget(pill)
+        self.deck_heading = DeckHeading(pills)
         picker_row = _DeckControlsLayout()
+        picker_row.addWidget(self.deck_heading)
         picker_row.addWidget(self.deck_picker)
         self.favorite_button = QPushButton(T('☆ Favori'))
         self.favorite_button.setObjectName('favoriteButton')
@@ -940,15 +1249,35 @@ class MainWindow(QMainWindow):
         self.add_deck_button.setToolTip(T('Coller la liste exportée de TCG Live'))
         self.add_deck_button.clicked.connect(self.add_my_deck)
         picker_row.addWidget(self.add_deck_button)
-        layout.addLayout(picker_row)
-        self.deck_info = QLabel(T('Chargement des références…'))
+        # Copy and Export act on the deck shown: in its strip now, with short words (the full ones in their
+        # tooltips and accessible names); they used to sit under the gallery (owner, 2026-11-18).
+        self.copy_deck = QPushButton(T('Copier', en='Copy'))
+        self.copy_deck.setToolTip(T('Copier les 60 cartes'))
+        self.copy_deck.setAccessibleName(T('Copier les 60 cartes'))
+        self.copy_deck.setEnabled(False)
+        self.copy_deck.clicked.connect(self.copy_export)
+        self.save_deck = QPushButton(T('Exporter…', en='Export…'))
+        self.save_deck.setToolTip(T('Exporter en fichier texte…'))
+        self.save_deck.setAccessibleName(T('Exporter en fichier texte…'))
+        self.save_deck.setEnabled(False)
+        self.save_deck.clicked.connect(self.export_deck)
+        picker_row.addWidget(self.copy_deck)
+        picker_row.addWidget(self.save_deck)
+        # Deck strip: the deck shown as its title (first card, name, pills: real values of its row, nothing else),
+        # then the same controls, still children of the page, on a panel the page paints behind them.
+        strip = widget.strip = QVBoxLayout()
+        strip.setContentsMargins(12, 10, 12, 10)
+        strip.setSpacing(7)
+        strip.addLayout(picker_row)
+        layout.addLayout(strip)
+        self.deck_info = QLabel(T('Chargement des références…'))  # then the sources of the deck shown, if it has any
         self.deck_info.setWordWrap(True)
         layout.addWidget(self.deck_info)
         self.deck_text = QTextEdit()
         self.deck_text.setReadOnly(True)
-        self.deck_text.setFont(QFont('Consolas', 11))
         self.deck_views = QTabWidget()
         self.gallery = DeckGallery()
+        self.gallery.cover_changed.connect(self.gallery_cover)
         self.deck_views.addTab(self.gallery, T('Galerie · 60/60'))
         self.deck_views.addTab(self.deck_text, T('Liste texte'))
         # Public archetype statistics (PM-DECKLAB-PUBLIC-STATS-001): loaded only when this tab is shown.
@@ -961,13 +1290,13 @@ class MainWindow(QMainWindow):
         self.deck_views.addTab(self.public_stats_scroll, T('Statistiques', en='Statistics'))
         ranking = QWidget()
         ranking_layout = QVBoxLayout(ranking)
-        caption = QLabel(T('Classement de TES entrées selon le taux PUBLIC de leur archétype (pas classement mondial)',
-                          en='YOUR entries ranked by their archetype’s PUBLIC rate (not a world ranking)'))
+        caption = QLabel(T('Tes decks, classés selon le taux de victoire public de leur archétype.'))
         caption.setWordWrap(True)
-        ranking_layout.addWidget(caption)
+        ranking_layout.addLayout(title_row(caption, InfoButton(
+            T('Ce n’est pas un classement mondial, ni le taux de ta liste exacte ou de tes propres parties.')), wrap=True))
         self.ranking_table = QTableWidget(0, 4)
         self.ranking_table.setHorizontalHeaderLabels([T('Rang', en='Rank'), T('Deck', en='Deck'),
-            T('Victoires\nPUBLIC BO1', en='Win rate\nPUBLIC BO1'), T('Matchs\n(n)', en='Matches\n(n)')])
+            T('Victoires\nPUBLIC BO1', en='Win rate\nPUBLIC BO1'), T('Matchs', en='Matches')])
         self.ranking_table.setAccessibleName(T('Classement des decks par taux PUBLIC BO1', en='Deck ranking by PUBLIC BO1 rate'))
         self.ranking_table.setEditTriggers(W.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.ranking_table.setSelectionBehavior(W.QAbstractItemView.SelectionBehavior.SelectRows)
@@ -984,6 +1313,7 @@ class MainWindow(QMainWindow):
             header.setSectionResizeMode(column, W.QHeaderView.ResizeMode.Fixed)
         header.resizeSection(2, 156)
         header.resizeSection(3, 70)
+        style_table(self.ranking_table, numeric=(0, 2, 3))
         self.ranking_table.currentCellChanged.connect(
             lambda row, *_: self.deck_picker.setCurrentIndex(row) if 0 <= row < len(self.deck_rows) else None)
         ranking_layout.addWidget(self.ranking_table)
@@ -992,28 +1322,27 @@ class MainWindow(QMainWindow):
         self.ranking_source.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse |
                                                    Qt.TextInteractionFlag.TextSelectableByKeyboard)
         ranking_layout.addWidget(self.ranking_source)
+        ranking_layout.addStretch()  # the table is as tall as its rows; the rest of the tab stays free
         self.deck_views.addTab(ranking, T('Classement', en='Ranking'))
         self._public_stats_request, self.public_stats_busy = None, False
         self.public_stats_cancel = threading.Event()
         self.deck_views.currentChanged.connect(self.deck_view_changed)
         layout.addWidget(self.deck_views, 1)
-        row = QHBoxLayout()
-        self.copy_deck = QPushButton(T('Copier les 60 cartes'))
-        self.copy_deck.setEnabled(False)
-        self.copy_deck.clicked.connect(self.copy_export)
-        self.save_deck = QPushButton(T('Exporter en fichier texte…'))
-        self.save_deck.setEnabled(False)
-        self.save_deck.clicked.connect(self.export_deck)
-        row.addWidget(self.copy_deck)
-        row.addWidget(self.save_deck)
-        layout.addLayout(row)
+        # One row while both fit, two otherwise (same rule as the controls of the strip): more room for the cards.
         self.compare_picker = QComboBox()
-        layout.addWidget(self.compare_picker)
+        self.compare_picker.setMinimumContentsLength(12)
+        self.compare_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         compare = QPushButton(T('Comparer à cette référence'))
+        compare.setToolTip(T('Une différence de cartes ne prouve pas une amélioration.') + '\n'
+                           + T('Équivalences de réimpression et efficacité non établies.'))
         compare.clicked.connect(self.compare_decks)
-        layout.addWidget(compare)
-        self.deck_diff = QLabel(T('Une différence de cartes ne prouve pas une amélioration.'))
+        compare_row = _DeckControlsLayout()
+        compare_row.addWidget(self.compare_picker)
+        compare_row.addWidget(compare)
+        layout.addLayout(compare_row)
+        self.deck_diff = QLabel()  # the result of a comparison; its cautions are the tooltip of the button
         self.deck_diff.setWordWrap(True)
+        self.deck_diff.hide()
         layout.addWidget(self.deck_diff)
         self.stack.addWidget(widget)
 
@@ -1032,8 +1361,7 @@ class MainWindow(QMainWindow):
         self.card_language.addItem(T('Français'), 'fr')
         self.card_language.addItem('English', 'en')
         row.addWidget(self.card_language)
-        button = QPushButton(T('Rechercher'))
-        button.setObjectName('primary')
+        button = QPushButton(T('Rechercher'))  # Entrée in the field searches too; not a filled button
         button.clicked.connect(self.search_cards)
         row.addWidget(button)
         self.binder_reset = QPushButton(T('Tout le classeur'))
@@ -1052,6 +1380,8 @@ class MainWindow(QMainWindow):
         self.binder.card_activated.connect(self.binder_card)
         self.binder.download_requested.connect(self.download_catalog)
         self.binder_search, self.binder_loaded_once = None, False
+        self.binder_pages = {}  # spreads already read from the catalog: (language, offset, count) -> result
+        self.binder_epoch = 0  # raised when the catalog changes: a list read before then is not kept
         split.addWidget(self.binder)
         self.card_panel = QWidget()
         panel = QVBoxLayout(self.card_panel)
@@ -1066,6 +1396,7 @@ class MainWindow(QMainWindow):
         panel.addWidget(self.card_details, 1)
         close_panel = QPushButton(T('Fermer la fiche'))
         close_panel.clicked.connect(self.card_panel.hide)
+        close_panel.clicked.connect(self.refresh_ideas)
         panel.addWidget(close_panel)
         self.card_panel.setMinimumWidth(260)
         self.card_panel.hide()
@@ -1086,42 +1417,45 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(widget)
 
     def _learning(self):
-        widget, layout = page(T('Apprentissage'), T('Ce que PokeMind retient de tes parties, et quoi tester ensuite.'))
+        widget, layout = page(T('Apprentissage'), T('Ce que PokeMind retient de tes parties, et quoi tester ensuite.'),
+                              info=LEARNING_CAVEAT)
         tiles = QHBoxLayout()
         self.learning_tiles = {}
-        for kind, name, style in (('games', T('Parties observées'), 'games'), ('opponents', T('Adversaires suivis'), 'wins'),
-                                  ('plans', T('Plans à tester'), 'losses'), ('updated', T('Mise à jour'), 'rival')):
-            frame = QFrame()
-            frame.setObjectName('card')
-            frame.setProperty('metricKind', style)
-            box = QVBoxLayout(frame)
-            box.setContentsMargins(14, 10, 14, 10)
-            caption = QLabel(name)
-            caption.setObjectName('smallCaption')
-            box.addWidget(caption)
-            value = QLabel('—')
-            value.setObjectName('tileName' if kind == 'updated' else 'tileValue')
-            box.addWidget(value)
+        # Counts only: blue and red mean wins and losses everywhere else, so these are grey, and yellow for what
+        # to test. The date is not a number: it is a line under the tiles (owner, 2026-11-18).
+        for kind, name, style in (('games', T('Parties observées'), 'games'), ('opponents', T('Adversaires suivis'), 'games'),
+                                  ('plans', T('Plans à tester'), 'plans')):
+            frame, value = metric_tile(style, name)
             self.learning_tiles[kind] = value
             tiles.addWidget(frame)
         layout.addLayout(tiles)
-        note = QLabel(T('Les observations sont conservées. Les hypothèses se révisent. Aucun réentraînement de modèle.'))
-        note.setObjectName('smallCaption')
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        self.memory_text = browser()
+        self.learning_updated = StatusLine()
+        self.learning_updated.setObjectName('smallCaption')
+        layout.addWidget(self.learning_updated)
+        # What the games show and the plans to try, in a box like the Coach's idea buttons; the records, the plans
+        # to test and the revisions under it, set the same way (owner, 2026-11-19).
+        self.learning_story = QLabel()
+        self.learning_story.setObjectName('readingText')
+        self.learning_story.setTextFormat(Qt.TextFormat.RichText)
+        self.learning_story.setWordWrap(True)
+        self.learning_story.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.learning_story_box = text_bubble(self.learning_story)
+        self.learning_story_box.hide()
+        layout.addWidget(self.learning_story_box)
+        self.memory_text = browser(reading=True)
         self.memory_text.anchorClicked.connect(self.internal_link)
         layout.addWidget(self.memory_text)
         self.stack.addWidget(widget)
 
     def _terminal(self):
-        widget, layout = page('Terminal', T('Codex, Claude Code ou PowerShell, dans le dossier PokeMind.'))
-        access = T('Accès complet : Codex (yolo) et Claude (toutes permissions) lisent et modifient '
+        access = T('Codex et Claude Code démarrent ici sans confirmations : ils lisent et modifient '
             'tous les fichiers du projet, y compris data/local, sans demander d’approbation. '
             'Ctrl+V colle · Ctrl+C copie la sélection (sinon interrompt) · clic droit copie ou colle · Maj+Pg↑ remonte.')
-        row = QHBoxLayout()
+        widget, layout = page('Terminal', T('Codex, Claude Code ou PowerShell, dans le dossier PokeMind.'), info=access)
+        buttons = WrapRow(6)  # the buttons go to a second row rather than cut their words (1100 × 700)
+        row = buttons.flow
         self.terminal_buttons = {}
-        for kind, label in (('codex', T('Codex · yolo')), ('claude', T('Claude Code · toutes permissions')),
+        for kind, label in (('codex', 'Codex'), ('claude', T('Claude Code (sans confirmations)')),
                             ('powershell', 'PowerShell')):
             button = QPushButton(label)
             button.setIcon(navigation_icon(6))
@@ -1131,15 +1465,14 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda checked=False, k=kind: self.open_terminal(k))
             row.addWidget(button)
             self.terminal_buttons[kind] = button
-        row.addStretch(1)
-        self.terminal_note = QLabel(T('Accès complet · Ctrl+V colle · Ctrl+C copie'))
+        self.terminal_note = QLabel()  # says why the terminal cannot start; nothing otherwise
         self.terminal_note.setObjectName('smallCaption')
-        self.terminal_note.setToolTip(access)
+        self.terminal_note.hide()
         row.addWidget(self.terminal_note)
-        layout.addLayout(row)
+        layout.addWidget(buttons)
         self.terminal_tabs = QTabWidget()
         self.terminal_tabs.setObjectName('terminalTabs')
-        self.terminal_tabs.setTabsClosable(True)
+        closable_tabs(self.terminal_tabs)
         self.terminal_tabs.setDocumentMode(True)
         self.terminal_tabs.tabCloseRequested.connect(self.close_terminal)
         layout.addWidget(self.terminal_tabs, 1)
@@ -1147,10 +1480,34 @@ class MainWindow(QMainWindow):
             for button in self.terminal_buttons.values():
                 button.setEnabled(False)
             self.terminal_note.setText(T('Terminal indisponible : pywinpty et pyte sont requis (Windows).'))
+            self.terminal_note.show()
         self.stack.addWidget(widget)
 
     def terminal_views(self):
         return [self.terminal_tabs.widget(i) for i in range(self.terminal_tabs.count())]
+
+    def terminal_running(self):
+        return any(view.session and view.session.alive() for view in self.terminal_views())
+
+    def apply_advanced_mode(self):
+        """The Terminal page is in the menu only in advanced mode; it keeps its place (row 6) for when it is."""
+        shown = bool(self.preferences.get('advanced_mode', False))
+        self.navigation.item(6).setHidden(not shown)
+        if not shown and self.navigation.currentRow() == 6:
+            self.navigation.setCurrentRow(5)
+        self.fit_sidebar()  # one row more or less in the menu
+
+    def advanced_toggled(self, checked):
+        if not checked and self.terminal_running():
+            # Nothing is stopped behind the owner's back: the option stays on until the terminal is closed.
+            self.advanced_mode.blockSignals(True)
+            self.advanced_mode.setChecked(True)
+            self.advanced_mode.blockSignals(False)
+            QMessageBox.information(self, T('Mode avancé'),
+                T('Un terminal est encore ouvert. Ferme-le d’abord dans la page Terminal, puis décoche le mode avancé.'))
+            return
+        self.save_preferences()
+        self.apply_advanced_mode()
 
     def open_terminal(self, kind):
         names = {'codex': 'Codex', 'claude': 'Claude Code', 'powershell': 'PowerShell'}
@@ -1250,6 +1607,9 @@ class MainWindow(QMainWindow):
         self.reduced_motion = WrapCheckBox(T('Réduire les animations'))
         self.reduced_motion.setChecked(self.preferences['reduced_motion'])
         self.reduced_motion.toggled.connect(self.save_preferences)
+        self.advanced_mode = WrapCheckBox(T('Mode avancé'))
+        self.advanced_mode.setChecked(self.preferences['advanced_mode'])
+        self.advanced_mode.toggled.connect(self.advanced_toggled)
         self.language = QComboBox()
         self.language.setAccessibleName(T('Langue de l’application'))
         self.language.setToolTip(T('Le choix s’applique immédiatement et sera conservé au prochain lancement.'))
@@ -1363,6 +1723,8 @@ class MainWindow(QMainWindow):
                 self.setting_row('language', self.language, T('Langue'), T('Français ou anglais')),
                 self.setting_row('motion', self.reduced_motion, hint=T('Pages affichées instantanément')),
                 self.setting_row('images', self.card_images, hint=T('Images gardées en cache sur ce PC')),
+                self.setting_row('terminal', self.advanced_mode,
+                                 hint=T('Affiche le terminal pour Codex, Claude Code et PowerShell')),
             ]),
             ('coach', T('Coach IA'), [
                 self.setting_row('cloud', self.cloud_consent, hint=T('Codex et Claude sont en ligne; Ollama reste sur ce PC.'),
@@ -1442,10 +1804,7 @@ class MainWindow(QMainWindow):
         for label in widget.findChildren(QLabel):
             label.setWordWrap(True)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(widget)
-        self.stack.addWidget(scroll)
+        self.stack.addWidget(page_scroll(widget))
 
     def show_settings_section(self, key):
         for name, section in self.settings_sections.items():
@@ -1456,12 +1815,18 @@ class MainWindow(QMainWindow):
         dock = QDockWidget(T('Assistant PokeMind'), self)
         dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea)
         dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        title_bar = QFrame()
+        # The title bar and the body are the two halves of one lit panel (the bar stays the dock's handle).
+        # Same total margins as before (28 px wide, 20 px high): the dock keeps its minimum width.
+        title_bar = GlowPanel(fill='surface', spread=6, open_bottom=True, underline=True)
         title_bar.setObjectName('chatTitleBar')
         title_layout = QHBoxLayout(title_bar)
-        title_layout.setContentsMargins(14, 10, 14, 10)
-        title_layout.addWidget(QLabel(T('TON COACH POKEMIND')))
-        title_layout.addStretch()
+        title_layout.setContentsMargins(6 + 9, 6 + 8, 6 + 7, 6)
+        # 16 px like a panel title, shortened with « … » rather than widening the dock (owner, 2026-11-18).
+        self.chat_title = ClampLabel('accent', 1, title=(16, 700))  # the title of the discussion
+        self.chat_title.setObjectName('chatTitle')
+        self.chat_title.setText(T('Ton coach PokeMind'))
+        self.chat_title.setAccessibleName(T('Ton coach PokeMind'))
+        title_layout.addWidget(self.chat_title, 1)
         self.chat_expand = QPushButton(T('Agrandir'))
         self.chat_expand.setIcon(expand_icon(False))
         self.chat_expand.setObjectName('chatExpand')
@@ -1471,17 +1836,44 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(self.chat_expand)
         dock.setTitleBarWidget(title_bar)
         dock.topLevelChanged.connect(self.chat_window_changed)
-        body = QWidget()
+        body = GlowPanel(fill='surface', spread=6, open_top=True)
         body.setObjectName('chatBody')
         body.setMinimumWidth(355)
         layout = QVBoxLayout(body)
+        layout.setContentsMargins(6 + 5, 6, 6 + 5, 6 + 6)
         self.provider = QComboBox()
         self.provider.setAccessibleName(T('Moteur de discussion'))
         for label, key in ((T('Codex · session CLI'), 'codex'), (T('Claude Code · session CLI'), 'claude'), ('Ollama · local', 'ollama')):
             self.provider.addItem(label, key)
         self.provider.setCurrentIndex(self.provider.findData(self.conversation['provider']))
         self.provider.currentIndexChanged.connect(self.change_provider)
-        layout.addWidget(self.provider)
+        self.provider.setMinimumContentsLength(10)
+        self.provider.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        # One row: the session, « Nouveau », and everything else about discussions behind « ⋯ » (owner, 2026-11-16).
+        self.new_button = QPushButton(T('Nouveau'))
+        self.new_button.setToolTip(T('Nouvelle discussion'))
+        self.new_button.clicked.connect(self.new_conversation)
+        self.chat_menu_button = QPushButton('⋯')
+        self.chat_menu_button.setObjectName('chatMenu')
+        self.chat_menu_button.setToolTip(T('Historique, copier, supprimer'))
+        self.chat_menu_button.setAccessibleName(T('Autres actions de la discussion'))
+        self.chat_menu = QMenu(self.chat_menu_button)
+        self.history_menu = self.chat_menu.addMenu('')
+        self.history_actions = {}
+        self.copy_action = self.chat_menu.addAction('')
+        self.copy_action.triggered.connect(self.copy_answer)
+        self.chat_menu.addSeparator()
+        self.delete_action = self.chat_menu.addAction('')
+        self.delete_action.triggered.connect(self.delete_conversation)
+        self.delete_all_action = self.chat_menu.addAction('')
+        self.delete_all_action.triggered.connect(self.delete_all_conversations)
+        self.chat_menu.aboutToShow.connect(self.fill_chat_menu)
+        self.chat_menu_button.setMenu(self.chat_menu)
+        session_row = QHBoxLayout()
+        session_row.addWidget(self.provider, 1)
+        session_row.addWidget(self.new_button)
+        session_row.addWidget(self.chat_menu_button)
+        layout.addLayout(session_row)
         self.permission_badge = QLabel()
         self.permission_badge.setWordWrap(True)
         self.update_permission_badge()
@@ -1491,30 +1883,32 @@ class MainWindow(QMainWindow):
         self.model.currentTextChanged.connect(self.save_preferences)
         self.model.setVisible(self.provider.currentData() == 'ollama')
         layout.addWidget(self.model)
-        self.provider_status = QLabel(T('Connexion au premier message · outils selon ta demande'))
+        self.provider_status = StatusLine()
         self.provider_status.setWordWrap(True)
         self.provider_status.setObjectName('muted')
         # The cloud context is a Settings choice; shown on hover instead of a permanent line.
         self.context_status = QLabel(T('Contexte cloud : connaissances publiques; statistiques sur opt-in dans Réglages.'))
         self.context_status.hide()
-        self.history_picker = QComboBox()
-        self.history_picker.setAccessibleName(T('Historique des discussions'))
-        self.history_picker.activated.connect(self.resume_conversation)
-        # Two rows so no history button gets cut in a narrow chat panel (owner, 2026-11-02).
-        history_row = QHBoxLayout()
-        history_row.addWidget(self.history_picker, 1)
-        layout.addLayout(history_row)
-        history_controls = QHBoxLayout()
-        self.history_picker.setMinimumContentsLength(8)
-        self.history_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        # The closed box is narrow; the open list must still show readable titles.
-        wrap_popup(self.history_picker, 460)
-        layout.addLayout(history_controls)
         self.transcript = RoundedTranscript()
         self.transcript.setObjectName('chatTranscript')
         self.transcript.document().setDocumentMargin(10)
         self.transcript.anchorClicked.connect(self.internal_link)
         layout.addWidget(self.transcript, 1)
+        # An empty discussion shows three questions to click instead of an empty frame (owner, 2026-11-16).
+        self.chat_empty = QFrame()
+        self.chat_empty.setObjectName('chatEmpty')
+        ideas = QVBoxLayout(self.chat_empty)
+        ideas.setContentsMargins(12, 14, 12, 14)
+        ideas.setSpacing(8)
+        invite = QLabel(T('Pose ta question au coach, ou commence par une de ces idées :'))
+        invite.setObjectName('muted')
+        invite.setWordWrap(True)
+        ideas.addWidget(invite)
+        # The page shown chooses the ideas (owner, 2026-11-18): its first three here, all of them in the menu.
+        self.idea_layout, self.idea_buttons, self.ideas, self.idea_page = ideas, [], [], 0
+        ideas.addStretch(1)
+        self.chat_empty.hide()
+        layout.addWidget(self.chat_empty, 1)
         self.source_toggle = QPushButton(T('Sources regroupées'))
         self.source_toggle.setObjectName('sourceToggle')
         self.source_toggle.setCheckable(True)
@@ -1533,7 +1927,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.provider_status)
         self.starters = QComboBox()
         self.starters.addItem(T('Idées de questions'))
-        self.starters.addItems([T(starter) for starter in STARTERS])
         self.starters.setMinimumContentsLength(10)
         self.starters.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         wrap_popup(self.starters, 460)
@@ -1581,26 +1974,6 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.send_button, 1)
         buttons.addWidget(self.stop_button, 1)
         layout.addLayout(buttons)
-        self.new_button = QPushButton(T('Nouveau'))
-        self.new_button.setToolTip(T('Nouvelle discussion'))
-        self.new_button.clicked.connect(self.new_conversation)
-        copy = QPushButton(T('Copier'))
-        copy.setToolTip(T('Copier la dernière réponse'))
-        copy.clicked.connect(lambda: QApplication.clipboard().setText(next((m['content'] for m in reversed(self.conversation['messages']) if m['role'] == 'assistant'), '')))
-        self.delete_button = QPushButton(T('Supprimer'))
-        self.delete_button.setProperty('destructive', True)
-        self.delete_button.setToolTip(T('Supprimer cette discussion'))
-        self.delete_button.clicked.connect(self.delete_conversation)
-        self.delete_all_button = QPushButton(T('Tout supprimer'))
-        self.delete_all_button.setProperty('destructive', True)
-        self.delete_all_button.setToolTip(T('Supprimer toutes les discussions de l’historique'))
-        self.delete_all_button.clicked.connect(self.delete_all_conversations)
-        history_row.addWidget(self.new_button)
-        for button in (copy, self.delete_button, self.delete_all_button):
-            button.setObjectName('compact')
-            last = button is self.delete_all_button  # keeps its natural width; the two others share the rest
-            button.setSizePolicy(QSizePolicy.Policy.Preferred if last else QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            history_controls.addWidget(button, 0 if last else 1)
         dock.setWidget(body)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.chat_dock = dock
@@ -1741,6 +2114,8 @@ class MainWindow(QMainWindow):
         report = self.services.report if result.get('report') else None  # the season chosen
         self.refresh_seasons()
         self.statistics.set_report(report)
+        self.record_report = report
+        self.show_sidebar_deck()
         self.update_home()
         if not report:
             self.overview.setText(T('Aucun rapport conservé. Ajoute tes journaux dans data/local/battle_logs, puis utilise Actualiser.'))
@@ -1751,18 +2126,20 @@ class MainWindow(QMainWindow):
                 self._startup_pending = False
                 QTimer.singleShot(0, lambda: self.reload(True, auto=True))
             return
-        self.overview.setText(T('Analyse conservée au ') + report['as_of'] + ' · ' + report['model_version'] + T(' · mémoire locale'))
         for value, count in zip(self.metrics, (report['coverage']['valid'], report['outcomes']['wins'], report['outcomes']['losses'])):
             value.setText(str(count))
-        self.dashboard_text.setHtml(self.priorities_html(report))
+        self.show_priorities(report)
         self.filter_matchups()
         tiles, memory = learning_view(self.services.learning, colors(self.preferences['theme']))
+        updated = tiles.pop('updated')
         for key, value in tiles.items():
             self.learning_tiles[key].setText(value)
-        self.memory_text.setHtml(memory)
+        self.learning_updated.setText(T('Mise à jour : ') + updated if updated != '—' else '')
+        self.learning_memory = memory
+        self.show_stories(report)
         self.system_health.setText(J('\n',(T(k) + ' : ' + v for k, v in self.services.health().items())))
         self.reload_decks()
-        self.statusBar().showMessage(T('Rapport local prêt · aucun taux de victoire global inféré'))
+        self.statusBar().showMessage(T('Tes statistiques sont à jour.'))
         if self._auto_refresh:
             current = set(self.services.match_index)
             self.statusBar().showMessage(T('Combats actualisés automatiquement · ') + str(len(current - self._before_matches)) + T(' nouvelles parties uniques.'))
@@ -1772,27 +2149,52 @@ class MainWindow(QMainWindow):
             self._startup_pending = False
             QTimer.singleShot(0, lambda: self.reload(True, auto=True))
 
+    def show_stories(self, report):
+        """The Overview summary and the Learning observations of the season shown, from its real games."""
+        story = overview_story(report)
+        updated = T('Dernière mise à jour : ') + long_date(report['as_of'])
+        self.overview.setText(story + '\n' + updated if story else updated)
+        self.overview_info.setVisible(bool(story))
+        observations = learning_html(report)
+        # The headings keep their size and weight; the lines are set like the Coach's idea buttons.
+        self.learning_story.setText(observations.replace('<h3>', '<h3 style="font-size:16px; font-weight:700; '
+                                    'margin-top:0px;">').replace('<li>', '<li style="margin-bottom:4px;">')
+                                    if observations else '')
+        self.learning_story_box.setVisible(bool(observations))
+        memory = getattr(self, 'learning_memory', '')
+        self.memory_text.setHtml(memory)
+        self.memory_text.setVisible(bool(memory))
+
     @staticmethod
     def priorities_html(report):
-        content = T('<h2>Priorités de travail</h2>')
+        """The opponents that cost the most losses, as links. The cautions are in the « ⓘ » of the heading."""
+        content = ''
         if report.get('season', {}).get('key') not in (None, seasons.ALL) and not report['groups']:
-            content += T('<p>Aucune partie dans cette saison pour l’instant. Les saisons passées et le cumul restent '
+            content += T('<p>Aucune partie dans cette saison pour l’instant. Les saisons passées restent '
                          'dans le choix de saison.</p>')
         for group in report['groups'][:3]:
-            content += '<p><a href="pokemind://matchup/' + str(report['groups'].index(group)) + '">' + rich(group['archetype']) + '</a><br>' + str(group['losses']) + T(' défaites enregistrées · n=') + str(group['n']) + T(' · hypothèse de famille</p>')
+            content += ('<p><a href="pokemind://matchup/' + str(report['groups'].index(group)) + '">'
+                        + rich(opponent_name(group['archetype'])) + '</a><br>' + losses_text(group['losses'], group['n']) + '</p>')
             for signal in group.get('signals', [])[:1]:
-                content += '<p>' + rich(signal['explanation']) + T(' Observé dans ') + str(signal['loss_games']) + T(' défaites et ') + str(signal['win_games']) + T(' victoires; causalité non prouvée.</p>')
-        content += T('<p>Choisis une famille pour retrouver les parties et distinguer les observations des hypothèses.</p>')
-        if report.get('season', {}).get('whole_corpus'):
-            content += '<p>' + T(report['season']['whole_corpus']) + '</p>'
+                content += '<p>' + rich(signal['explanation']) + T(' Observé dans ') + str(signal['loss_games']) + T(' défaites et ') + str(signal['win_games']) + T(' victoires.</p>')
         return content
+
+    def show_priorities(self, report):
+        content = self.priorities_html(report)
+        self.dashboard_text.setHtml(content)
+        whole = report.get('season', {}).get('whole_corpus')
+        self.priorities_info.set_tip(CAUSE_CAVEAT + '\n' + OPPONENT_CAVEAT + ('\n' + T(whole) if whole else ''))
 
     def season_picker(self):
         picker = QComboBox()
         picker.setAccessibleName(T('Saison affichée'))
         picker.setToolTip(T('Une partie compte dans la saison du jour où son journal a été ajouté à PokeMind. '
-                            'Les saisons passées restent consultables; le cumul compte toutes les parties.'))
+                            'Les saisons passées restent consultables.'))
         picker.activated.connect(lambda index, picker=picker: self.choose_season(picker.itemData(index)))
+        # It may narrow to a few words (the open list keeps every choice in full), so that it never sets the page
+        # wider than the room beside the Coach (1100 × 700, owner, 2026-11-19).
+        picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        picker.setMinimumContentsLength(12)
         self.season_pickers.append(picker)
         return picker
 
@@ -1807,11 +2209,11 @@ class MainWindow(QMainWindow):
             else:
                 name = row['name'] + ' (' + row['start'] + ' →' + (' ' + row['end'] if row['end'] else '') + ')'
             games = known.get(row['start'])
-            return prefix + name + (' · n=' + str(games) if games is not None else '')
+            return prefix + name + (' · ' + games_text(games) if games is not None else '')
         items = [(label(rows[-1], T('Saison actuelle · ')), seasons.CURRENT)]
         items += [(label(r), r['key']) for r in reversed(rows[:-1]) if known.get(r['start'])]
         total = len((services.full_report or {}).get('matches', []))
-        items.append((T('Cumul · toutes les saisons') + (T(' · n=') + str(total) if services.full_report else ''), seasons.ALL))
+        items.append((T('Toutes les saisons') + (' · ' + games_text(total) if services.full_report else ''), seasons.ALL))
         chosen = services.season_key if any(key == services.season_key for _, key in items) else seasons.CURRENT
         for picker in self.season_pickers:
             picker.blockSignals(True)
@@ -1820,6 +2222,11 @@ class MainWindow(QMainWindow):
                 picker.addItem(text, key)
             picker.setCurrentIndex(max(0, picker.findData(chosen)))
             picker.blockSignals(False)
+            metrics = picker.fontMetrics()
+            picker.view().setMinimumWidth(max((metrics.horizontalAdvance(text) for text, _ in items), default=0) + 48)
+            picker.updateGeometry()
+        if hasattr(self, 'season_row'):
+            self.season_row.refit()
 
     def choose_season(self, key):
         """Show one season (or all of them) everywhere; the analysis itself is not redone."""
@@ -1836,15 +2243,21 @@ class MainWindow(QMainWindow):
         report = self.services.report
         self.refresh_seasons()
         self.statistics.set_report(report)
+        self.record_report = report
+        self.show_sidebar_deck()
         self.update_home()
         for value, count in zip(self.metrics, (report['coverage']['valid'], report['outcomes']['wins'], report['outcomes']['losses'])):
             value.setText(str(count))
-        self.dashboard_text.setHtml(self.priorities_html(report))
+        self.show_priorities(report)
         self.filter_matchups()
-        self.games.clear()
-        self.game_selected()
-        self.statusBar().showMessage(T('Saison affichée : ') + report.get('season', {}).get('name', '')
-                                     + T(' · n=') + str(report['coverage']['valid']))
+        if not self.matchups.selectedItems():  # an opponent still chosen has just been refreshed for this season
+            self.games.clear()
+            self.game_selected()
+        self.show_stories(report)
+        season = report.get('season', {})
+        self.statusBar().showMessage(T('Saison affichée : ')
+                                     + (T('Toutes les saisons') if season.get('key') == seasons.ALL else season.get('name', ''))
+                                     + ' · ' + games_text(report['coverage']['valid']))
 
     def new_season(self):
         name, accepted = W.QInputDialog.getText(self, display(T('Nouvelle saison')),
@@ -1869,21 +2282,67 @@ class MainWindow(QMainWindow):
         self.battle_tiles['wins'].setText(str(totals['wins']) if groups else '—')
         self.battle_tiles['losses'].setText(str(totals['losses']) if groups else '—')
         rival = max(groups, key=lambda g: (g.get('losses', 0), g.get('n', 0)), default=None)
-        self.battle_tiles['rival'].setText(rival['archetype'] + ' · ' + str(rival['losses']) + ' D / ' + str(rival['n'])
+        self.battle_tiles['rival'].setText(opponent_name(rival['archetype']) + ' · ' + losses_text(rival['losses'], rival['n'])
                                            if rival and rival.get('losses') else '—')
         query = self.matchup_filter.text().casefold()
-        fill_table(self.matchups, [[g['archetype'], g['wins'], g['losses'], g['unknown'], g['n']]
-            for g in report.get('groups', []) if query in g['archetype'].casefold()])
+        shown = [g for g in groups if query in g['archetype'].casefold()
+                 or query in display(opponent_name(g['archetype'])).casefold()]
+        # A rebuild (reload, season, language) keeps the opponent chosen, and with it the Coach's {adversaire}.
+        row = self.matchups.currentRow()
+        previous = self.matchup_key(row) if self.matchups.selectedItems() and row >= 0 else None
+        if previous is not None:
+            self.matchups.blockSignals(True)
+        fill_table(self.matchups, [[opponent_name(g['archetype']), g['wins'], g['losses'], g['unknown'], g['n']] for g in shown],
+                   keys=[g['archetype'] for g in shown])
+        if previous is not None:
+            kept = next((r for r in range(self.matchups.rowCount()) if self.matchup_key(r) == previous), None)
+            if kept is not None:
+                self.choose_matchup_row(kept)
+            self.matchups.blockSignals(False)
+            self.matchup_selected()  # its games, summary and timeline from the report now shown
+        self.show_probable_tips()
+        # Room after the name, and for the sort arrow beside V, D and « ? » (they were glued together).
+        self.matchups.setColumnWidth(0, min(380, self.matchups.columnWidth(0) + 28))
+        for column in (1, 2, 3):
+            self.matchups.setColumnWidth(column, max(56, self.matchups.columnWidth(column)))
+        fit_table(self.matchups)
+        self.show_matchup_tips()
+
+    def show_probable_tips(self):
+        """A guessed opponent says in its tooltip what it rests on, in the language shown (rows may be sorted:
+        found by their key)."""
+        report = self.services.report or {}
+        by_reference = {m.get('match'): m for m in report.get('matches', [])}
+        by_label = {g['archetype']: g for g in report.get('groups', [])}
+        for row in range(self.matchups.rowCount()):
+            group = by_label.get(self.matchup_key(row), {})
+            tip = probable_tip([by_reference[r] for r in group.get('matches', []) if r in by_reference])
+            if tip:
+                self.matchups.item(row, 0).setToolTip(display(tip))
+
+    def show_matchup_tips(self):
+        """What V, D and « ? » stand for, on the column headers, in the language shown."""
+        for column, tip in enumerate(self.matchup_header_tips):
+            item = self.matchups.horizontalHeaderItem(column)
+            if item:
+                item.setToolTip(display(tip))
 
     def matchup_selected(self):
         # Rebuilding a family list may display its first row, but it is not a choice of a game.
         self._combat_match = (self.conversation['id'], None)
         row = self.matchups.currentRow()
-        if row < 0 or not self.matchups.item(row, 0):
+        chosen = bool(self.matchups.selectedItems()) and row >= 0 and bool(self.matchups.item(row, 0))
+        self.matchup_details.setVisible(chosen)
+        self.refresh_ideas()
+        if not chosen:
             return
-        label = self.matchups.item(row, 0).text()
+        label = self.matchup_key(row)
         group = next((g for g in (self.services.report or {}).get('groups', []) if g['archetype'] == label), {})
         references = set(group.get('matches', []))
+        story = matchup_story(label, [m for m in (self.services.report or {}).get('matches', [])
+                                      if m.get('match') in references or (m.get('opponent') or {}).get('label') == label])
+        self.matchup_story.setText(story or '')
+        self.matchup_story_box.setVisible(bool(story))
         self.games.blockSignals(True)
         self.games.clear()
         for match in (self.services.report or {}).get('matches', []):
@@ -1905,8 +2364,10 @@ class MainWindow(QMainWindow):
             else:
                 self.conversation.pop('selected_match', None)
             self.remember()
+            self.refresh_ideas()
+        self.battle_badge.setVisible(bool(match))
         if not match:
-            self.battle_badge.setText(T('Aucune partie sélectionnée.'))
+            self.battle_badge.setText('')
             self.battle_details.clear()
             return
         self.battle_badge.setText(str(match['match']) + ' · ' + OUTCOME_LABELS.get(match.get('outcome'), T('Issue inconnue')))
@@ -1915,7 +2376,8 @@ class MainWindow(QMainWindow):
     def ask_matchup(self):
         row = self.matchups.currentRow()
         if row >= 0 and self.matchups.item(row, 0):
-            self.chat_input.setPlainText(T('Dans mes combats, quelles situations travailler contre ') + self.matchups.item(row, 0).text() + T('? Cite n, les sources et ce qui reste inconnu.'))
+            self.chat_input.setPlainText(T('Dans mes combats, quelles situations travailler contre ') + self.matchups.item(row, 0).text()
+                                         + T('? Indique le nombre de parties, les sources et ce qui reste inconnu.'))
             self.chat_input.setFocus()
 
     def reload_decks(self):
@@ -1943,7 +2405,7 @@ class MainWindow(QMainWindow):
         self.deck_picker.blockSignals(True)
         self.compare_picker.blockSignals(True)
         self.deck_picker.clear()
-        self.deck_picker._deck_tips = {}
+        self.deck_picker._deck_tips, self.ranking_tips = {}, {}
         self.compare_picker.clear()
         self.ranking_table.blockSignals(True)
         self.ranking_table.setRowCount(len(rows))
@@ -1954,29 +2416,33 @@ class MainWindow(QMainWindow):
             if stats.get('fraction') is not None:
                 rank += 1
                 percent = T(f"{100 * stats['fraction']:.1f}".replace('.', ','), en=f"{100 * stats['fraction']:.1f}")
-                period = stats['window']['since'] + '–' + stats['window']['until']
-                suffix = percent + ' % PUBLIC BO1 · n=' + str(stats['n']) + ' · ' + period + ' · Limitless'
+                period = period_text(stats['window']['since'], stats['window']['until'])
+                suffix = (percent + ' % PUBLIC BO1 · ' + str(stats['n']) + T(' matchs', en=' matches') + ' · ' + period
+                          + ' · Limitless')
                 prefix = '#' + str(rank) + ' · ' + percent + ' %'
             else:
                 suffix = T('Données insuffisantes', en='Insufficient data')
                 prefix = '— · ' + suffix
-            label = prefix + ' · ' + ('♛ ' if main and favorite_key(row) == main else '') + row['label']
+            # The selectors show the deck's name; its rank and public rate are read in the Ranking tab only.
+            label = ('♛ ' if main and favorite_key(row) == main else '') + row['label']
             self.deck_picker.addItem(label)
-            tip = label + '\n' + suffix + '\n' + T('Taux d’archétype PUBLIC PTCGL Standard, pas de cette liste exacte ni tes résultats.',
+            tip = prefix + ' · ' + label + '\n' + suffix + '\n' + T('Taux d’archétype PUBLIC PTCGL Standard, pas de cette liste exacte ni tes résultats.',
                                       en='PUBLIC PTCGL Standard archetype rate, not this exact list or your results.')
             if stats.get('fraction') is not None:
                 tip += '\n' + stats['source_url'] + '\n' + T('Instantané : ', en='Snapshot: ') + str(stats.get('last_success_at'))
-            self.deck_picker._deck_tips[self.deck_picker.count() - 1] = tip
-            self.deck_picker.setItemData(self.deck_picker.count() - 1, display(tip), Qt.ItemDataRole.ToolTipRole)
-            self.deck_picker.setItemData(self.deck_picker.count() - 1, display(tip), Qt.ItemDataRole.AccessibleTextRole)
+            self.ranking_tips[index] = tip
+            self.deck_picker._deck_tips[index] = label
+            self.deck_picker.setItemData(index, display(label), Qt.ItemDataRole.ToolTipRole)
+            self.deck_picker.setItemData(index, display(label), Qt.ItemDataRole.AccessibleTextRole)
             self.compare_picker.addItem(label)
-            self.compare_picker.setItemData(index, display(tip), Qt.ItemDataRole.ToolTipRole)
+            self.compare_picker.setItemData(index, display(label), Qt.ItemDataRole.ToolTipRole)
             values = ['#' + str(rank) if stats.get('fraction') is not None else '—', row['label'],
                       percent + ' %' if stats.get('fraction') is not None else suffix,
                       str(stats['n']) if stats.get('fraction') is not None else '—']
             for column, value in enumerate(values):
                 item = QTableWidgetItem()
                 item.setData(Qt.ItemDataRole.DisplayRole, value)
+                item.setTextAlignment(NUMBER if column in self.ranking_table.numeric_columns else WORDS)
                 item.setToolTip(display(tip))
                 item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, display(tip))
                 self.ranking_table.setItem(index, column, item)
@@ -1992,6 +2458,7 @@ class MainWindow(QMainWindow):
         self.deck_picker.setAccessibleName(self.deck_picker.currentText())
         self.deck_picker.setAccessibleDescription(self.deck_picker.toolTip())
         self.ranking_table.setCurrentCell(max(0, self.deck_picker.currentIndex()), 0)
+        fit_table(self.ranking_table, least=2)
         self.ranking_table.blockSignals(False)
         # Relabel/reorder only: the selected list and gallery keep their scroll and image generation.
         if selected_index < 0:
@@ -2038,14 +2505,21 @@ class MainWindow(QMainWindow):
         self.main_button.setEnabled(valid)
         if not valid:
             self.deck_info.setText(T('Aucune référence exacte de 60 cartes disponible localement.'))
+            self.deck_info.show()
+            self.show_deck_pills()
             self.deck_text.clear()
             self.gallery.populate([])
+            self.show_active_deck()
             self._public_stats_request = None
             self.public_stats.set_view(None)
             return
         row = self.deck_rows[index]
         self.deck_badges(row)
-        self.deck_info.setText(row['kind'] + ' · 60/60\n' + row['legality'] + T(' · possession / crédits inconnus.\nSources : ') + self.source_urls(row.get('source', {})))
+        # What this line used to say before « Sources » is now the pills of the deck strip; no sources, no line.
+        sources = self.source_urls(row.get('source', {}))
+        self.deck_info.setText(T('Sources : ', en='Sources: ') + sources if sources else '')
+        self.deck_info.setVisible(bool(sources))
+        self.show_deck_pills(row)
         self.deck_text.setPlainText(row['export'])
         token = self._gallery_request = object()
         def show(items):
@@ -2056,9 +2530,17 @@ class MainWindow(QMainWindow):
             for tile in self.gallery.tiles:
                 identity = tile.card.get('identity')
                 if identity and self.preferences['card_images']:
-                    self.submit(lambda e, key=identity: self.images.fetch(key),
-                        lambda value, target=tile: target.set_image(value) if self.preferences['card_images'] and self.gallery.generation == generation else None,
-                        pool=self.image_pool)
+                    key = picture_key(self.picture_scope, identity, 'fr')
+                    known = cached_picture(key)
+                    if known is not None:  # already decoded: shown at once, no fade
+                        tile.set_image(known)
+                        continue
+                    tile.set_pending(True)
+                    self.submit(lambda e, i=identity: self.decoded_image(i),
+                        lambda value, target=tile, k=key: target.set_image(self.remembered(k, value), fade=True)
+                        if self.preferences['card_images'] and self.gallery.generation == generation else None,
+                        error=lambda code, target=tile: target.set_pending(False)
+                        if self.gallery.generation == generation else None, pool=self.image_pool, priority=1)
         self.submit(lambda e: self.services.gallery_cards(row['export']), show)
         if self.deck_views.currentWidget() is self.public_stats_scroll:
             self.load_public_stats()
@@ -2070,13 +2552,15 @@ class MainWindow(QMainWindow):
         main = favorite_key(row) == self.preferences.get('main_deck', '')
         self.main_button.setChecked(main)
         self.main_button.setText(T('♛ Deck principal') if main else T('☆ Deck principal'))
+        self.show_active_deck(row)
+        self.refresh_ideas()
 
     def ranking_context(self):
         index = self.deck_picker.currentIndex()
         stats = (self.deck_rows[index].get('public_ranking') or {}) if 0 <= index < len(self.deck_rows) else {}
         period = stats.get('window') or {}
-        self.ranking_source.setText(('PUBLIC PTCGL Standard · BO1 · n≥20 · Limitless · '
-            + str(period.get('since', '—')) + ' → ' + str(period.get('until', '—')))
+        self.ranking_source.setText(('PUBLIC PTCGL Standard · BO1 · ' + T('20 matchs ou plus', en='20 matches or more')
+            + ' · Limitless · ' + period_text(period.get('since'), period.get('until')))
             if stats.get('fraction') is not None else T('Données insuffisantes · aucun taux PUBLIC BO1 attribué',
                                                                        en='Insufficient data · no PUBLIC BO1 rate assigned'))
 
@@ -2160,7 +2644,8 @@ class MainWindow(QMainWindow):
             text = str(difference['counts']['shared']) + T(' copies communes. ')
             for key, label in (('removed', 'Retirer'), ('added', 'Ajouter')):
                 text += label + ' : ' + J(', ',(str(c['quantity']) + ' × ' + c['name'] for c in difference[key])) + '. '
-            self.deck_diff.setText(text + T(' Équivalences de réimpression et efficacité non établies.'))
+            self.deck_diff.setText(text.strip())
+            self.deck_diff.show()
 
     def search_cards(self):
         query = self.card_query.text().strip()
@@ -2181,6 +2666,7 @@ class MainWindow(QMainWindow):
 
     def reset_binder(self):
         self.binder_search = None
+        self.forget_binder_pages()
         self.binder_reset.hide()
         self.binder.title.setText(T('Classeur'))
         self.browse_binder(0)
@@ -2198,8 +2684,88 @@ class MainWindow(QMainWindow):
                               'cards': self.binder_search[offset:offset + count]})
             return
         language = self.binder_language()
-        self.submit(lambda e: self.services.browse_cards(language, offset, count), self.show_binder,
+        known = self.binder_pages.get((language, offset, count))
+        if known is not None:  # read ahead of time, while the previous spread was open
+            self.show_binder(known)
+            return
+        epoch = self.binder_epoch
+        self.submit(lambda e: self.services.browse_cards(language, offset, count),
+                    lambda result: self.show_binder(self.keep_binder_page((language, offset, count), result, epoch)),
                     error=self.binder_unavailable)
+
+    def forget_binder_pages(self):
+        self.binder_pages.clear()
+        self.binder_epoch += 1
+
+    def keep_binder_page(self, key, result, epoch=None):
+        if (isinstance(result, dict) and result.get('cards') is not None
+                and (epoch is None or epoch == self.binder_epoch)):
+            while len(self.binder_pages) >= 8:
+                self.binder_pages.pop(next(iter(self.binder_pages)))
+            self.binder_pages[key] = result
+        return result
+
+    def decoded_image(self, identity, language=None, cached_only=False):
+        """Worker thread: the cached (or, for what is in sight, fetched) picture, decoded and sized off the
+        interface thread. `cached_only` never downloads."""
+        if cached_only:
+            result = self.images.fetch(identity, language or 'fr', cached_only=True)
+        else:
+            result = self.images.fetch(identity, language) if language else self.images.fetch(identity)
+        image = decode_picture(result)
+        if image is None:
+            return {'status': result.get('status', 'UNAVAILABLE') if isinstance(result, dict) else 'UNAVAILABLE'}
+        return dict(result, data=None, image=image)
+
+    def remembered(self, key, value):
+        """Interface thread: keep a decoded picture in the bounded memory cache."""
+        image = value.get('image') if isinstance(value, dict) else None
+        if image is None:
+            return {'status': 'UNAVAILABLE'}
+        return dict(value, image=None, picture=remember_picture(key, image, value.get('source_url', '')))
+
+    def prefetch_binder(self, offset, count, total):
+        """Neighbouring spreads: their card lists and the pictures already in the disk cache, decoded ahead of
+        time off the interface thread. Never a download; nothing at all when illustrations are off."""
+        if not self.preferences['card_images']:
+            return
+        language = self.binder_language()
+        for target in (offset + count, offset - count):
+            if not 0 <= target < total:
+                continue
+            if self.binder_search is not None:
+                self.prefetch_pictures(self.binder_search[target:target + count])
+                continue
+            known = self.binder_pages.get((language, target, count))
+            if known is not None:
+                self.prefetch_pictures(known.get('cards', []))
+                continue
+            self.submit(lambda e, o=target: self.services.browse_cards(language, o, count),
+                        lambda result, key=(language, target, count), epoch=self.binder_epoch:
+                        self.prefetch_pictures(self.keep_binder_page(key, result, epoch).get('cards', []))
+                        if isinstance(result, dict) else None,
+                        error=lambda code: None)
+
+    def prefetch_pictures(self, cards):
+        wanted = []
+        for card in cards or []:
+            identity = card.get('tcgdex_id')
+            if identity:
+                language = card.get('language') or 'fr'
+                if cached_picture(picture_key(self.picture_scope, identity, language)) is None:
+                    wanted.append((identity, language))
+        if not wanted:
+            return
+
+        def read(e):
+            return [(picture_key(self.picture_scope, i, l), self.decoded_image(i, l, cached_only=True)) for i, l in wanted]
+
+        def keep(found):
+            if self.preferences['card_images']:
+                for key, value in found:
+                    if value.get('image') is not None:
+                        self.remembered(key, value)
+        self.submit(read, keep, error=lambda code: None, pool=self.image_pool, priority=-1)
 
     def binder_unavailable(self, code):
         from pokemind import catalog_download
@@ -2253,6 +2819,7 @@ class MainWindow(QMainWindow):
             count = receipt.get('printings')
             self.statusBar().showMessage(T('Catalogue de cartes prêt') + (' : ' + str(count) + T(' cartes.') if count else '.'))
             self.binder_loaded_once = False
+            self.forget_binder_pages()
             if self.stack.currentIndex() == 3:
                 self.browse_binder(0)
         else:
@@ -2270,16 +2837,24 @@ class MainWindow(QMainWindow):
 
     def show_binder(self, result):
         cards = result.get('cards', [])
-        self.binder.set_cards(cards, result.get('offset', 0), result.get('total', 0))
-        if not self.preferences['card_images']:
+        images = self.preferences['card_images']
+        self.binder.set_cards(cards, result.get('offset', 0), result.get('total', 0), expect_art=images)
+        if not images:
             return
         for slot in self.binder.slots:
             card = slot.card
             if card and card.get('tcgdex_id'):
                 identity, language = card['tcgdex_id'], card.get('language') or 'fr'
-                self.submit(lambda e, i=identity, l=language: self.images.fetch(i, l),
-                            lambda value, s=slot, i=identity: s.set_image(value, i), error=lambda code: None,
-                            pool=self.image_pool)
+                key = picture_key(self.picture_scope, identity, language)
+                known = cached_picture(key)
+                if known is not None:  # already decoded: shown at once, no fade
+                    slot.set_image(known, identity)
+                    continue
+                self.submit(lambda e, i=identity, l=language: self.decoded_image(i, l),
+                            lambda value, s=slot, i=identity, k=key: s.set_image(self.remembered(k, value), i, fade=True)
+                            if self.preferences['card_images'] else None,
+                            error=lambda code, s=slot, i=identity: s.set_image({}, i), pool=self.image_pool, priority=1)
+        self.prefetch_binder(result.get('offset', 0), self.binder.per_spread(), result.get('total', 0))
 
     def binder_card(self, card):
         self.card_panel.show()
@@ -2287,6 +2862,7 @@ class MainWindow(QMainWindow):
         self.submit(lambda e: self.services.card(identity, language), self.show_card)
 
     def page_shown(self, index):
+        self.refresh_ideas()
         if index == 3 and not self.binder_loaded_once:
             self.binder.open_cover()
             self.browse_binder(0)
@@ -2306,6 +2882,7 @@ class MainWindow(QMainWindow):
             self.submit(lambda e: self.images.fetch(identity, language),
                 lambda value: self.card_preview.set_image(value) if self.preferences['card_images'] and self.card_preview.card.get('identity') == identity and self.card_preview.card.get('language') == language else None,
                 pool=self.image_pool)
+        self.refresh_ideas()
         text = '<h2>' + rich(card['name']) + '</h2><p>' + rich(card['tcgdex_id']) + ' · ' + rich(card['language']) + T(' · PV ') + rich(card.get('hp')) + '</p>'
         for value in (card.get('description'), card.get('effect')):
             if value:
@@ -2341,7 +2918,7 @@ class MainWindow(QMainWindow):
         if url.scheme() == 'pokemind' and url.host() == 'page':
             try:
                 index = int(url.path().strip('/'))
-                if 0 <= index < self.stack.count():
+                if 0 <= index < self.stack.count() and not self.navigation.item(index).isHidden():
                     self.navigation.setCurrentRow(index)
             except ValueError:
                 pass
@@ -2349,8 +2926,8 @@ class MainWindow(QMainWindow):
             try:
                 group = self.services.report['groups'][int(url.path().strip('/'))]
                 self.navigation.setCurrentRow(1)
-                self.matchup_filter.setText(group['archetype'])
-                self.matchups.selectRow(0)
+                self.matchup_filter.setText(display(opponent_name(group['archetype'])))
+                self.choose_matchup_row(0)
             except (KeyError, ValueError, IndexError, TypeError):
                 pass
         elif url.scheme() == 'pokemind' and url.host() == 'card':
@@ -2363,6 +2940,8 @@ class MainWindow(QMainWindow):
 
     def apply_theme(self):
         theme = self.preferences['theme']
+        apply_color_scheme(theme)  # the Windows title bar too
+        apply_application_font()  # dialogs, menus and tooltips outside the window's style sheet
         self.setPalette(palette(theme))
         self.setStyleSheet(DARK if self.preferences['theme'] == 'dark' else LIGHT)
         for index in range(1, self.navigation.count()):
@@ -2376,8 +2955,11 @@ class MainWindow(QMainWindow):
         self.statistics.set_theme(theme)
         self.public_stats.set_theme(theme)
         self.game_selected()
+        if getattr(self, 'learning_memory', None) and self.services.learning:  # its bars in the new theme's colours
+            self.learning_memory = learning_view(self.services.learning, colors(theme))[1]
+            self.memory_text.setHtml(self.learning_memory)
         for view in self.findChildren(QTextBrowser):
-            view.document().setDefaultStyleSheet('a {color:' + color + ';} h2 {font-size:21px;} h3 {font-size:16px;}')
+            view.document().setDefaultStyleSheet(browser_style(view, color))
             block = view.document().begin()
             while block.isValid():
                 iterator = block.begin()
@@ -2406,6 +2988,7 @@ class MainWindow(QMainWindow):
         self.card_preview.art.set_motion_enabled(enabled)
         self.activity.spinner.motion = enabled
         self.binder.set_motion_enabled(enabled)
+        self.active_deck.ring.set_motion_enabled(enabled)
         if hasattr(self, 'motion'):
             self.motion.set_enabled(enabled)
 
@@ -2419,6 +3002,7 @@ class MainWindow(QMainWindow):
         self.preferences.update(startup_refresh=self.startup_refresh.isChecked(),
             watch_logs=self.watch_logs.isChecked(), card_images=self.card_images.isChecked(),
             reduced_motion=self.reduced_motion.isChecked(), chat_project=self.chat_project.isChecked(),
+            advanced_mode=self.advanced_mode.isChecked(),
             update_check=self.update_auto.isChecked() if hasattr(self, 'update_auto') else self.preferences['update_check'])
         self.preferences.update(permission_mode=self.permission_mode.currentData(),
             project_relative=self.project_relative.text().strip() or '.', language=self.language.currentData())
@@ -2433,8 +3017,11 @@ class MainWindow(QMainWindow):
                         pool=self.image_pool)
             else:
                 self.images.cancelled.set()
+                forget_pictures()  # illustrations off: nothing decoded stays in memory either
                 for tile in self.gallery.tiles:
                     tile.reset(tile.card)
+                for slot in self.binder.slots:
+                    slot.clear_picture()
                 self.card_preview.reset(self.card_preview.card)
         try:
             self.store.write('preferences.json', self.preferences)
@@ -2454,7 +3041,10 @@ class MainWindow(QMainWindow):
     def apply_language(self):
         set_language(self.preferences.get('language', 'fr'))
         retranslate(self)
-        for index, tip in getattr(self.deck_picker, '_deck_tips', {}).items():
+        self.show_matchup_tips()
+        self.show_probable_tips()
+        self.fill_chat_menu()
+        for index, tip in getattr(self, 'ranking_tips', {}).items():
             for column in range(self.ranking_table.columnCount()):
                 item = self.ranking_table.item(index, column)
                 if item:
@@ -2471,7 +3061,7 @@ class MainWindow(QMainWindow):
             content = self.stack.widget(i)
             if isinstance(content, QScrollArea):
                 content = content.widget()
-            content.layout().itemAt(0).widget().setText(name)
+            content.title_label.setText(name)
 
     def get_adapter(self):
         if self.adapter is None:
@@ -2593,8 +3183,8 @@ class MainWindow(QMainWindow):
 
     def update_permission_badge(self):
         full = self.preferences['permission_mode'] == 'full'
-        self.permission_badge.setText(T('Accès complet · données privées accessibles') if full
-                                      else T('Standard · données privées accessibles'))
+        # Plain words, always in sight; the mode and what it allows are in the tooltip.
+        self.permission_badge.setText(T('Le coach peut lire tes données PokeMind'))
         self.permission_badge.setToolTip(T('ACCÈS COMPLET · --yolo volontaire · données privées accessibles') if full
                                          else T('STANDARD · shell : données privées accessibles'))
         self.permission_badge.setObjectName('permissionBadge')
@@ -2958,7 +3548,8 @@ class MainWindow(QMainWindow):
         self.update_info = {'app': result.get('app') or {}, 'cards': result.get('cards') or {}}
         from datetime import datetime
         stamp = str(result.get('checked_at') or datetime.now().isoformat(timespec='minutes'))
-        self.update_checked.setText(T('Dernière vérification : ') + stamp.replace('T', ' ')[:16])
+        self.update_checked.setText(T('Dernière vérification : ') + long_date(stamp)
+                                    + (' · ' + stamp[11:16] if len(stamp) >= 16 and stamp[10] == 'T' else ''))
         self.show_update_state()
 
     def catalogue_commit(self):
@@ -3079,6 +3670,7 @@ class MainWindow(QMainWindow):
                     else T('Cartes à jour') + (' : ' + news if news else '.'))
             self.statusBar().showMessage(text)
             self.binder_loaded_once = False
+            self.forget_binder_pages()
             if self.stack.currentIndex() == 3 and status == 'UPDATED':
                 self.browse_binder(0)
             self.show_update_state()
@@ -3191,15 +3783,77 @@ class MainWindow(QMainWindow):
         return True
 
     def refresh_history(self):
-        self.history_picker.blockSignals(True)
-        self.history_picker.clear()
-        self.history_picker.addItem(T('Historique'), None)
-        for row in self.preferences['conversations']:
-            self.history_picker.addItem(row['title'][:60] + ' · ' + row['provider'], row['id'])
-        self.history_picker.blockSignals(False)
+        self.fill_chat_menu()
 
-    def resume_conversation(self, index):
-        identity = self.history_picker.itemData(index)
+    def fill_chat_menu(self):
+        """The « ⋯ » menu in the language shown: one entry per saved discussion, then copy and the two deletions."""
+        self.history_menu.setTitle(display(T('Historique')))
+        self.history_menu.clear()
+        self.history_actions = {}
+        for row in self.preferences['conversations']:
+            action = self.history_menu.addAction((row['title'][:60] + ' · ' + row['provider']).replace('&', '&&'))
+            action.triggered.connect(lambda checked=False, identity=row['id']: self.resume_conversation(identity))
+            self.history_actions[row['id']] = action
+        self.history_menu.setEnabled(bool(self.history_actions))
+        self.copy_action.setText(display(T('Copier la dernière réponse')))
+        self.copy_action.setEnabled(any(m['role'] == 'assistant' for m in self.conversation['messages']))
+        self.delete_action.setText(display(T('Supprimer cette discussion')))
+        self.delete_all_action.setText(display(T('Tout supprimer')))
+
+    def copy_answer(self):
+        QApplication.clipboard().setText(next((m['content'] for m in reversed(self.conversation['messages'])
+                                               if m['role'] == 'assistant'), ''))
+
+    def use_idea(self, idea):
+        """A clicked idea goes to the message box, ready to send or to change; nothing is sent by itself and the
+        mode under the chat is left as it is."""
+        self.chat_input.setPlainText(display(idea))
+        self.chat_input.setFocus()
+
+    def idea_state(self):
+        """What the page shows, for the {slots} of its ideas; nothing chosen gives the fallback words."""
+        state = {}
+        if hasattr(self, 'matchups'):
+            row = self.matchups.currentRow()
+            if self.matchups.selectedItems() and row >= 0 and self.matchups.item(row, 0):
+                label = self.matchup_key(row)
+                if opponent_words(label):
+                    state['adversaire'] = opponent_words(label)
+            state['match'] = bool(self._combat_match and self._combat_match[1])
+        if hasattr(self, 'deck_picker'):
+            index = self.deck_picker.currentIndex()
+            if 0 <= index < len(self.deck_rows):
+                state['deck'] = self.deck_rows[index]['label']
+        if hasattr(self, 'card_preview') and self.card_panel.isVisibleTo(self) and self.card_preview.card.get('identity'):
+            state['carte'] = self.card_preview.card.get('name')
+        return state
+
+    def refresh_ideas(self, *args):
+        """The Coach's ideas for the page shown; the Terminal keeps those of the page before it."""
+        if not hasattr(self, 'starters') or not hasattr(self, 'stack'):
+            return
+        page = self.stack.currentIndex()
+        if page != TERMINAL and page >= 0:
+            self.idea_page = page
+        self.ideas = page_ideas(self.idea_page, self.idea_state())
+        for button in self.idea_buttons:
+            self.idea_layout.removeWidget(button)
+            button.deleteLater()
+        self.idea_buttons = []
+        for position, idea in enumerate(self.ideas[:3]):
+            button = WrapPushButton(idea)
+            button.setObjectName('chatIdea')
+            button.clicked.connect(lambda checked=False, text=idea: self.use_idea(text))
+            self.idea_layout.insertWidget(1 + position, button)
+            self.idea_buttons.append(button)
+        self.starters.blockSignals(True)
+        while self.starters.count() > 1:
+            self.starters.removeItem(1)
+        self.starters.addItems(self.ideas)
+        self.starters.setCurrentIndex(0)
+        self.starters.blockSignals(False)
+
+    def resume_conversation(self, identity):
         if not identity or self.chat_busy:
             return
         old, self.adapter = self.adapter, None
@@ -3227,7 +3881,7 @@ class MainWindow(QMainWindow):
         if cached is not None:
             return cached
         user = message['role'] == 'user'
-        title = T('TOI') if user else 'POKEMIND'
+        title = T('Toi') if user else 'PokeMind'
         content = (message_html(str(message['content'])) if message['role'] == 'assistant' and not plain
                    else rich(str(message['content'])).replace('\n','<br>'))
         urls = () if user else tuple(html.unescape(url) for url in re.findall(r'<a href="(https://[^"]+)"', content))
@@ -3236,12 +3890,14 @@ class MainWindow(QMainWindow):
         content = content.replace(TOOL_COLOR, 'color:' + c['muted'] + ';')  # tool lines follow the theme
         body = ('<p style="color:' + foreground + '; margin-top:2px;">' + content + '</p>' if user
                 else '<div style="color:' + foreground + ';">' + content + '</div>')
-        bubble = ('<td width="88%" style="color:'
-                  + foreground + ';"><p style="color:' + heading + '; font-size:11px; font-weight:800; letter-spacing:1px;'
-                  ' margin-bottom:2px;">' + title + '</p>' + body + '</td>')
-        spacer = '<td width="12%"></td>'
-        table = ('<table width="100%" cellspacing="0" cellpadding="12"><tr>' +
-                 (spacer + bubble if user else bubble + spacer) + '</tr></table><p></p>')
+        width = RoundedTranscript.WIDTH
+        bubble = ('<td width="' + str(width) + '%" style="color:'
+                  + foreground + ';"><p style="color:' + heading + ';'
+                  ' margin-top:0px; margin-bottom:2px;">' + title + '</p>' + body + '</td>')
+        spacer = '<td width="' + str(100 - width) + '%"></td>'
+        # The separator paragraph is one pixel high: the space between boxes is the table margin (space_bubbles).
+        table = ('<table width="100%" cellspacing="0" cellpadding="' + str(RoundedTranscript.PADDING) + '"><tr>' +
+                 (spacer + bubble if user else bubble + spacer) + '</tr></table><p style="margin:0px; font-size:1px;"></p>')
         if len(self._bubbles) >= 1000:
             self._bubbles.clear()
         if not plain:
@@ -3276,15 +3932,17 @@ class MainWindow(QMainWindow):
         c = colors(self.preferences['theme'])
         self.transcript.chat_theme = self.preferences['theme']
         self.transcript.bubble_roles = [m['role'] for m in self.conversation['messages']]
-        muted = c['muted']
-        intro = '<p style="color:' + muted + T('">PokeMind · questions, sources et hypothèses.<br>Choisis une discussion ou pose une question.</p>')
         messages = self.conversation['messages']
+        intro = ''  # an empty discussion shows the ideas panel instead of the transcript
+        self.chat_empty.setVisible(not messages)
+        self.transcript.setVisible(bool(messages))
         bubbles = [self.chat_bubble(message, c, plain=streaming and i == len(messages) - 1)
                    for i, message in enumerate(messages)]
         self._chat_stream_content = str(messages[-1]['content']) if messages and streaming else None
         urls = [url for _, links in bubbles for url in links]
         prefix = J('', [intro] + [table for table, _ in bubbles[:-1]])
         self.transcript.setHtml(prefix)
+        self.transcript.space_bubbles()
         self._chat_tail = None
         if bubbles:
             # The last bubble is inserted separately so a streaming refresh can
@@ -3294,13 +3952,14 @@ class MainWindow(QMainWindow):
             cursor.movePosition(QTextCursor.MoveOperation.End)
             position = cursor.position()
             cursor.insertHtml(display(bubbles[-1][0]))
+            self.transcript.space_bubbles()
             self.transcript._bindings['setHtml'] = prefix + bubbles[-1][0]
             self._chat_tail = (self.conversation['id'], len(messages), self.preferences['theme'],
                                position, document.revision(), prefix)
         unique = list(dict.fromkeys(urls))
         self.source_toggle.setVisible(bool(unique))
         self.source_toggle.setText(T('Sources regroupées (') + str(min(50, len(unique))) + ')')
-        self.source_drawer.setHtml((T('<small>50 premières sources citées</small>') if len(unique) > 50 else '') + J('',(
+        self.source_drawer.setHtml((T('<p>50 premières sources citées</p>') if len(unique) > 50 else '') + J('',(
             '<p><a href="' + html.escape(url, quote=True) + '">' + rich(url) + '</a></p>' for url in unique[:50])))
         if not unique:
             self.source_toggle.setChecked(False)
@@ -3312,8 +3971,7 @@ class MainWindow(QMainWindow):
         self.transcript.ensureCursorVisible()
 
     def chat_controls(self, busy):
-        for control in (self.send_button, self.provider, self.new_button, self.history_picker,
-                        self.delete_button, self.delete_all_button,
+        for control in (self.send_button, self.provider, self.new_button, self.chat_menu_button, *self.idea_buttons,
                         self.model, self.cloud_consent, self.sharing, self.attach_button,
                         self.permission_mode, self.project_relative, self.starters, self.revoke_development,
                         self.chat_project, self.chat_mode):
@@ -3321,11 +3979,9 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(busy)
 
     def pick_starter(self, index):
-        if not index:
+        if not 0 < index <= len(self.ideas):
             return
-        self.chat_input.setPlainText(self.starters.itemText(index))
-        if STARTERS[index - 1] in RESEARCH_STARTERS:
-            self.chat_mode.setCurrentIndex(self.chat_mode.findData('research'))
+        self.use_idea(self.ideas[index - 1])
 
     def choose_logs(self):
         paths, _ = QFileDialog.getOpenFileNames(self, T('Joindre des journaux TCG Live'),
@@ -3379,6 +4035,10 @@ class MainWindow(QMainWindow):
                         'INGEST_ATTACHMENT_CHANGED':T('Le fichier est encore en cours d’écriture; réessaie une fois terminé.')}.get(str(error),
                         T('Journal refusé : fichier inaccessible, modifié, redirigé ou import déjà occupé. Aucun envoi cloud.'))
                     results.append({'status':'REFUSED','new_unique':0,'stats_updated':False,'reasons':[reason]})
+            try:  # built here, off the interface thread; ingest_done then finds it in memory
+                opponent_archetype.local_classifier(self.services.root)
+            except (OSError, ValueError, sqlite3.Error):
+                pass
             return results
         self.submit(run, self.ingest_done, self.ingest_failed, phase=self.ingest_phase)
 
@@ -3399,7 +4059,7 @@ class MainWindow(QMainWindow):
             source = receipt.get('source') or {}
             dates = source.get('date_range') or [str(source.get('retrieved_at') or '')[:10]]
             return (T('Deck adverse ajouté (reconstruction hypothétique) : ', en='Opponent deck added (hypothetical reconstruction): ')
-                    + receipt['name'] + ' · PUBLIC/' + str(max(dates)) + ' · '
+                    + receipt['name'] + ' · PUBLIC · ' + long_date(max(dates)) + ' · '
                     + str(receipt['observed_names']) + T(' cartes observées / 60 supposées', en=' observed cards / 60 assumed')
                     + '\n' + MainWindow.source_urls(source))
         if receipt.get('status') == 'ALREADY_SAVED':
@@ -3497,10 +4157,11 @@ class MainWindow(QMainWindow):
         report = self.services.report or {}
         current = set(self.services.match_index)
         # Corpus totals go to the status bar: the owner pasted one game to learn about that game.
-        totals = T('Nouvelles parties uniques dans le corpus : ') + str(len(current - self._before_matches))
+        totals = T('Nouvelles parties ajoutées : ') + str(len(current - self._before_matches))
         if latest:
             o = report['outcomes']
-            totals += ' · ' + T('Statistiques actualisées : n=') + str(report['coverage']['valid']) + ', ' + str(o['wins']) + T(' victoires, ') + str(o['losses']) + T(' défaites. Taux global inconnu.')
+            totals += (' · ' + T('Statistiques actualisées : ', en='Statistics updated: ') + games_text(report['coverage']['valid'])
+                       + ', ' + str(o['wins']) + T(' victoires, ') + str(o['losses']) + T(' défaites.', en=' losses.'))
         self.statusBar().showMessage(totals)
         self.last_import = next((r for r in reversed(results) if r.get('match')), None)
         if self.last_import and not self.data_cancel.is_set():
@@ -3567,8 +4228,8 @@ class MainWindow(QMainWindow):
         if match:
             self.navigation.setCurrentRow(1)
             group = next((g['archetype'] for g in (self.services.report or {}).get('groups', []) if reference in g.get('matches', [])), match['opponent']['label'] or 'unknown')
-            self.matchup_filter.setText(group)
-            self.matchups.selectRow(0)
+            self.matchup_filter.setText(display(opponent_name(group)))
+            self.choose_matchup_row(0)
             self.matchup_selected()  # a refreshed table may keep row 0 without emitting selectionChanged
             for index in range(self.games.count()):
                 if self.games.itemData(index).get('match') == reference:
@@ -3859,7 +4520,7 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.provider.setEnabled(True)
         self.new_button.setEnabled(True)
-        self.history_picker.setEnabled(True)
+        self.chat_menu_button.setEnabled(True)
         self.model.setEnabled(True)
         self.cloud_consent.setEnabled(True)
         self.sharing.setEnabled(True)

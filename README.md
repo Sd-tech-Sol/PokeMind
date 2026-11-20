@@ -9,7 +9,7 @@ your PC, and lets you review them with an AI coach.
 
 > ## Status: pre-release
 >
-> PokeMind **0.9.5** is a public pre-release (the first one was 0.9.0; 0.9.4 was never published). The Windows installer is **unsigned**,
+> PokeMind **0.9.6** is a public pre-release (the first one was 0.9.0; 0.9.4 was never published). The Windows installer is **unsigned**,
 > and before these releases PokeMind had been used by **its author only**. Expect defects and missing features, and keep
 > your own copy of anything important.
 
@@ -46,7 +46,7 @@ The installer is not code-signed yet: if Windows shows « Windows protected your
 - **Cards & meta**: an offline card binder (French and English texts, printings, dated legality) built
   from the public TCGdex catalogue, and the tournament results saved on your PC.
 - **Learning**: observations are kept with sample sizes and hypotheses are revised; no model is retrained.
-- **Terminal**: Codex, Claude Code or PowerShell in a tab, inside the app.
+- **Terminal** (advanced mode): Codex, Claude Code or PowerShell in a tab, inside the app. The page is hidden until *Settings › General › Advanced mode* is ticked.
 
 ## What PokeMind does not do
 
@@ -66,7 +66,7 @@ These absences are **design choices**:
 The interface follows Windows on first launch: a French Windows gets French, any other language gets
 English. Change it at any time in **Settings → General**; your choice is remembered.
 
-## Exact limits of version 0.9.5
+## Exact limits of version 0.9.6
 
 | Limit | Detail |
 |---|---|

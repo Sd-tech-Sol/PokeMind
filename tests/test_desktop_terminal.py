@@ -6,7 +6,7 @@ pytest.importorskip('pyte')
 from PySide6.QtCore import Qt, QObject, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
-from test_desktop_qt import app, ui, wait_until  # noqa: F401
+from test_desktop_qt import app, ui, wait_until, dispose_window  # noqa: F401
 from pokemind.desktop import terminal, window
 
 ESC = '\x1b'
@@ -140,6 +140,78 @@ def test_terminal_page_starts_codex_yolo_and_claude_bypass_only_after_consent(ui
         view.session.close()  # the window closes after monkeypatch is undone
 
 
+def test_advanced_mode_is_off_by_default_and_the_terminal_page_is_not_in_the_menu(ui, app):
+    """Owner, 2026-11-16: a first-time owner does not see the Terminal page."""
+    from PySide6.QtCore import QUrl
+    from PySide6 import QtWidgets as Native
+    from pokemind.assistant import sessions
+    assert sessions.DEFAULTS['advanced_mode'] is False
+    assert ui.preferences['advanced_mode'] is False and not ui.advanced_mode.isChecked()
+    assert ui.navigation.count() == 7 and ui.stack.count() == 7  # the page keeps its place for when it is shown
+    assert [ui.navigation.item(i).isHidden() for i in range(7)] == [False] * 6 + [True]
+    ui.internal_link(QUrl('pokemind://page/6'))  # a link cannot open a page that is not in the menu
+    assert ui.navigation.currentRow() != 6 and ui.stack.currentIndex() != 6
+    ui.internal_link(QUrl('pokemind://page/2'))
+    assert ui.navigation.currentRow() == 2
+    labels = [label.text() for label in ui.findChildren(Native.QLabel)]
+    assert ui.advanced_mode.text() == 'Mode avancé'
+    assert 'Affiche le terminal pour Codex, Claude Code et PowerShell' in labels
+    ui.language.setCurrentIndex(ui.language.findData('en'))
+    app.processEvents()
+    try:
+        labels = [label.text() for label in ui.findChildren(Native.QLabel)]
+        assert ui.advanced_mode.text() == 'Advanced mode'
+        assert 'Shows the terminal for Codex, Claude Code and PowerShell' in labels
+        assert ui.navigation.item(6).isHidden()  # a language change does not bring the page back
+    finally:
+        ui.language.setCurrentIndex(ui.language.findData('fr'))
+        app.processEvents()
+    with pytest.raises(ValueError):  # the preference is a boolean like the others
+        ui.store.write('preferences.json', dict(ui.preferences, advanced_mode='yes'))
+        ui.store.preferences()
+
+
+def test_advanced_mode_shows_the_terminal_page_survives_a_restart_and_never_stops_a_running_terminal(ui, app, monkeypatch):
+    FakeSession.started = []
+    monkeypatch.setattr(terminal, 'Session', FakeSession)
+    monkeypatch.setattr(terminal, 'available', lambda: True)
+    told = []
+    monkeypatch.setattr(window.QMessageBox, 'information', lambda *a, **k: told.append(a[2]))
+    ui.advanced_mode.setChecked(True)
+    assert [ui.navigation.item(i).isHidden() for i in range(7)] == [False] * 7
+    assert ui.navigation.item(6).text() == 'Terminal' and ui.navigation.row(ui.navigation.item(6)) == 6  # its usual place
+    assert window.Store(ui.root).preferences()['advanced_mode'] is True  # saved like the other preferences
+    reopened = window.MainWindow(ui.root)
+    try:
+        assert reopened.advanced_mode.isChecked() and not reopened.navigation.item(6).isHidden()
+    finally:
+        dispose_window(reopened, app)
+    # A terminal is running: unticking the option stops nothing and asks to close it first.
+    ui.navigation.setCurrentRow(6)
+    for button in ui.terminal_buttons.values():
+        button.setEnabled(True)  # disabled at start where ConPTY is absent (Linux CI)
+    ui.terminal_buttons['powershell'].click()
+    session, = FakeSession.started
+    assert ui.terminal_running() and ui.terminal_tabs.count() == 1
+    ui.advanced_mode.setChecked(False)
+    assert session.open and ui.terminal_tabs.count() == 1, 'the running terminal must not be stopped'
+    assert ui.advanced_mode.isChecked() and len(told) == 1 and 'Ferme-le d’abord' in told[0]
+    assert not ui.navigation.item(6).isHidden() and ui.navigation.currentRow() == 6
+    assert ui.preferences['advanced_mode'] is True and window.Store(ui.root).preferences()['advanced_mode'] is True
+    # Once it is closed, the option can be unticked: the page leaves the menu and another page is shown.
+    session.close()
+    assert not ui.terminal_running()
+    ui.advanced_mode.setChecked(False)
+    assert not ui.advanced_mode.isChecked() and len(told) == 1
+    assert ui.navigation.item(6).isHidden() and ui.navigation.currentRow() == 5 and ui.stack.currentIndex() == 5
+    assert window.Store(ui.root).preferences()['advanced_mode'] is False
+    reopened = window.MainWindow(ui.root)
+    try:
+        assert not reopened.advanced_mode.isChecked() and reopened.navigation.item(6).isHidden()
+    finally:
+        dispose_window(reopened, app)
+
+
 def test_npm_batch_shims_run_through_the_command_interpreter(monkeypatch):
     monkeypatch.setattr('pokemind.assistant.provider.executable', lambda name: 'C:/invented/npm/claude.CMD')
     argv = terminal.command('claude')
@@ -147,3 +219,35 @@ def test_npm_batch_shims_run_through_the_command_interpreter(monkeypatch):
     monkeypatch.setenv('CLAUDECODE', '1')
     monkeypatch.setenv('CLAUDE_CODE_SESSION_ID', 'invented')
     assert 'CLAUDECODE' not in terminal.environment() and 'CLAUDE_CODE_SESSION_ID' not in terminal.environment()
+
+
+def test_closable_tab_close_button_keeps_clear_of_the_rounded_border(app):
+    """Owner, 2026-11-18: the session tab's × overflowed onto the rounded border."""
+    from PySide6.QtWidgets import QTabBar, QTabWidget, QWidget
+    from pokemind.desktop.widgets import ClosableTabBar, closable_tabs
+    tabs = closable_tabs(QTabWidget())
+    asked = []
+    tabs.tabCloseRequested.connect(asked.append)
+    for name in ('Codex 1', 'Claude Code 2'):
+        tabs.addTab(QWidget(), name)
+    tabs.resize(500, 200)
+    tabs.show()
+    app.processEvents()
+    bar = tabs.tabBar()
+    for index in range(bar.count()):
+        holder = bar.tabButton(index, QTabBar.ButtonPosition.RightSide)
+        button = holder.layout().itemAt(0).widget()
+        right = holder.mapTo(bar, button.geometry().topRight()).x()
+        assert bar.tabRect(index).right() - right >= ClosableTabBar.MARGIN
+        assert button.isVisible()
+    bar.tabButton(1, QTabBar.ButtonPosition.RightSide).layout().itemAt(0).widget().click()
+    assert asked == [1]
+    tabs.removeTab(0)
+    bar.tabButton(0, QTabBar.ButtonPosition.RightSide).layout().itemAt(0).widget().click()
+    assert asked == [1, 0]  # the index follows the tab, not the order it was opened in
+    tabs.close()
+
+
+def test_terminal_tabs_use_the_clear_close_button(ui):
+    from pokemind.desktop.widgets import ClosableTabBar
+    assert isinstance(ui.terminal_tabs.tabBar(), ClosableTabBar) and ui.terminal_tabs.tabsClosable()

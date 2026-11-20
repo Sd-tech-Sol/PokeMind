@@ -136,10 +136,12 @@ def test_qt_chat_two_turns_and_history_resume(ui, app):
     identity=ui.conversation['id']
     assert ui.store.load(identity)['session']=='invented-thread'
     ui.new_conversation()
-    index=ui.history_picker.findData(identity)
-    assert index>0
-    ui.resume_conversation(index)
+    assert ui.chat_empty.isVisibleTo(ui.chat_dock) and not ui.transcript.isVisibleTo(ui.chat_dock)
+    ui.chat_menu.aboutToShow.emit()  # what opening « ⋯ » does
+    assert identity in ui.history_actions and ui.history_menu.isEnabled()
+    ui.history_actions[identity].trigger()
     assert ui.conversation['id']==identity and len(ui.conversation['messages'])==4
+    assert ui.transcript.isVisibleTo(ui.chat_dock) and not ui.chat_empty.isVisibleTo(ui.chat_dock)
 
 
 def test_qt_delete_conversation_asks_first_then_erases_only_it(ui, app, monkeypatch):
@@ -154,12 +156,12 @@ def test_qt_delete_conversation_asks_first_then_erases_only_it(ui, app, monkeypa
     kept, erased = identities
     path = ui.store.path('conversation-' + erased + '.json')
     monkeypatch.setattr(window.QMessageBox, 'question', lambda *a: window.QMessageBox.StandardButton.No)
-    QTest.mouseClick(ui.delete_button, Qt.MouseButton.LeftButton)
+    ui.delete_action.trigger()
     assert path.exists() and ui.conversation['id'] == erased
     monkeypatch.setattr(window.QMessageBox, 'question', lambda *a: window.QMessageBox.StandardButton.Yes)
-    QTest.mouseClick(ui.delete_button, Qt.MouseButton.LeftButton)
+    ui.delete_action.trigger()
     assert not path.exists() and ui.conversation['id'] != erased and ui.conversation['messages'] == []
-    assert ui.history_picker.findData(erased) == -1 and ui.history_picker.findData(kept) > 0
+    assert erased not in ui.history_actions and kept in ui.history_actions
     assert ui.store.load(kept)['messages'] and ui.store.preferences()['current'] is None
     assert erased not in [row['id'] for row in ui.store.preferences()['conversations']]
 
@@ -180,13 +182,13 @@ def test_qt_delete_all_conversations_asks_once_then_erases_every_one(ui, app, mo
         asked.append(a[2])
         return window.QMessageBox.StandardButton.No
     monkeypatch.setattr(window.QMessageBox, 'question', refuse)
-    QTest.mouseClick(ui.delete_all_button, Qt.MouseButton.LeftButton)
+    ui.delete_all_action.trigger()
     assert all(p.exists() for p in paths) and count >= 2 and str(count) + ' discussion' in asked[0]
     monkeypatch.setattr(window.QMessageBox, 'question', lambda *a: window.QMessageBox.StandardButton.Yes)
-    QTest.mouseClick(ui.delete_all_button, Qt.MouseButton.LeftButton)
+    ui.delete_all_action.trigger()
     assert not any(p.exists() for p in paths)
     assert ui.conversation['messages'] == [] and ui.conversation['id'] not in identities
-    assert all(ui.history_picker.findData(identity) == -1 for identity in identities)
+    assert not ui.history_actions and not ui.history_menu.isEnabled()
     assert ui.store.preferences()['conversations'] == [] and ui.store.preferences()['current'] is None
     assert 'Toutes les discussions' in ui.provider_status.text()
 
@@ -303,8 +305,8 @@ def test_qt_season_picker_shows_the_current_season_then_every_season(ui, app, mo
     wait_until(app, lambda: not ui.jobs)
     picker = ui.season_pickers[0]
     texts = [picker.itemText(i) for i in range(picker.count())]
-    assert texts == ['Saison actuelle · Delta Reign (2026-11-05 →) · n=3', 'Avant le 2026-11-05 · n=2',
-                     'Cumul · toutes les saisons · n=6']
+    assert texts == ['Saison actuelle · Delta Reign (2026-11-05 →) · 3 parties', 'Avant le 2026-11-05 · 2 parties',
+                     'Toutes les saisons · 6 parties']
     assert [m.text() for m in ui.metrics] == ['3', '1', '1'] and ui.battle_tiles['games'].text() == '2'
     picker.activated.emit(2)
     assert [m.text() for m in ui.metrics] == ['6', '3', '2'] and ui.battle_tiles['games'].text() == '5'
@@ -351,7 +353,7 @@ def test_qt_reset_window_starts_with_nothing_ticked_and_everything_ticks_all(app
 
 def test_qt_an_import_ending_after_its_discussion_was_emptied_does_not_crash(ui, app, monkeypatch):
     ui.chat_controls(True)
-    assert not ui.delete_button.isEnabled() and not ui.delete_all_button.isEnabled()
+    assert not ui.chat_menu_button.isEnabled() and not ui.new_button.isEnabled()  # history and deletions wait too
     ui.chat_controls(False)
     ui.ingest_busy = True
     monkeypatch.setattr(window.QMessageBox, 'question', lambda *a, **k: pytest.fail('no deletion during an import'))
@@ -848,9 +850,11 @@ def test_qt_premium_gallery_layout_languages_themes_and_large_font(ui, app, prem
         # The offscreen shell has different dock/font metrics. Check actual rows
         # in every backend; the exact full-window 3/2 contract is native Windows.
         actual_columns = len({tile.x() for tile in gallery.grids[0][1]})
-        assert actual_columns == gallery._columns and 1 <= actual_columns <= 3
-        if app.platformName() == 'windows':
-            assert actual_columns == (3 if width == 1500 else 2), gallery.viewport().width()
+        assert actual_columns == gallery._columns and 1 <= actual_columns <= gallery.COLUMNS
+        if width == 1500 and font_size == 14:  # four or five cards a row beside the Coach (owner, 2026-11-16)
+            assert actual_columns >= 4, gallery.viewport().width()
+            assert all(tile.findChild(QLabel, 'galleryStamp') is tile.stamp_label for tile in gallery.tiles)
+            assert not [label for tile in gallery.tiles for label in tile.findChildren(QLabel) if label.property('cardType')]
     if output := os.environ.get('POKEMIND_GALLERY_QA_DIR'):
         import json
         from pathlib import Path
@@ -944,7 +948,7 @@ def test_qt_premium_gallery_narrow_singleton_empty_and_scroll_anchor(ui, app, pr
     app.processEvents()
     assert abs(gallery.verticalScrollBar().value() - 150) <= 2
     assert gallery._columns == columns
-    gallery.setFixedWidth(330)  # available central space, e.g. a widened Coach dock
+    gallery.setFixedWidth(200)  # available central space, e.g. a widened Coach dock
     app.processEvents()
     assert gallery._columns == 1 and gallery.horizontalScrollBar().maximum() == 0
     fallback = gallery.tiles[-1]
@@ -956,7 +960,7 @@ def test_qt_premium_gallery_narrow_singleton_empty_and_scroll_anchor(ui, app, pr
         gallery.populate([dict(name='Singleton', quantity=60, category=category)])
         app.processEvents()
         assert len(gallery.tiles) == 1 and gallery.horizontalScrollBar().maximum() == 0
-        assert gallery.tiles[0].x() == 16
+        assert gallery.tiles[0].x() == gallery.SIDE  # a lone card starts at the left edge
     gallery.populate([])
     app.processEvents()
     assert not gallery.tiles and gallery.horizontalScrollBar().maximum() == 0
@@ -1056,7 +1060,7 @@ def test_013_streaming_appends_without_reparse_or_growing_prefix_cache(ui, app, 
         ui.chat_render_timer.stop()
         ui.render_stream()
     assert parsed == [] and len(ui._bubbles) == cached
-    assert ui.transcript.toPlainText().count('POKEMIND') == 2 and 'Première réponse' in ui.transcript.toPlainText()
+    assert ui.transcript.toPlainText().count('PokeMind') == 2 and 'Première réponse' in ui.transcript.toPlainText()
     ui.render_chat()
     assert parsed == [len(ui.conversation['messages'][-1]['content'])]
     assert '**' not in ui.transcript.toPlainText() and ui.transcript.toPlainText().count('inventé') == 100
@@ -1094,7 +1098,8 @@ def select_combo_item(app, combo, index):
 def select_historical_game(ui, app, reference):
     """Combats -> family row -> game dropdown. Never inject Services.selected_match."""
     ui.navigation.setCurrentRow(1)
-    wait_until(app, lambda: ui.games.isVisible() and not ui.stack.transition.isVisible())
+    # The games of an opponent show once it is chosen (owner, 2026-11-18): wait for the table, then choose.
+    wait_until(app, lambda: ui.matchups.isVisible() and not ui.stack.transition.isVisible())
     family = 'Invented Beta' if reference == 'RECENT-B' else 'Invented Alpha'
     row = next(i for i in range(ui.matchups.rowCount()) if ui.matchups.item(i, 0).text() == family)
     QTest.mouseClick(ui.matchups.viewport(), Qt.MouseButton.LeftButton,
@@ -1121,7 +1126,7 @@ def test_013_explicit_selected_old_match_is_local_and_visible_without_provider(u
     wait_until(app, lambda: not ui.chat_busy and not ui.jobs, timeout=15000)
     assert len(files(ui.root)) == 1 and len(ui.deck_rows) == 1
     assert 'Deck adverse ajouté (reconstruction hypothétique)' in ui.transcript.toPlainText()
-    assert 'PUBLIC/' in ui.transcript.toPlainText() and '6 cartes observées / 60 supposées' in ui.transcript.toPlainText()
+    assert ' · PUBLIC · ' in ui.transcript.toPlainText() and '6 cartes observées / 60 supposées' in ui.transcript.toPlainText()
     assert not ui.cloud_consent.isChecked() and all(m['local_only'] for m in ui.conversation['messages'])
     ui.chat_input.setPlainText('Reconstruis le deck adverse de cette partie')
     ui.send_chat()
@@ -1190,7 +1195,7 @@ def configure_deck_controls(ui, app, width, theme, language, font_size):
     ui.theme.setCurrentIndex(1 if theme == 'light' else 0)
     ui.language.setCurrentIndex(ui.language.findData(language))
     ui.apply_theme()  # reset a prior large-font QA override; keep 006's 17/14px defaults
-    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button):
+    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck):
         control.setStyleSheet(f'font-size:{font_size}px;')
     if font_size == 18:
         ui.setStyleSheet(ui.styleSheet() + '\nQScrollArea#deckGallery QLabel {font-size:18px;}')
@@ -1202,7 +1207,7 @@ def configure_deck_controls(ui, app, width, theme, language, font_size):
 def deck_controls_measurements(ui):
     from PySide6.QtCore import QPoint
     from PySide6.QtWidgets import QStyle, QStyleOptionButton
-    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button)
+    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck)
     result = []
     for control in controls:
         position = control.mapTo(ui, QPoint(0, 0))
@@ -1227,7 +1232,7 @@ def assert_deck_controls_readable(ui):
     for entry, box in zip(measurements, boxes):
         assert entry['visible'] and ui.rect().contains(box), entry
     page = ui.deck_picker.parentWidget()
-    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button):
+    for control in (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck):
         assert page.rect().contains(control.geometry())
     for entry in measurements[1:]:
         # Both native style contents and independent QSS padding/border budget.
@@ -1237,7 +1242,9 @@ def assert_deck_controls_readable(ui):
     for index, box in enumerate(boxes):
         assert all(not box.intersects(other) for other in boxes[index + 1:]), measurements
     combo = ui.deck_picker
-    assert combo.width() >= combo.fontMetrics().horizontalAdvance('M' * 12) + 35
+    # A button « Changer de deck » now (owner, 2026-11-18): its words fit, the deck's name is the strip's title.
+    assert combo.width() >= combo.fontMetrics().horizontalAdvance(window.display(combo.LABEL)) + 40
+    assert ui.deck_heading.name.text() in (combo.currentText(), 'Aucun deck', 'No deck')
     assert combo.currentText() == combo.accessibleName()
     assert combo.toolTip().startswith(combo.currentText())  # full source/period now augment the readable name
     assert combo.itemData(combo.currentIndex(), Qt.ItemDataRole.ToolTipRole) == combo.toolTip()
@@ -1269,7 +1276,7 @@ def test_qt_deck_controls_layout(ui, app, premium_gallery, width, theme, languag
         centers = [entry['geometry'][1] + entry['geometry'][3] / 2 for entry in measurements]
         assert max(centers) - min(centers) <= 1
     if app.platformName() == 'windows':
-        assert ui.gallery._columns == (3 if width == 1500 else 2)
+        assert ui.gallery._columns >= (4 if width == 1500 else 2)
     assert ui.gallery.viewport().height() >= 200
 
 
@@ -1282,7 +1289,7 @@ def test_qt_deck_controls_resize_language_focus_and_real_actions(ui, app, premiu
     rows[0]['label'] = 'Synthetic deck with a very long title ' * 5
     ui.loaded_decks(rows)
     wait_until(app, lambda: not ui.jobs)
-    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button)
+    controls = (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck)
     configure_deck_controls(ui, app, 1100, 'dark', 'fr', 18)
     before = dict(ui.preferences)
     for width, language in ((1500, 'en'), (1100, 'fr'), (1500, 'fr'), (1100, 'en')):
@@ -1291,7 +1298,7 @@ def test_qt_deck_controls_resize_language_focus_and_real_actions(ui, app, premiu
         for _ in range(4):
             app.processEvents()
         assert_deck_controls_readable(ui)
-        assert (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button) == controls
+        assert (ui.deck_picker, ui.favorite_button, ui.main_button, ui.add_deck_button, ui.copy_deck, ui.save_deck) == controls
     # The production shell enforces 1100 px. Constrain only this test page to
     # exercise a smaller content area; the shell/dock minimums stay unchanged.
     dock = next(d for d in ui.findChildren(QDockWidget) if d.isVisible())

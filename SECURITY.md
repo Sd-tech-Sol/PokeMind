@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest prerelease (`v0.9.5`) is supported. Security fixes are also applied to the current `main` branch.
+The current prerelease (`v0.9.6`) and the latest public prerelease are supported. Security fixes are also applied to the current `main` branch.
 
 ## Reporting a vulnerability
 

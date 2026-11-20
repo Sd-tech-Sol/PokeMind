@@ -17,7 +17,9 @@ DEFAULTS = {'provider': 'codex', 'theme': 'dark', 'cloud_consent': True,
             'permission_mode': 'workspace', 'project_relative': '.', 'language': None,
             'development_privacy_acknowledgements': [], 'reduced_motion': False,
             'favorite_decks': [], 'sidebar_collapsed': False, 'chat_project': True, 'season_view': 'current',
-            'update_check': True, 'main_deck': ''}
+            'update_check': True, 'main_deck': '',
+            # Off for a first-time owner: the Terminal page (Codex, Claude Code, PowerShell) is in the menu only when on.
+            'advanced_mode': False}
 
 
 def system_language():
@@ -97,7 +99,7 @@ class Store:
                 or not isinstance(result['project_relative'], str) or len(result['project_relative']) > 160
                 or result['theme'] not in {'dark', 'light'}
                 or any(type(result[k]) is not bool for k in ('startup_refresh', 'card_images', 'watch_logs', 'reduced_motion', 'sidebar_collapsed', 'chat_project',
-                                                     'update_check'))
+                                                     'update_check', 'advanced_mode'))
                 or not isinstance(result['conversations'], list) or len(result['conversations']) > 500
                 or not isinstance(result['main_deck'], str) or not re.fullmatch(r'(?:[0-9a-f]{64})?', result['main_deck'])
                 or not isinstance(result['season_view'], str) or not re.fullmatch(r'current|all|before|\d{4}-\d{2}-\d{2}', result['season_view'])):

@@ -80,7 +80,9 @@ class ImageCache:
         if not (0 < width <= 4096 and 0 < height <= 4096):
             raise ValueError('IMAGE_DIMENSION_CAP')
 
-    def fetch(self, identity, language='fr', *, permitted=True):
+    def fetch(self, identity, language='fr', *, permitted=True, cached_only=False):
+        """The cached picture, else one download within the session budget; `cached_only` never downloads
+        (used to prepare neighbouring binder pages ahead of time)."""
         if not permitted or not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,90}', identity) or '..' in identity:
             return {'status':'UNAVAILABLE_OR_NOT_PERMITTED'}
         if language not in {'fr','en'}:
@@ -109,7 +111,7 @@ class ImageCache:
                         if hashlib.sha256(raw).hexdigest() != metadata['image_sha256']:
                             raise ValueError('IMAGE_CACHE_CORRUPT')
                         return metadata | {'data':raw,'cached':True,'status':'OK'}
-                    if key in self.failed or self.cancelled.is_set():
+                    if cached_only or key in self.failed or self.cancelled.is_set():
                         continue
                     source = 'https://api.tcgdex.net/v2/' + lang + '/cards/' + quote(identity, safe='')
                     info = json.loads(self._get(source, 2*1024*1024))

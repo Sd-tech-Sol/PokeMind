@@ -422,7 +422,7 @@ def test_projection_keeps_n_source_dates_and_both_languages(local_tmp, server):
         assert 'Alphamon Betadrake' in text and 'pas de tes 60 cartes exactes' in text
         assert 'n=' + str(view['archetype']['modes']['BO1']['n']) in text and 'IC 95 %' in text
         assert 'Représentation (tournois BO1) : 36 % (8 / 22 placements classifiés, 1 tournoi(s))' in text
-        assert '2026-11-01 → 2026-11-01' in text and 'pas date des matchs' in text and 'docs.limitlesstcg.com' in text
+        assert '1er novembre 2026 → 1er novembre 2026' in text and 'pas date des matchs' in text  # one date format (D-317) and 'docs.limitlesstcg.com' in text
         assert len(model['matchup_rows']) == len(view['archetype']['modes']['BO1']['matchups'])
         set_current_language('en')
         english = display(project_public_stats(view)['summary']) + display(project_public_stats(view)['identity'])

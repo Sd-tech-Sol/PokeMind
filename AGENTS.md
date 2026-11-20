@@ -1,3 +1,61 @@
+# PRIORITÉ ACTIVE — D-320 / PM-RELEASE-096-PUBLIC-025 / STOP PUBLICATION 0.9.6 À L'ÉTAPE 4 (2026-11-20)
+
+Réception **OWNER_GUI_ACCEPTED_096** (déclaration du propriétaire), puis GO de publier 0.9.6 en préversion (D-320).
+**STOP à l'étape 4** : deux captures `docs/design/pokemind-brainball/captures/style-global/06-reglages-4-data-*`
+affichent un chemin absolu contenant le nom du compte Windows. **Rien de public** (`main` public `295db53`, aucun
+tag, release ni asset v0.9.6). Prévol, porte 1946 / 0 / 3, Setup `688d8651…d137` et scan CLEAN étaient verts.
+Commit privé de préparation `81580b0`. **Aucun mandat actif; prochaine action : décision du propriétaire.**
+Détails : [RESULT](.orchestrator/RESULT.md).
+
+---
+
+# HISTORIQUE — D-319 / PM-RELEASE-096-LOCAL-INSTALL-024 / 0.9.6 INSTALLÉE LOCALEMENT / RÉCEPTION FAITE (2026-11-19)
+
+**0.9.6 installée localement** (une seule fois, code 0) depuis le source `8d2bd62` : fusion `1e3d483`, version
+`215e1f4`, mise en page `5eee9c9`, plantage de la QA native corrigé (`c34f32e`, `8d2bd62`). Porte verte 1946 / 0 / 3,
+QA native 5 × verte, scan CLEAN, fumée et QA Inno vertes, sauvegarde et copie 0.9.5 vérifiées, données conservées.
+**Aucun mandat d'exécution actif. Prochaine action : réception par le propriétaire**, jamais inférée. Aucune
+deuxième installation. **Publication non autorisée.** Détails : [RESULT](.orchestrator/RESULT.md).
+
+Mandat d'origine — GO explicite du propriétaire (D-319), exécuté par Claude Code : fusion de `work/ui-premium-look` dans
+`work/pm-v1-lotj-final-readiness-windows`, version **0.9.6**, porte locale complète, build et QA synthétique,
+UNE nouvelle sauvegarde complète vérifiée (`data_archive`, GO explicite malgré l'ancienne règle « aucune nouvelle
+sauvegarde »), copie vérifiée de l'installation 0.9.5, puis **UNE seule** installation locale du Setup de
+production. Procédure : `archive/2026-11/NEXT_PROMPT_CONSUMED_017_2026-11-14.md`, adaptée. Toute porte rouge =
+STOP, jamais de deuxième tentative. **Publication NON autorisée** : aucun tag, aucune release, rien vers le dépôt
+public `Sd-tech-Sol/PokeMind`. Suivi : [NEXT_ACTION](.orchestrator/NEXT_ACTION.md).
+
+---
+
+# HISTORIQUE — D-318 / PM-UI-PIPELINE-023 / TERMINÉ / POUSSÉ (2026-11-18)
+
+Pipeline autonome en 8 phases (GO direct du propriétaire, nommé D-317 par lui, inscrit **D-318**) **terminé** sur
+`work/ui-premium-look` et poussé vers le dépôt privé (`git push -u origin work/ui-premium-look`, seul push autorisé).
+Porte complète verte à `0d0ae08` : 1928 réussis / 0 échec / 3 ignorés; aucune phase annulée. Suivi :
+[RESULT](.orchestrator/RESULT.md). **Prochaine action : vérification par le propriétaire, puis audit indépendant.**
+Aucun mandat d’exécution actif. Toujours interdits sans nouvel ordre : dépendance, téléchargement supplémentaire,
+écriture dans la base personnelle, sauvegarde, fusion, tag, publication, version, dépôt public.
+**L’audit de 019 est passé et clos.**
+
+---
+
+# HISTORIQUE — D-315 (branche de publication) / AUDIT INDÉPENDANT 019 PASSÉ / v0.9.5 PUBLIÉE (2026-11-15)
+
+**Décision D-315** : publication publique v0.9.5 **confirmée indépendamment** sur GitHub (tag/main/commit/tree/asset API) : `.orchestrator/VERIFICATION_PM-V1-PUBLIC-RELEASE-019_2026-11-15.md`. 019 **CONSUMED**; `STATE.json`, `NEXT_ACTION.md`, `HANDOFF.md` concordent. V1 fonctionnelle acceptée par propriétaire; 0.9.5 **préversion**, pas 1.0 stable. Les deux portes 1885/0/3 sont **rapportées par Codex**, aucune CI GitHub, pas d'audit indépendant du PC. **NO_ACTIVE_MANDATE : pas de Codex/Claude, développement, build, installation, sauvegarde, nettoyage, restauration, v1.0.0 ni publication supplémentaire sans nouvel ordre explicite.** Les anciens blocs 019/018/017 ci-dessous restent historiques et ne confèrent plus de permission.
+
+---
+
+# HISTORIQUE — 019 CONSOMMÉ / PUBLIC 0.9.5 / AUDIT PASSÉ ET CLOS (2026-11-15, clos le 2026-11-18)
+
+`PM-V1-PUBLIC-RELEASE-GATE-019` : **AUDIT PASSÉ ET CLOS** (déclaration du propriétaire, D-318), PUBLISHED_AND_VERIFIED par Codex, prompt CONSUMED.
+Deux portes entières vertes (1885 réussis / 3 ignorés chacune); seul test de métadonnées corrigé.
+Public `main` `295db53d24e67fa656c3cb4b2f2fb1f12d6ef5ac`, préversion `v0.9.5`, Setup non signé et SHA téléchargés/vérifiés.
+Données et installation personnelles non consultées/non touchées. D-313/D-314 consommés pour cette publication.
+L'audit attendu à l'époque est passé et clos. Aucune reprise de 019.
+Les blocs d'exécution ci-dessous sont historiques; [RESULT](.orchestrator/RESULT.md) fait foi.
+
+---
+
 # PRIORITÉ ACTIVE — D-314 / PM-V1-PUBLIC-RELEASE-GATE-019 / READY_FOR_CODEX (2026-11-15)
 
 **Audit indépendant ChatGPT du STOP 018 terminé**, preuve `.orchestrator/VERIFICATION_PM-V1-PUBLIC-RELEASE-018_STOP_2026-11-15.md`. Cause confirmée : test du titre `CHANGELOG.md` incompatible avec la date de préversion 0.9.5 préparée par 018. Ancien 018 **CONSUMED/STOP**, **non relançable**. Nouveau mandat unique **019** autorisé par arbitrage D-314, dans le périmètre du GO propriétaire D-313 (publication **v0.9.5 seulement**) : corriger strictement le test de version obsolète, suite complète isolée verte puis, **seulement si toutes les portes passent**, export confidentiel/fast-forward du dépôt public existant et release 0.9.5 prerelease avec checksum. Lire le **premier bloc** de `.orchestrator/NEXT_ACTION.md` et exécuter intégralement `.orchestrator/NEXT_PROMPT.md`, Codex High. **Aucun nouveau Setup personnel, backup, accès aux données réelles, code produit, changement de dépendance, nouvelle version ni publication en cas de porte rouge.** Les blocs D-313/018 et D-312/017 ci-dessous sont historiques quant à leur exécution; seul 019 est actif. Rapport final puis STOP audit ChatGPT.

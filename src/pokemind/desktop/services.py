@@ -1,6 +1,7 @@
 """Read models over PokeMind's existing engines. No alternative brain or DB."""
 from __future__ import annotations
 from pokemind.desktop.locale_text import T, J
+from pokemind.desktop.insights import opponent_name
 
 import json
 import re
@@ -14,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from pokemind import battle_batch, battle_coach, cards, coach_cards, competitive, decks, diagnostics, legacy_bridge, loss_watch, rules, seasons
+from pokemind import opponent_archetype
 from pokemind.database import connect_readonly
 from pokemind.public_deck_preflight import SCOPED_PUBLIC_CACHES
 
@@ -156,7 +158,7 @@ class Services:
         groups = report.get('groups', [])
         selected = [g for g in groups if g['archetype'].casefold() in question.casefold()] or groups[:5]
         for g in selected[:5]:
-            text += '\n' + g['archetype'] + ' : ' + str(g['wins']) + T(' V / ') + str(g['losses']) + T(' D, n=') + str(g['n']) + T('. Famille hypothétique.\n')
+            text += '\n' + opponent_name(g['archetype']) + ' : ' + str(g['wins']) + T(' V / ') + str(g['losses']) + T(' D, n=') + str(g['n']) + T('. Famille hypothétique.\n')
             for signal in g.get('signals', [])[:2]:
                 text += signal['explanation'] + T(' Observé dans ') + str(signal['loss_games']) + T(' défaites et ') + str(signal['win_games']) + T(' victoires; causalité inconnue.\n')
         text += T('\nSource : rapport canonique PokeMind ') + report['as_of'] + ' / ' + report['model_version'] + T(', Learning Loop local. pokemind://page/1\n')
@@ -215,8 +217,13 @@ class Services:
         return result
 
     def set_full_report(self, report):
-        """Every game; the report shown is the chosen season of it."""
-        self.full_report = report
+        """Every game; the report shown is the chosen season of it. A game whose opponent the saved report left
+        unidentified gets its probable archetype here, in memory only (pipeline 023, phase 6)."""
+        try:
+            classify = opponent_archetype.local_classifier(self.root) if report else None
+        except (OSError, ValueError, sqlite3.Error):
+            classify = None
+        self.full_report = opponent_archetype.with_probable_opponents(report, classify)
         self.season_dates = seasons.added_dates(self.root, (report or {}).get('matches', []))
         self.set_season(self.season_key)
 
@@ -692,6 +699,9 @@ class Services:
             # Loss-first follow-up over every recorded game (all seasons): the families that beat the owner.
             result['loss_watch'] = loss_watch.problem_matchups(self.full_report or report, dates=self.season_dates,
                                                                focus=query_words)
+            if report.get('probable_opponents'):
+                result['probable_opponents'] = ('Une famille « probable:NOM » est un archétype probable déduit hors ligne '
+                    'des cartes adverses vues (' + report['probable_opponents']['version'] + '), pas un fait; le dire ainsi.')
             result['observed_own_decks'] = report.get('own_decks', {})
             result['own_deck_scope'] = 'Familles inférées des cartes observées, version jouée non attestée; ne pas inventer une liste exacte.'
             result['matchup_groups_total'] = len(groups)
